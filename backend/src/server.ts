@@ -56,6 +56,14 @@ app.use(cors({
 app.use(express.json({ limit: "12mb" }));
 app.use(morgan("dev"));
 
+// DigitalOcean App Platform strips the /api path prefix when routing to the backend service.
+app.use((req, _res, next) => {
+  if (!req.url.startsWith("/api")) {
+    req.url = `/api${req.url}`;
+  }
+  next();
+});
+
 app.use("/api/media/trainers", express.static(TRAINER_MEDIA_DIR, { maxAge: "7d" }));
 app.use("/api/media/programs", express.static(PROGRAM_MEDIA_DIR, { maxAge: "7d" }));
 
@@ -260,14 +268,21 @@ app.post("/api/admin/test-mail", auth, requireRole("SUPER_ADMIN"), async (req, r
 
 async function ensureSiteAdmin() {
   const email = "admin@dharma-space.com";
-  const existing = await prisma.user.findUnique({ where: { email } });
-  if (existing) return;
   const pass = process.env.SITE_ADMIN_PASS || "admin";
+  const passwordHash = await bcrypt.hash(pass, 12);
+  const existing = await prisma.user.findUnique({ where: { email } });
+  if (existing) {
+    await prisma.user.update({
+      where: { email },
+      data: { passwordHash, role: "SUPER_ADMIN" }
+    });
+    return;
+  }
   await prisma.user.create({
     data: {
       name: "Website Admin",
       email,
-      passwordHash: await bcrypt.hash(pass, 12),
+      passwordHash,
       role: "SUPER_ADMIN",
       avatar: "AD"
     }

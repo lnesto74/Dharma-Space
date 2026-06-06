@@ -66,6 +66,7 @@ ingress:
         exact: ""
       path:
         prefix: /api
+    preserve_path_prefix: true
   - component:
       name: dharma-space-web
     match:
