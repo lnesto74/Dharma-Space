@@ -67,18 +67,38 @@ The backend exposes the requested REST surface under `/api`, including:
 
 ## DigitalOcean deployment (backend)
 
-The backend is configured for **PostgreSQL** on App Platform:
+### App settings
 
-1. Attach a **Dev database** (Postgres 17) in the App Platform UI.
-2. Set `DATABASE_URL` to `${your-db-name.DATABASE_URL}` (DigitalOcean injects the connection string).
-3. Set `JWT_SECRET`, SMTP variables, and `FRONTEND_URL` as encrypted env vars.
-4. **Build command:** `npm install && npm run build -w backend`
-5. **Run command:** `npm run start:prod -w backend`
-6. **HTTP port:** `8080` (App Platform default; the server reads `PORT` automatically).
+| Setting | Value |
+|---------|--------|
+| Build command | `npm install && npm run build:backend` |
+| Run command | `npm start` |
+| HTTP port | `8080` |
 
-On first boot the API runs `prisma db push` against Postgres, then seeds marketing site content if the database is empty.
+### Environment variables (required)
 
-See `.do/app.yaml` for a starter App Platform spec.
+| Key | Value |
+|-----|--------|
+| `DATABASE_URL` | `${dev-db-191474.DATABASE_URL}` |
+| `JWT_SECRET` | random string (encrypted) |
+| `FRONTEND_URL` | your live site URL |
+| SMTP vars | see `backend/.env.example` |
+
+### First deploy only — database tables
+
+The app DB user cannot create tables. Use **doadmin** once:
+
+1. **Databases** → your Postgres cluster → **Connection Details**
+2. Copy the **doadmin** connection URI (database: `dev-db-191474`, not `defaultdb`)
+3. **Apps** → your app → **Environment Variables** → add:
+   - Key: `DATABASE_MIGRATION_URL`
+   - Value: doadmin URI
+   - Encrypt: yes
+   - Scope: Run time
+4. **Redeploy**
+5. After a successful deploy, remove `DATABASE_MIGRATION_URL` (optional)
+
+The app creates tables with doadmin, grants access to the app user, then runs normally on `DATABASE_URL`.
 
 ## Future Improvements
 

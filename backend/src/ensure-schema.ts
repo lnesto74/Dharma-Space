@@ -3,7 +3,6 @@ import path from "path";
 import { fileURLToPath } from "url";
 
 const backendRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
-const PG_SCHEMA = "dharma";
 
 export function usesPostgres(): boolean {
   const url = process.env.DATABASE_URL ?? "";
@@ -15,95 +14,92 @@ export function postgresUser(url: string): string | null {
   return match?.[1] ? decodeURIComponent(match[1]) : null;
 }
 
-/** DigitalOcean dev DB URLs often use the component name as DB; the real DB is defaultdb. */
-export function normalizePostgresUrl(url: string): string {
-  let normalized = url;
-
-  const match = normalized.match(/^(postgresql:\/\/[^/]+\/)([^?]+)(.*)$/);
-  if (match) {
-    const [, prefix, dbName, suffix] = match;
-    if (/^dev-db-\d+$/.test(dbName)) {
-      console.log(`[startup] DigitalOcean: using database "defaultdb" instead of "${dbName}"`);
-      normalized = `${prefix}defaultdb${suffix}`;
-    }
-  }
-
-  return normalized;
-}
-
-export function withSchemaParam(databaseUrl: string, schema: string): string {
-  const withoutSchema = databaseUrl.replace(/([?&])schema=[^&]*&?/g, "$1").replace(/[?&]$/, "");
-  const joiner = withoutSchema.includes("?") ? "&" : "?";
-  return `${withoutSchema}${joiner}schema=${encodeURIComponent(schema)}`;
-}
-
-function printGrantInstructions(url: string) {
-  const user = postgresUser(url);
-  if (!user) return;
-  console.error(`
-[startup] ── DigitalOcean: one-time database fix required ──
-
-Open: DigitalOcean → Databases → your Postgres cluster → Query / Console
-Run as doadmin:
-
-  CREATE SCHEMA IF NOT EXISTS ${PG_SCHEMA} AUTHORIZATION "${user}";
-  GRANT ALL ON SCHEMA ${PG_SCHEMA} TO "${user}";
-  GRANT ALL ON SCHEMA public TO "${user}";
-  GRANT CREATE ON SCHEMA public TO "${user}";
-
-Then redeploy.
-
-Or add DATABASE_MIGRATION_URL = doadmin connection URI from DO (encrypted).
-`);
-}
-
-async function createDedicatedSchema(baseUrl: string): Promise<string> {
+async function tableCount(url: string): Promise<number> {
   const { PrismaClient } = await import("@prisma/client");
-  const bootstrap = new PrismaClient({
-    datasources: { db: { url: baseUrl } }
-  });
-
+  const client = new PrismaClient({ datasources: { db: { url } } });
   try {
-    await bootstrap.$executeRawUnsafe(`CREATE SCHEMA IF NOT EXISTS "${PG_SCHEMA}"`);
-    console.log(`[startup] PostgreSQL schema "${PG_SCHEMA}" ready`);
-  } catch (error) {
-    console.warn(`[startup] Could not create schema "${PG_SCHEMA}" — will try db push on public`);
+    const rows = await client.$queryRaw<{ count: bigint }[]>`
+      SELECT COUNT(*)::bigint AS count
+      FROM information_schema.tables
+      WHERE table_schema = 'public' AND table_type = 'BASE TABLE'
+    `;
+    return Number(rows[0]?.count ?? 0);
   } finally {
-    await bootstrap.$disconnect();
+    await client.$disconnect();
   }
+}
 
-  return withSchemaParam(baseUrl, PG_SCHEMA);
+async function grantAppUserAccess(migrationUrl: string, appUser: string) {
+  const { PrismaClient } = await import("@prisma/client");
+  const admin = new PrismaClient({ datasources: { db: { url: migrationUrl } } });
+  try {
+    await admin.$executeRawUnsafe(`GRANT USAGE ON SCHEMA public TO "${appUser}"`);
+    await admin.$executeRawUnsafe(`GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA public TO "${appUser}"`);
+    await admin.$executeRawUnsafe(`GRANT ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA public TO "${appUser}"`);
+    await admin.$executeRawUnsafe(
+      `ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON TABLES TO "${appUser}"`
+    );
+    await admin.$executeRawUnsafe(
+      `ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON SEQUENCES TO "${appUser}"`
+    );
+    console.log(`[startup] Granted public schema access to "${appUser}"`);
+  } finally {
+    await admin.$disconnect();
+  }
+}
+
+function printSetupInstructions(appUser: string | null) {
+  console.error(`
+╔══════════════════════════════════════════════════════════════════╗
+║  FIRST-TIME DIGITALOCEAN DATABASE SETUP (do this once)           ║
+╠══════════════════════════════════════════════════════════════════╣
+║  1. DigitalOcean → Databases → your Postgres cluster             ║
+║  2. Connection Details → copy the doadmin Connection URI        ║
+║     (database must be dev-db-191474 — do NOT use defaultdb)      ║
+║  3. App → Settings → Environment Variables → Add:                ║
+║       Key:   DATABASE_MIGRATION_URL                              ║
+║       Value: paste doadmin URI                                   ║
+║       Encrypt: YES                                               ║
+║       Scope: Run time                                            ║
+║  4. Keep DATABASE_URL = \${dev-db-191474.DATABASE_URL}           ║
+║  5. Redeploy                                                     ║
+║  6. After first successful deploy, you may remove                ║
+║     DATABASE_MIGRATION_URL                                       ║
+╚══════════════════════════════════════════════════════════════════╝
+App DB user: ${appUser ?? "unknown"}
+`);
 }
 
 export async function ensureDatabaseSchema(): Promise<void> {
   if (!usesPostgres()) return;
 
-  const appUrl = normalizePostgresUrl(process.env.DATABASE_URL!);
+  const appUrl = process.env.DATABASE_URL!;
+  const appUser = postgresUser(appUrl);
+  const migrationUrl = process.env.DATABASE_MIGRATION_URL?.trim();
 
-  let pushUrl: string;
-  if (process.env.DATABASE_MIGRATION_URL) {
-    const adminUrl = normalizePostgresUrl(process.env.DATABASE_MIGRATION_URL);
-    console.log("[startup] Using DATABASE_MIGRATION_URL for schema setup");
-    pushUrl = withSchemaParam(adminUrl, PG_SCHEMA);
-    await createDedicatedSchema(adminUrl).catch(() => undefined);
-  } else {
-    pushUrl = await createDedicatedSchema(appUrl);
-  }
-
-  console.log("[startup] Applying Prisma schema to PostgreSQL...");
-  try {
+  if (migrationUrl) {
+    console.log("[startup] Step 1/3: db push with DATABASE_MIGRATION_URL (doadmin)...");
     execSync("npx prisma db push --skip-generate --accept-data-loss", {
       cwd: backendRoot,
       stdio: "inherit",
-      env: { ...process.env, DATABASE_URL: pushUrl }
+      env: { ...process.env, DATABASE_URL: migrationUrl }
     });
-    console.log("[startup] Database schema ready.");
-  } catch (error) {
-    printGrantInstructions(appUrl);
-    throw error;
+
+    if (appUser) {
+      console.log("[startup] Step 2/3: grant app user access to tables...");
+      await grantAppUserAccess(migrationUrl, appUser);
+    }
+
+    console.log("[startup] Step 3/3: database schema ready.");
+    return;
   }
 
-  process.env.DATABASE_URL = pushUrl.includes(`schema=${PG_SCHEMA}`)
-    ? withSchemaParam(appUrl, PG_SCHEMA)
-    : appUrl;
+  const tables = await tableCount(appUrl);
+  if (tables > 0) {
+    console.log(`[startup] Database OK — ${tables} tables in public schema.`);
+    return;
+  }
+
+  printSetupInstructions(appUser);
+  throw new Error("Database has no tables. Set DATABASE_MIGRATION_URL and redeploy.");
 }
