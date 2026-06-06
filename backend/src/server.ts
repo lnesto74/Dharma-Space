@@ -903,10 +903,13 @@ app.use((error: any, _req: Request, res: Response, _next: NextFunction) => {
 });
 
 async function startServer() {
-  await ensureDatabaseSchema().catch((error) => {
+  const schemaReady = await ensureDatabaseSchema().catch((error) => {
     console.error("[startup] database schema:", error);
-    process.exit(1);
+    return false;
   });
+  if (!schemaReady) {
+    console.warn("[startup] API starting without database tables — redeploy after this deployment succeeds.");
+  }
   prisma = new PrismaClient();
   registerSiteContentRoutes(app, prisma, auth, requireRole);
   await ensureSiteAdmin().catch((error) => console.error("[startup] site admin:", error));
