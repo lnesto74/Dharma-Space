@@ -1,1 +1,1 @@
-web: npm run start:prod -w backend
+web: npm start
