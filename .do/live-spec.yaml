@@ -12,7 +12,7 @@ envs:
   value: EV[1:04OQtsOkkCnqMH9ZRqRP2308TjOn08b1:pdHFDHtyeoMt1zQAmncWXa2k1eLaHqQPrz5fnfjXA5SDz+jlBe3bSf1/glEqDF6P5fKeEJHz+v6d5oZ1]
 - key: FRONTEND_URL
   scope: RUN_AND_BUILD_TIME
-  value: https://dharma-space.com
+  value: https://hammerhead-app-9ae2w.ondigitalocean.app
 - key: SMTP_HOST
   scope: RUN_AND_BUILD_TIME
   value: smtp.gmail.com
@@ -65,6 +65,13 @@ ingress:
       authority:
         exact: ""
       path:
+        prefix: /api
+  - component:
+      name: dharma-space-web
+    match:
+      authority:
+        exact: ""
+      path:
         prefix: /
 name: hammerhead-app
 region: sgp
@@ -84,4 +91,19 @@ services:
   instance_size_slug: apps-s-1vcpu-1gb
   name: dharma-space
   run_command: npm start
+  source_dir: /
+static_sites:
+- build_command: npm install && npm run build -w frontend
+  catchall_document: index.html
+  environment_slug: node-js
+  envs:
+  - key: VITE_API_URL
+    scope: RUN_AND_BUILD_TIME
+    value: ""
+  github:
+    branch: main
+    deploy_on_push: true
+    repo: lnesto74/Dharma-Space
+  name: dharma-space-web
+  output_dir: frontend/dist
   source_dir: /
