@@ -28,26 +28,29 @@ export async function tableCount(url: string): Promise<number> {
 export async function ensureDatabaseSchema(): Promise<boolean> {
   if (!usesPostgres()) return true;
 
-  const url = process.env.DATABASE_URL!;
+  const appUrl = process.env.DATABASE_URL!;
+  const pushUrl = process.env.DATABASE_MIGRATION_URL || appUrl;
 
-  if ((await tableCount(url)) > 0) {
+  if ((await tableCount(appUrl)) > 0) {
     console.log("[startup] Database OK — tables already exist.");
     return true;
   }
 
   console.log("[startup] No tables yet — running prisma db push...");
+  if (process.env.DATABASE_MIGRATION_URL) {
+    console.log("[startup] Using DATABASE_MIGRATION_URL for one-time schema setup.");
+  }
   try {
     execSync("npx prisma db push --skip-generate --accept-data-loss", {
       cwd: backendRoot,
       stdio: "inherit",
-      env: process.env
+      env: { ...process.env, DATABASE_URL: pushUrl }
     });
     console.log("[startup] Database schema created.");
     return true;
   } catch (error) {
-    console.warn("[startup] db push failed — starting API anyway so DigitalOcean can finish provisioning.");
-    console.warn("[startup] DO grants dev-DB permissions only AFTER a successful deploy.");
-    console.warn("[startup] Redeploy once more after this deployment goes ACTIVE; tables should then be created.");
+    console.warn("[startup] db push failed — API will start but login/data will not work.");
+    console.warn("[startup] Add DATABASE_MIGRATION_URL (doadmin URI) in App Platform env vars, then redeploy.");
     return false;
   }
 }

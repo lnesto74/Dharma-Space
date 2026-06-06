@@ -2,8 +2,12 @@ alerts:
 - rule: DEPLOYMENT_FAILED
 - rule: DOMAIN_FAILED
 databases:
-- engine: PG
-  name: dev-db-191474
+- cluster_name: dharma-space-db
+  db_name: dharma
+  db_user: dharma_app
+  engine: PG
+  name: dharma-db
+  production: true
   version: "17"
 envs:
 - key: JWT_SECRET
@@ -81,7 +85,7 @@ services:
   envs:
   - key: DATABASE_URL
     scope: RUN_TIME
-    value: ${dev-db-191474.DATABASE_URL}
+    value: ${dharma-db.DATABASE_URL}
   github:
     branch: main
     deploy_on_push: true
