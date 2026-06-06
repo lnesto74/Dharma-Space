@@ -16,7 +16,7 @@ services:
     instance_size_slug: basic-xxs
     http_port: 8080
     build_command: npm install && npm run build:backend
-    run_command: npm run start:prod -w backend
+    run_command: npm start
     envs:
       - key: DATABASE_URL
         scope: RUN_TIME
