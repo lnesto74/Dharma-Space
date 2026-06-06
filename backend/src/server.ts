@@ -28,7 +28,7 @@ import {
 import { PROGRAM_MEDIA_DIR } from "./program-media-cache.js";
 import { ensureDatabaseSchema } from "./ensure-schema.js";
 
-const prisma = new PrismaClient();
+let prisma!: PrismaClient;
 const app = express();
 const port = Number(process.env.PORT || 7010);
 const jwtSecret = process.env.JWT_SECRET || "dev-secret";
@@ -894,8 +894,6 @@ app.get("/api/admin/trainers", auth, requireRole("SUPER_ADMIN"), async (_req, re
   }
 });
 
-registerSiteContentRoutes(app, prisma, auth, requireRole);
-
 app.use((error: any, _req: Request, res: Response, _next: NextFunction) => {
   if (error instanceof z.ZodError) return res.status(400).json({ message: "Validation error", issues: error.issues });
   if (error.code === "P2002") return res.status(409).json({ message: "Record already exists" });
@@ -909,6 +907,8 @@ async function startServer() {
     console.error("[startup] database schema:", error);
     process.exit(1);
   });
+  prisma = new PrismaClient();
+  registerSiteContentRoutes(app, prisma, auth, requireRole);
   await ensureSiteAdmin().catch((error) => console.error("[startup] site admin:", error));
   await ensureSiteContent(prisma).catch((error) => console.error("[startup] site content:", error));
   await migrateProgramCategories(prisma).catch((error) => console.error("[startup] program migrate:", error));
