@@ -1,0 +1,87 @@
+alerts:
+- rule: DEPLOYMENT_FAILED
+- rule: DOMAIN_FAILED
+databases:
+- engine: PG
+  name: dev-db-191474
+  version: "17"
+envs:
+- key: JWT_SECRET
+  scope: RUN_AND_BUILD_TIME
+  type: SECRET
+  value: EV[1:04OQtsOkkCnqMH9ZRqRP2308TjOn08b1:pdHFDHtyeoMt1zQAmncWXa2k1eLaHqQPrz5fnfjXA5SDz+jlBe3bSf1/glEqDF6P5fKeEJHz+v6d5oZ1]
+- key: FRONTEND_URL
+  scope: RUN_AND_BUILD_TIME
+  value: https://dharma-space.com
+- key: SMTP_HOST
+  scope: RUN_AND_BUILD_TIME
+  value: smtp.gmail.com
+- key: SMTP_PORT
+  scope: RUN_AND_BUILD_TIME
+  value: "587"
+- key: SMTP_SECURE
+  scope: RUN_AND_BUILD_TIME
+  value: "false"
+- key: SMTP_EDUCATION_USER
+  scope: RUN_AND_BUILD_TIME
+  value: education@dharma-space.com
+- key: SMTP_EDUCATION_PASS
+  scope: RUN_AND_BUILD_TIME
+  type: SECRET
+  value: EV[1:LqJJIqeWMonkbkYeUkKbFawWMSHZ1uOH:gIiuf8x8mQNvaSCY9G/+EcVIQJl7PUSeNXJtR7tcSjs=]
+- key: SMTP_EDUCATION_FROM
+  scope: RUN_AND_BUILD_TIME
+  value: Dharma Space <education@dharma-space.com>
+- key: MAIL_EDUCATION_INBOX
+  scope: RUN_AND_BUILD_TIME
+  value: education@dharma-space.com
+- key: SMTP_CORPORATE_USER
+  scope: RUN_AND_BUILD_TIME
+  value: corporate@dharma-space.com
+- key: SMTP_CORPORATE_PASS
+  scope: RUN_AND_BUILD_TIME
+  type: SECRET
+  value: EV[1:Kf0r/7UOPz7EaPgxUobTCHHv76oEdJmm:xMOOaQyUrGltHI1J93eHr1UumR/bqn/h3FSPe7s3QfM=]
+- key: SMTP_CORPORATE_FROM
+  scope: RUN_AND_BUILD_TIME
+  value: Dharma Space <corporate@dharma-space.com>
+- key: MAIL_CORPORATE_INBOX
+  scope: RUN_AND_BUILD_TIME
+  value: corporate@dharma-space.com
+- key: MAIL_NOTIFY
+  scope: RUN_AND_BUILD_TIME
+  value: vera@dharma-space.com
+- key: SITE_ADMIN_PASS
+  scope: RUN_AND_BUILD_TIME
+  type: SECRET
+  value: EV[1:YWULLepWHmQKzO6yTdHdL1wFcH93hR0P:ar6SPg7W9aHj41Cqj4Y2Tyh7Y1cv]
+features:
+- buildpack-stack=ubuntu-22
+ingress:
+  rules:
+  - component:
+      name: dharma-space
+    match:
+      authority:
+        exact: ""
+      path:
+        prefix: /
+name: hammerhead-app
+region: sgp
+services:
+- build_command: npm install && npm run build:backend
+  environment_slug: node-js
+  envs:
+  - key: DATABASE_URL
+    scope: RUN_TIME
+    value: ${dev-db-191474.DATABASE_URL}
+  github:
+    branch: main
+    deploy_on_push: true
+    repo: lnesto74/Dharma-Space
+  http_port: 8080
+  instance_count: 1
+  instance_size_slug: apps-s-1vcpu-1gb
+  name: dharma-space
+  run_command: npm start
+  source_dir: /
