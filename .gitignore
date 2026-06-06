@@ -1,0 +1,36 @@
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+frontend/dist/
+backend/dist/
+
+# Environment & secrets
+.env
+.env.*
+**/.env
+**/.env.*
+!.env.example
+!**/.env.example
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+npm-debug.log*
+
+# Vite
+frontend/node_modules/.vite/
+
+# Editor
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Prisma local DB (regenerate with npm run db:push && npm run seed)
+backend/prisma/dev.db
+backend/prisma/dev.db-journal

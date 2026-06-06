@@ -1,0 +1,294 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id                  String                   @id @default(cuid())
+  name                String
+  email               String                   @unique
+  passwordHash        String
+  role                String
+  companyId           String?
+  departmentId        String?
+  avatar              String?
+  createdAt           DateTime                 @default(now())
+  company             Company?                 @relation(fields: [companyId], references: [id])
+  department          Department?              @relation(fields: [departmentId], references: [id])
+  courses             Course[]                 @relation("InstructorCourses")
+  sessions            Session[]                @relation("TrainerSessions")
+  enrollments         Enrollment[]
+  attendance          Attendance[]
+  wellbeingCheckins   WellbeingCheckin[]
+  badges              UserBadge[]
+  certificates        Certificate[]
+  challengeEntries    ChallengeParticipation[]
+}
+
+model Company {
+  id          String       @id @default(cuid())
+  name        String
+  industry    String
+  plan        String
+  seats       Int
+  createdAt   DateTime     @default(now())
+  departments Department[]
+  users       User[]
+  challenges  Challenge[]
+  invoices    Invoice[]
+}
+
+model Department {
+  id        String   @id @default(cuid())
+  name      String
+  companyId String
+  company   Company  @relation(fields: [companyId], references: [id])
+  users     User[]
+}
+
+model Course {
+  id                     String        @id @default(cuid())
+  title                  String
+  description            String
+  category               String
+  level                  String
+  duration               String
+  format                 String
+  price                  Float
+  certificationAvailable Boolean       @default(false)
+  instructorId           String?
+  image                  String
+  rating                 Float         @default(4.8)
+  enrolledCount          Int           @default(0)
+  tags                   String        @default("[]")
+  learningOutcomes       String        @default("[]")
+  published              Boolean       @default(true)
+  createdAt              DateTime      @default(now())
+  instructor             User?         @relation("InstructorCourses", fields: [instructorId], references: [id])
+  modules                Module[]
+  enrollments            Enrollment[]
+  sessions               Session[]
+  certificates           Certificate[]
+}
+
+model Module {
+  id          String @id @default(cuid())
+  courseId    String
+  title       String
+  description String
+  order       Int
+  duration    String
+  course      Course @relation(fields: [courseId], references: [id], onDelete: Cascade)
+}
+
+model Enrollment {
+  id          String           @id @default(cuid())
+  userId      String
+  courseId    String
+  progress    Int              @default(0)
+  status      String   @default("ACTIVE")
+  enrolledAt  DateTime         @default(now())
+  completedAt DateTime?
+  user        User             @relation(fields: [userId], references: [id])
+  course      Course           @relation(fields: [courseId], references: [id])
+
+  @@unique([userId, courseId])
+}
+
+model Session {
+  id         String       @id @default(cuid())
+  courseId   String
+  trainerId  String
+  title      String
+  startTime  DateTime
+  endTime    DateTime
+  location   String
+  format     String
+  course     Course       @relation(fields: [courseId], references: [id])
+  trainer    User         @relation("TrainerSessions", fields: [trainerId], references: [id])
+  attendance Attendance[]
+}
+
+model Attendance {
+  id        String           @id @default(cuid())
+  sessionId String
+  userId    String
+  status    String
+  session   Session          @relation(fields: [sessionId], references: [id])
+  user      User             @relation(fields: [userId], references: [id])
+
+  @@unique([sessionId, userId])
+}
+
+model WellbeingCheckin {
+  id        String   @id @default(cuid())
+  userId    String
+  mood      Int
+  stress    Int
+  energy    Int
+  sleep     Int
+  focus     Int
+  note      String?
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id])
+}
+
+model Badge {
+  id          String      @id @default(cuid())
+  name        String      @unique
+  description String
+  category    String
+  icon        String
+  users       UserBadge[]
+  challenges  Challenge[]
+}
+
+model UserBadge {
+  id       String   @id @default(cuid())
+  userId   String
+  badgeId  String
+  earnedAt DateTime @default(now())
+  user     User     @relation(fields: [userId], references: [id])
+  badge    Badge    @relation(fields: [badgeId], references: [id])
+
+  @@unique([userId, badgeId])
+}
+
+model Certificate {
+  id                String   @id @default(cuid())
+  userId            String
+  courseId          String
+  certificateNumber String   @unique
+  issuedAt          DateTime @default(now())
+  verified          Boolean  @default(true)
+  user              User     @relation(fields: [userId], references: [id])
+  course            Course   @relation(fields: [courseId], references: [id])
+}
+
+model Challenge {
+  id             String                   @id @default(cuid())
+  companyId      String
+  title          String
+  description    String
+  startDate      DateTime
+  endDate        DateTime
+  rewardBadgeId  String?
+  company        Company                  @relation(fields: [companyId], references: [id])
+  rewardBadge    Badge?                   @relation(fields: [rewardBadgeId], references: [id])
+  participations ChallengeParticipation[]
+}
+
+model ChallengeParticipation {
+  id          String    @id @default(cuid())
+  challengeId String
+  userId      String
+  progress    Int       @default(0)
+  completed   Boolean   @default(false)
+  challenge   Challenge @relation(fields: [challengeId], references: [id])
+  user        User      @relation(fields: [userId], references: [id])
+
+  @@unique([challengeId, userId])
+}
+
+model Invoice {
+  id        String        @id @default(cuid())
+  companyId String
+  amount    Float
+  status    String
+  issuedAt  DateTime      @default(now())
+  dueDate   DateTime
+  company   Company       @relation(fields: [companyId], references: [id])
+}
+
+model FormSubmission {
+  id            String   @id @default(cuid())
+  type          String
+  inbox         String
+  name          String
+  email         String
+  phone         String?
+  subject       String?
+  message       String?
+  payload       String   @default("{}")
+  status        String   @default("NEW")
+  emailSent     Boolean  @default(false)
+  siteProgramId String?
+  audienceType  String?
+  createdAt     DateTime @default(now())
+}
+
+model SiteTrainer {
+  id            String   @id @default(cuid())
+  name          String
+  role          String
+  description   String
+  credentials   String
+  imageUrl      String
+  websiteUrl    String?
+  instagramUrl  String?
+  linkedinUrl   String?
+  galleryUrls   String   @default("[]")
+  mediaLinks    String   @default("[]")
+  scrapeSources String   @default("{}")
+  scrapeMeta    String   @default("{}")
+  published     Boolean  @default(true)
+  sortOrder     Int      @default(0)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+}
+
+model SiteClass {
+  id              String   @id @default(cuid())
+  classDate       String   @default("")
+  day             String
+  dayIndex        Int      @default(0)
+  time            String
+  startMinutes    Int      @default(420)
+  durationMinutes Int      @default(60)
+  classType       String
+  instructor      String
+  level           String
+  location        String
+  price           String   @default("SGD 35")
+  stripeLink      String?
+  published       Boolean  @default(true)
+  comingSoon      Boolean  @default(false)
+  sortOrder       Int      @default(0)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+}
+
+model SiteProgram {
+  id                 String   @id @default(cuid())
+  category           String
+  title              String
+  description        String   @default("")
+  comingSoon         Boolean  @default(false)
+  scheduledDate      String   @default("")
+  startMinutes       Int      @default(0)
+  dates              String   @default("Coming Soon")
+  duration           String   @default("")
+  time               String   @default("")
+  location           String   @default("Dharma Space Studio")
+  facilitator        String   @default("")
+  price              String   @default("")
+  certificationLabel String   @default("")
+  classSize          String   @default("")
+  curriculumItems    String   @default("[]")
+  badgeTitle         String   @default("")
+  badgeSubtitle      String   @default("")
+  imageUrl           String   @default("")
+  stripeLink         String?
+  usePayNow          Boolean  @default(false)
+  code               String?
+  depositAmount      String?
+  singlePerson       Boolean  @default(true)
+  published          Boolean  @default(true)
+  sortOrder          Int      @default(0)
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+}
