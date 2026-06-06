@@ -9,6 +9,11 @@ export function usesPostgres(): boolean {
   return url.startsWith("postgresql://") || url.startsWith("postgres://");
 }
 
+export function postgresUser(url: string): string | null {
+  const match = url.match(/^postgres(?:ql)?:\/\/([^:@/]+)/);
+  return match?.[1] ? decodeURIComponent(match[1]) : null;
+}
+
 export async function tableCount(url: string): Promise<number> {
   const { PrismaClient } = await import("@prisma/client");
   const client = new PrismaClient({ datasources: { db: { url } } });
@@ -24,20 +29,53 @@ export async function tableCount(url: string): Promise<number> {
   }
 }
 
+async function grantAppUserPrivileges(adminUrl: string, appUser: string): Promise<void> {
+  const { PrismaClient } = await import("@prisma/client");
+  const client = new PrismaClient({ datasources: { db: { url: adminUrl } } });
+  try {
+    await client.$executeRawUnsafe(`GRANT ALL ON SCHEMA public TO "${appUser}"`);
+    await client.$executeRawUnsafe(`GRANT ALL ON ALL TABLES IN SCHEMA public TO "${appUser}"`);
+    await client.$executeRawUnsafe(`GRANT ALL ON ALL SEQUENCES IN SCHEMA public TO "${appUser}"`);
+    await client.$executeRawUnsafe(
+      `ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON TABLES TO "${appUser}"`
+    );
+    await client.$executeRawUnsafe(
+      `ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON SEQUENCES TO "${appUser}"`
+    );
+    console.log(`[startup] Granted schema privileges to ${appUser}.`);
+  } finally {
+    await client.$disconnect();
+  }
+}
+
 /** Returns true when schema is ready for queries. */
 export async function ensureDatabaseSchema(): Promise<boolean> {
   if (!usesPostgres()) return true;
 
   const appUrl = process.env.DATABASE_URL!;
-  const pushUrl = process.env.DATABASE_MIGRATION_URL || appUrl;
+  const migrationUrl = process.env.DATABASE_MIGRATION_URL;
+  const pushUrl = migrationUrl || appUrl;
+  const appUser = postgresUser(appUrl);
+  const tablesExist = (await tableCount(appUrl)) > 0;
 
-  if ((await tableCount(appUrl)) > 0) {
+  if (tablesExist && migrationUrl && appUser) {
+    console.log("[startup] Tables exist — ensuring app user privileges...");
+    try {
+      await grantAppUserPrivileges(migrationUrl, appUser);
+      return true;
+    } catch (error) {
+      console.warn("[startup] Could not grant app user privileges:", error);
+      return false;
+    }
+  }
+
+  if (tablesExist) {
     console.log("[startup] Database OK — tables already exist.");
     return true;
   }
 
   console.log("[startup] No tables yet — running prisma db push...");
-  if (process.env.DATABASE_MIGRATION_URL) {
+  if (migrationUrl) {
     console.log("[startup] Using DATABASE_MIGRATION_URL for one-time schema setup.");
   }
   try {
@@ -46,6 +84,9 @@ export async function ensureDatabaseSchema(): Promise<boolean> {
       stdio: "inherit",
       env: { ...process.env, DATABASE_URL: pushUrl }
     });
+    if (migrationUrl && appUser) {
+      await grantAppUserPrivileges(migrationUrl, appUser);
+    }
     console.log("[startup] Database schema created.");
     return true;
   } catch (error) {
