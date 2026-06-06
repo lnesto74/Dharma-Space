@@ -9,7 +9,7 @@
     "start": "tsx src/server.ts",
     "start:prod": "tsx src/server.ts",
     "typecheck": "tsc --noEmit",
-    "db:push": "prisma db push",
+    "db:push": "tsx scripts/db-push.ts",
     "db:seed": "tsx prisma/seed.ts",
     "prisma:generate": "prisma generate",
     "postinstall": "prisma generate"

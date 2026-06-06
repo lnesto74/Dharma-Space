@@ -3,44 +3,35 @@ import path from "path";
 import { fileURLToPath } from "url";
 
 const backendRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
-const PG_SCHEMA = "dharma";
 
 export function usesPostgres(): boolean {
   const url = process.env.DATABASE_URL ?? "";
   return url.startsWith("postgresql://") || url.startsWith("postgres://");
 }
 
-export function withSchemaParam(databaseUrl: string, schema: string): string {
-  if (/[?&]schema=/.test(databaseUrl)) {
-    return databaseUrl.replace(/([?&])schema=[^&]*/, `$1schema=${encodeURIComponent(schema)}`);
+/** DigitalOcean dev DB URLs often use the component name as DB; the real DB is defaultdb. */
+export function normalizePostgresUrl(url: string): string {
+  let normalized = url;
+
+  const match = normalized.match(/^(postgresql:\/\/[^/]+\/)([^?]+)(.*)$/);
+  if (match) {
+    const [, prefix, dbName, suffix] = match;
+    if (/^dev-db-\d+$/.test(dbName)) {
+      console.log(`[startup] DigitalOcean: using database "defaultdb" instead of "${dbName}"`);
+      normalized = `${prefix}defaultdb${suffix}`;
+    }
   }
-  const joiner = databaseUrl.includes("?") ? "&" : "?";
-  return `${databaseUrl}${joiner}schema=${encodeURIComponent(schema)}`;
+
+  return normalized;
 }
 
 export async function ensureDatabaseSchema(): Promise<void> {
   if (!usesPostgres()) return;
 
-  const schema = process.env.PG_SCHEMA || PG_SCHEMA;
-  const baseUrl = process.env.DATABASE_URL!;
-  const schemaUrl = withSchemaParam(baseUrl, schema);
-
-  console.log(`[startup] Ensuring PostgreSQL schema "${schema}"...`);
-
-  const { PrismaClient } = await import("@prisma/client");
-  const bootstrap = new PrismaClient({
-    datasources: { db: { url: baseUrl } }
-  });
-  try {
-    await bootstrap.$executeRawUnsafe(`CREATE SCHEMA IF NOT EXISTS "${schema}"`);
-  } finally {
-    await bootstrap.$disconnect();
-  }
-
-  process.env.DATABASE_URL = schemaUrl;
+  process.env.DATABASE_URL = normalizePostgresUrl(process.env.DATABASE_URL!);
 
   console.log("[startup] Applying Prisma schema to PostgreSQL...");
-  execSync("npx prisma db push --skip-generate", {
+  execSync("npx prisma db push --skip-generate --accept-data-loss", {
     cwd: backendRoot,
     stdio: "inherit",
     env: process.env

@@ -11,7 +11,7 @@
   ],
   "scripts": {
     "postinstall": "npm run prisma:generate -w backend",
-    "heroku-postbuild": "npm run build:backend",
+    "heroku-postbuild": "npm run build:backend && npm run db:push -w backend",
     "dev": "concurrently \"npm run dev -w backend\" \"npm run dev -w frontend\"",
     "build": "npm run build -w backend && npm run build -w frontend",
     "build:backend": "npm run build -w backend",
