@@ -5,7 +5,12 @@ import { normalizePostgresUrl, usesPostgres } from "../src/ensure-schema.js";
 
 const backendRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 
-if (usesPostgres() && process.env.DATABASE_URL) {
+if (!process.env.DATABASE_URL) {
+  console.log("[db:push] DATABASE_URL not set — skipping (tables are created at server startup on DigitalOcean).");
+  process.exit(0);
+}
+
+if (usesPostgres()) {
   process.env.DATABASE_URL = normalizePostgresUrl(process.env.DATABASE_URL);
 }
 
