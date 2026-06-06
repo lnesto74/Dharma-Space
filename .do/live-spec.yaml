@@ -2,9 +2,6 @@ alerts:
 - rule: DEPLOYMENT_FAILED
 - rule: DOMAIN_FAILED
 databases:
-- engine: PG
-  name: dev-db-191474
-  version: "17"
 - cluster_name: dharma-space-db
   db_name: dharma
   db_user: dharma_app
