@@ -1,0 +1,38 @@
+# DigitalOcean App Platform — backend component reference.
+# Adjust names, regions, and GitHub repo to match your app setup.
+
+name: dharma-space
+region: sgp
+
+services:
+  - name: api
+    github:
+      repo: lnesto74/Dharma-Space
+      branch: main
+      deploy_on_push: true
+    source_dir: /
+    environment_slug: node-js
+    instance_count: 1
+    instance_size_slug: basic-xxs
+    http_port: 8080
+    build_command: npm install && npm run build:backend
+    run_command: npm run start:prod -w backend
+    envs:
+      - key: DATABASE_URL
+        scope: RUN_TIME
+        value: ${dev-db-191474.DATABASE_URL}
+      - key: JWT_SECRET
+        scope: RUN_TIME
+        type: SECRET
+      - key: FRONTEND_URL
+        scope: RUN_TIME
+        value: https://your-frontend-url.ondigitalocean.app
+      - key: NODE_ENV
+        scope: RUN_TIME
+        value: production
+
+databases:
+  - name: dev-db-191474
+    engine: PG
+    version: "17"
+    production: false

@@ -26,6 +26,7 @@ import {
   TRAINER_MEDIA_DIR
 } from "./trainer-media-cache.js";
 import { PROGRAM_MEDIA_DIR } from "./program-media-cache.js";
+import { ensureDatabaseSchema } from "./ensure-schema.js";
 
 const prisma = new PrismaClient();
 const app = express();
@@ -38,7 +39,13 @@ app.use(cors({
       process.env.FRONTEND_URL || "http://localhost:7011",
       process.env.CORPORATE_URL || "http://localhost:7011"
     ];
-    if (!origin || allowed.includes(origin) || /\.dharma-space\.com$/.test(new URL(origin).hostname)) {
+    const hostname = origin ? new URL(origin).hostname : "";
+    if (
+      !origin
+      || allowed.includes(origin)
+      || /\.dharma-space\.com$/.test(hostname)
+      || /\.ondigitalocean\.app$/.test(hostname)
+    ) {
       callback(null, true);
       return;
     }
@@ -897,12 +904,21 @@ app.use((error: any, _req: Request, res: Response, _next: NextFunction) => {
   res.status(error?.statusCode === 400 ? 400 : 500).json({ message });
 });
 
-app.listen(port, async () => {
+async function startServer() {
+  await ensureDatabaseSchema().catch((error) => {
+    console.error("[startup] database schema:", error);
+    process.exit(1);
+  });
   await ensureSiteAdmin().catch((error) => console.error("[startup] site admin:", error));
   await ensureSiteContent(prisma).catch((error) => console.error("[startup] site content:", error));
   await migrateProgramCategories(prisma).catch((error) => console.error("[startup] program migrate:", error));
   await migrateProgramScheduleFields(prisma).catch((error) => console.error("[startup] program schedule migrate:", error));
   await migrateClassScheduleFields(prisma).catch((error) => console.error("[startup] class migrate:", error));
-  logMailStatus();
-  console.log(`Dharma Space API running on http://localhost:${port}`);
-});
+
+  app.listen(port, "0.0.0.0", () => {
+    logMailStatus();
+    console.log(`Dharma Space API running on port ${port}`);
+  });
+}
+
+startServer();

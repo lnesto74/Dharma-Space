@@ -5,13 +5,15 @@ Corporate upskilling and wellbeing MVP for the AI era. The implementation follow
 ## Stack
 
 - Frontend: React, TypeScript, Vite, Tailwind CSS, React Router, lucide-react, Recharts, Framer Motion
-- Backend: Node.js, Express, TypeScript, Prisma ORM, SQLite for local development, JWT auth, bcrypt password hashing
+- Backend: Node.js, Express, TypeScript, Prisma ORM, PostgreSQL (DigitalOcean in production, Docker locally), JWT auth, bcrypt password hashing
 - Architecture: npm workspaces with `/frontend` and `/backend`
 
 ## Quick Start
 
 ```bash
 npm install
+docker compose up -d db
+cp backend/.env.example backend/.env   # then add SMTP secrets
 npm run db:push
 npm run seed
 npm run dev
@@ -63,10 +65,25 @@ The backend exposes the requested REST surface under `/api`, including:
 - Certificates: `/api/certificates/me`, `/api/certificates/issue`
 - Admin: `/api/admin/dashboard`, `/api/admin/companies`, `/api/admin/users`
 
+## DigitalOcean deployment (backend)
+
+The backend is configured for **PostgreSQL** on App Platform:
+
+1. Attach a **Dev database** (Postgres 17) in the App Platform UI.
+2. Set `DATABASE_URL` to `${your-db-name.DATABASE_URL}` (DigitalOcean injects the connection string).
+3. Set `JWT_SECRET`, SMTP variables, and `FRONTEND_URL` as encrypted env vars.
+4. **Build command:** `npm install && npm run build -w backend`
+5. **Run command:** `npm run start:prod -w backend`
+6. **HTTP port:** `8080` (App Platform default; the server reads `PORT` automatically).
+
+On first boot the API runs `prisma db push` against Postgres, then seeds marketing site content if the database is empty.
+
+See `.do/app.yaml` for a starter App Platform spec.
+
 ## Future Improvements
 
 - Replace AI placeholders with model-backed recommendations and burnout risk analysis.
 - Add file-backed certificate PDF export and real LinkedIn sharing.
 - Add SSO/SAML/OIDC integration and invitation email delivery.
 - Expand trainer course builder into a full multi-step editor.
-- Add PostgreSQL production config, migrations, tests, and deployment pipeline.
+- Add Prisma migrations, tests, and a full deployment pipeline.
