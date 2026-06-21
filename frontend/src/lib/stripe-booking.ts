@@ -14,6 +14,7 @@ export type PendingStripeBooking = {
   phone?: string;
   notes?: string;
   guests?: string;
+  memberBooking?: boolean;
 };
 
 const STORAGE_KEY = "dharma_pending_stripe_booking";

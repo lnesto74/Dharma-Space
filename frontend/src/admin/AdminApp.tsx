@@ -2,6 +2,7 @@ import "./admin.css";
 import { Navigate, Route, Routes } from "react-router-dom";
 import { useAuth } from "../auth/useAuth";
 import {
+  AdminBookingsPage,
   AdminInquiriesPage,
   AdminOverviewPage
 } from "./SiteAdminPages";
@@ -17,6 +18,7 @@ export default function AdminApp() {
   return (
     <Routes>
       <Route index element={<AdminOverviewPage auth={auth} />} />
+      <Route path="bookings" element={<AdminBookingsPage auth={auth} />} />
       <Route path="inquiries" element={<AdminInquiriesPage auth={auth} />} />
       <Route path="site/trainers" element={<AdminSiteTrainersPage auth={auth} />} />
       <Route path="site/classes" element={<AdminSiteClassesPage auth={auth} />} />

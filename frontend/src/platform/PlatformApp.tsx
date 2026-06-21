@@ -51,6 +51,7 @@ import {
   YAxis
 } from "recharts";
 
+import { BrandLogo } from "../components/BrandLogo";
 import { LOGO_URL } from "../brand";
 
 const API_URL = import.meta.env.VITE_API_URL || "";
@@ -307,14 +308,11 @@ function Shell({ children, auth }: { children: ReactNode; auth: ReturnType<typeo
     <div className="min-h-screen">
       {!immersiveRoute && <header className="sticky top-0 z-30 border-b border-white/60 bg-ivory/80 backdrop-blur-2xl">
         <div className="mx-auto flex max-w-7xl items-center justify-between px-5 py-4">
-          <Link to="/" className="flex items-center gap-3">
-            <div className="grid h-12 w-12 place-items-center rounded-full bg-white shadow-ambient">
-              <img src={LOGO_URL} alt="Dharma Space logo" className="h-10 w-10 object-contain" />
-            </div>
-            <div>
-              <p className="text-sm uppercase tracking-[0.24em] text-stone">Dharma</p>
-              <p className="font-semibold text-navy">Space</p>
-            </div>
+          <Link to="/">
+            <BrandLogo
+              iconClassName="h-11 w-11 object-contain"
+              textClassName="text-[11px] font-medium uppercase tracking-[0.2em] text-navy"
+            />
           </Link>
           <button className="rounded-full glass p-3 md:hidden" onClick={() => setOpen(!open)}>
             <Menu size={18} />

@@ -2,6 +2,7 @@ import { PrismaClient } from "@prisma/client";
 import { dayToIndex, formatMinutesToTime, migrateClassScheduleFields, parseTimeToMinutes, snapMinutes } from "../src/class-schedule.js";
 import { migrateProgramCategories } from "../src/site-content.js";
 import { LIVE_SITE_TRAINERS, syncTrainersFromLiveSite } from "../src/live-site-specialists.js";
+import { importBundledSiteMedia } from "../src/import-site-media.js";
 
 const FLAGSHIP_CURRICULUM = [
   "Yoga Philosophy & History",
@@ -67,7 +68,22 @@ export async function seedSiteContent(prisma: PrismaClient) {
     { category: "CERTIFICATION", title: "Meditation Teacher Training", description: "100-hour MTT certification covering mindfulness, breathwork, and non-dual approaches.", dates: "Coming Soon", price: "SGD 2,200", singlePerson: true, sortOrder: 3 },
     { category: "CERTIFICATION", title: "Sound Healing Certification", description: "Tibetan bowls, crystal bowls, and vibrational body contact therapy practitioner certification.", dates: "Coming Soon", price: "SGD 1,800", singlePerson: true, sortOrder: 4 },
     { category: "CERTIFICATION", title: "Barre Instructor Certification", description: "Contemporary barre methodology blending ballet, pilates, and strength training.", dates: "Coming Soon", price: "SGD 1,750", singlePerson: true, sortOrder: 5 },
-    { category: "WORKSHOP", title: "Arm Balance Intensive", description: "Build strength and confidence in arm balances with progressive drills and spotting.", dates: "Coming Soon", price: "SGD 95", location: "Dharma Space Studio", facilitator: "Sarah Chen", singlePerson: true, sortOrder: 10 },
+    {
+      category: "WORKSHOP",
+      title: "Arm Balance Intensive",
+      description: "Build strength and confidence in arm balances with progressive drills and spotting.",
+      dates: "September 17, 2026",
+      scheduledDate: "2026-09-17",
+      time: "2:00 PM",
+      price: "SGD 5",
+      location: "Dharma Space Studio",
+      facilitator: "Vera Pleshakova",
+      comingSoon: false,
+      usePayNow: false,
+      depositAmount: "SGD 5",
+      singlePerson: true,
+      sortOrder: 10
+    },
     { category: "WORKSHOP", title: "Yin & Sound Bath", description: "", dates: "Coming Soon", price: "SGD 75", location: "Dharma Space Studio", singlePerson: true, sortOrder: 11 },
     { category: "WORKSHOP", title: "Breathwork Journey", description: "", dates: "Coming Soon", price: "SGD 85", location: "Dharma Space Studio", singlePerson: true, sortOrder: 12 },
     { category: "WORKSHOP", title: "Meditation Intensive", description: "", dates: "Coming Soon", price: "SGD 150", location: "Dharma Space Studio", singlePerson: true, sortOrder: 13 },
@@ -76,7 +92,7 @@ export async function seedSiteContent(prisma: PrismaClient) {
     { category: "EVENT", title: "Sound Healing Journey", description: "Deep vibrational healing with Tibetan and crystal bowls, gongs, and guided relaxation.", dates: "Coming Soon", location: "Dharma Space Studio", facilitator: "Yana An", price: "SGD 75", sortOrder: 22 },
     { category: "EVENT", title: "Breathwork Circle", description: "Transformational connected breathwork for emotional release, clarity, and nervous system reset.", dates: "Coming Soon", location: "Dharma Space Studio", facilitator: "Oxana Shilina", price: "SGD 85", sortOrder: 23 },
     { category: "EVENT", title: "Full Moon Ceremony", description: "Outdoor full moon ritual with meditation, singing, sharing circles, and intention weaving.", dates: "Coming Soon", location: "Labrador Nature Reserve", facilitator: "Vera Pleshakova", price: "SGD 55", sortOrder: 24 },
-    { category: "EVENT", title: "Wellness Networking Evening", description: "Connect with Singapore's conscious wellness community.", dates: "Coming Soon", location: "TBC, Singapore", facilitator: "Dharma Space Team", price: "SGD 45", sortOrder: 25 }
+    { category: "EVENT", title: "Glow Yoga", description: "Yoga in a UV-lit studio with neon body paint — under the lamps, every move glows. A playful, high-energy night you won't forget.", dates: "Coming Soon", location: "Dharma Space Studio", facilitator: "Dharma Space Team", price: "SGD 45", sortOrder: 25 }
   ];
 
   await prisma.siteTrainer.createMany({ data: trainers });
@@ -120,10 +136,35 @@ async function upgradeFlagshipProgram(prisma: PrismaClient) {
   });
 }
 
+/** Test workshop: bookable at SGD 5 via PayNow (no Stripe link required). */
+async function upgradeArmBalanceTestWorkshop(prisma: PrismaClient) {
+  const workshop = await prisma.siteProgram.findFirst({
+    where: { title: { contains: "Arm Balance" } }
+  });
+  if (!workshop) return;
+
+  await prisma.siteProgram.update({
+    where: { id: workshop.id },
+    data: {
+      comingSoon: false,
+      scheduledDate: "2026-09-17",
+      dates: "September 17, 2026",
+      time: "2:00 PM",
+      facilitator: "Vera Pleshakova",
+      price: "SGD 5",
+      usePayNow: false,
+      depositAmount: "SGD 5",
+      stripeLink: null
+    }
+  });
+}
+
 export async function ensureSiteContent(prisma: PrismaClient) {
   await seedSiteContent(prisma);
   await syncTrainersFromLiveSite(prisma);
+  await importBundledSiteMedia(prisma).catch((error) => console.error("[startup] site media:", error));
   await migrateProgramCategories(prisma);
   await migrateClassScheduleFields(prisma);
   await upgradeFlagshipProgram(prisma);
+  await upgradeArmBalanceTestWorkshop(prisma);
 }

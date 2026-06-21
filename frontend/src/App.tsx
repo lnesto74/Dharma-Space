@@ -1,10 +1,12 @@
 import { Navigate, Route, Routes } from "react-router-dom";
 import AdminApp from "./admin/AdminApp";
+import { MemberAuthProvider } from "./auth/MemberAuthContext";
 import MarketingSite from "./marketing/MarketingSite";
 import PlatformApp from "./platform/PlatformApp";
 
 export default function App() {
   return (
+    <MemberAuthProvider>
     <Routes>
       <Route path="/" element={<MarketingSite initialPage="about" />} />
       <Route path="/about" element={<Navigate to="/" replace />} />
@@ -24,5 +26,6 @@ export default function App() {
       <Route path="/admin/*" element={<AdminApp />} />
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
+    </MemberAuthProvider>
   );
 }

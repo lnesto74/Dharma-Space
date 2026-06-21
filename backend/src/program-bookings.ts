@@ -24,6 +24,17 @@ function guestCountFromPayload(payload: string): number {
   }
 }
 
+async function countTableBookings(prisma: PrismaClient, programId: string): Promise<number> {
+  const rows = await prisma.booking.findMany({
+    where: {
+      siteProgramId: programId,
+      status: { in: ["AWAITING_PAYMENT", "PAID"] }
+    },
+    select: { guests: true }
+  });
+  return rows.reduce((sum, row) => sum + row.guests, 0);
+}
+
 export async function countProgramBookings(prisma: PrismaClient, programId: string): Promise<number> {
   const rows = await prisma.formSubmission.findMany({
     where: {
@@ -33,7 +44,9 @@ export async function countProgramBookings(prisma: PrismaClient, programId: stri
     select: { payload: true }
   });
 
-  return rows.reduce((sum, row) => sum + guestCountFromPayload(row.payload), 0);
+  const legacyGuests = rows.reduce((sum, row) => sum + guestCountFromPayload(row.payload), 0);
+  const tableGuests = await countTableBookings(prisma, programId);
+  return legacyGuests + tableGuests;
 }
 
 export function computeProgramSoldOut(input: {

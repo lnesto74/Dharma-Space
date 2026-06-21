@@ -46,7 +46,7 @@ export const LIVE_SITE_TRAINERS = [
     sortOrder: 4
   },
   {
-    name: "KJ",
+    name: "Kanthan Jeganathan",
     role: "Human Behavior & Trauma Specialist",
     description:
       "Helping organizations navigate complex behavioral challenges, trauma, and life transitions with clarity, structure, and practical support.",
@@ -77,13 +77,17 @@ export async function syncTrainersFromLiveSite(prisma: import("@prisma/client").
   for (const live of LIVE_SITE_TRAINERS) {
     const existing = await prisma.siteTrainer.findFirst({ where: { name: live.name } });
     if (existing) {
+      const keepStoredPhoto =
+        existing.imageUrl.includes("/api/media/trainers/") ||
+        (existing.imageUrl.startsWith("/specialists/") && !existing.imageUrl.includes("_components/"));
+
       await prisma.siteTrainer.update({
         where: { id: existing.id },
         data: {
           role: live.role,
           description: live.description,
           credentials: live.credentials,
-          imageUrl: live.imageUrl,
+          ...(keepStoredPhoto ? {} : { imageUrl: live.imageUrl }),
           sortOrder: live.sortOrder
         }
       });

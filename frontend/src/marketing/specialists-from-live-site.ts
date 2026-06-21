@@ -53,7 +53,7 @@ export const LIVE_SITE_SPECIALISTS: LiveSpecialist[] = [
     img: `${LIVE_COMPONENT_BASE}/IMG_7720_2.506eacb6.JPG`
   },
   {
-    name: "KJ",
+    name: "Kanthan Jeganathan",
     role: "Human Behavior & Trauma Specialist",
     desc: "Helping organizations navigate complex behavioral challenges, trauma, and life transitions with clarity, structure, and practical support.",
     cert: "E-RYT 500 · YACEP · B.Sc. Physio",

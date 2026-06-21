@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { GoogleOAuthProvider, GoogleLogin, CredentialResponse } from "@react-oauth/google";
 import { Navigate } from "react-router-dom";
 import PlatformApp from "../platform/PlatformApp";
-import { LOGO_URL } from "../brand";
+import { BrandLogo } from "../components/BrandLogo";
 
 const API_URL = import.meta.env.VITE_API_URL || "";
 
@@ -35,11 +35,14 @@ function CorporateLogin({ clientId }: { clientId: string }) {
   return (
     <div className="min-h-screen bg-[#faf9f9] flex items-center justify-center p-6" style={{ fontFamily: "Inter, ui-sans-serif, system-ui, sans-serif" }}>
       <div className="w-full max-w-md">
-        <div className="mb-8 text-center">
-          <img src={LOGO_URL} alt="Dharma Space" className="h-12 w-auto mx-auto mb-4" />
+        <div className="mb-8 flex flex-col items-center">
+          <BrandLogo
+            className="flex items-center gap-2 mb-4"
+            iconClassName="h-14 w-14 object-contain"
+            textClassName="text-[11px] font-medium uppercase tracking-[0.2em] text-[#37352f]"
+          />
           <p className="text-xs uppercase tracking-[0.2em] text-stone-500 mb-2">Corporate Wellness</p>
-          <h1 className="text-3xl font-semibold text-[#37352f]">Dharma Space</h1>
-          <p className="mt-3 text-sm text-stone-600">Sign in with your company Google account to access your corporate wellness portal.</p>
+          <p className="mt-3 text-sm text-stone-600 text-center">Sign in with your company Google account to access your corporate wellness portal.</p>
         </div>
         <div className="bg-white border border-black/10 rounded-lg p-8 shadow-sm">
           {error && <p className="mb-4 text-sm text-red-600">{error}</p>}

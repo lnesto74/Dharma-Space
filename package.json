@@ -19,6 +19,7 @@
     "typecheck": "npm run typecheck -w backend && npm run typecheck -w frontend",
     "seed": "npm run db:seed -w backend",
     "db:push": "npm run db:push -w backend",
+    "setup:local": "bash scripts/setup-local-dev.sh",
     "start": "npm run start:prod -w backend",
     "start:prod": "npm run start:prod -w backend"
   },

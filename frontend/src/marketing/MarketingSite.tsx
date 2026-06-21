@@ -1,12 +1,18 @@
 import { useState, useEffect, useRef } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import {
-  logoImg, heroImg, yttImg, payNowQR,
+  heroImg, yttImg, payNowQR,
   aerialSoundBathImg, glowYogaImg, handpanImg, cookingImg, yachtImg,
   platformImg1, platformImg2, platformImg3
 } from "./assets";
+import { BrandLogo } from "../components/BrandLogo";
+import { InstagramCommunityGallery } from "../components/InstagramCommunityGallery";
 import { LIVE_SITE_SPECIALISTS, type LiveSpecialist } from "./specialists-from-live-site";
-import { Menu, X, ChevronRight, ChevronDown, MapPin, Mail, Phone, Instagram, MessageCircle, Star, Check, Building2, Leaf, Bell, Wind, Compass, Moon, BookOpen, Activity, Lock, LogOut } from "lucide-react";
+import { Menu, X, ChevronRight, ChevronDown, MapPin, Mail, Phone, Instagram, MessageCircle, Star, Check, Building2, Leaf, Bell, Wind, Compass, Moon, BookOpen, Activity, Lock, LogOut, User } from "lucide-react";
+import { MemberAuthPanel } from "../components/MemberAuthPanel";
+import { MemberAccountModal } from "../components/MemberAccountModal";
+import { useMemberAuth } from "../auth/MemberAuthContext";
+import { createMemberBooking, confirmMemberBookingReturn, updateMemberProfile } from "../lib/member-api";
 import { submitInquiry } from "../lib/inquiries";
 import { useSiteContent, type SiteProgram } from "../lib/site-content";
 import { programToReserveInfo, programActionLabel, type ReserveInfo } from "../lib/education";
@@ -15,7 +21,6 @@ import {
   isStripeBookingReturn,
   readPendingStripeBooking,
   savePendingStripeBooking,
-  stripeCheckoutUrl,
   type PendingStripeBooking
 } from "../lib/stripe-booking";
 
@@ -54,7 +59,7 @@ const SERVICES = [
 
 const TEAM_ACTIVITIES = [
   { title: "Aerial Sound Bath", desc: "Immersive Tibetan and crystal bowl experience enjoyed from the comfort of aerial hammocks — deep collective relaxation and reset like no other.", img: aerialSoundBathImg },
-  { title: "Glow Yoga", desc: "Yoga under neon lights with luminescent body paint — a high-energy, unforgettable experience that glows as brightly as your team.", img: glowYogaImg },
+  { title: "Glow Yoga", desc: "Yoga in a UV-lit studio with neon body paint — under the lamps, every move glows. A playful, high-energy night you won't forget.", img: glowYogaImg },
   { title: "Learning Handpan Class", desc: "Discover the meditative magic of the handpan together — no experience needed, pure presence required.", img: handpanImg },
   { title: "Nature Walk & Mindfulness", desc: "Guided outdoor walk blending movement, breath, and sensory awareness in Singapore's green spaces.", img: "https://images.unsplash.com/photo-1759304426080-c2c31753db86?w=600&h=800&fit=crop&auto=format" },
   { title: "Healthy Meals Cooking Classes", desc: "Hands-on cooking class focused on healthy, nourishing meals — learn together, eat well, and bond as a team.", img: cookingImg },
@@ -81,7 +86,7 @@ const COURSES = [
 ];
 
 const WORKSHOPS = [
-  { title: "Arm Balance Intensive", date: "Coming Soon", instructor: "", price: "SGD 95", location: "Dharma Space Studio" },
+  { title: "Arm Balance Intensive", date: "September 17, 2026", instructor: "Vera Pleshakova", price: "SGD 5", location: "Dharma Space Studio" },
   { title: "Yin & Sound Bath", date: "Coming Soon", instructor: "", price: "SGD 75", location: "Dharma Space Studio" },
   { title: "Breathwork Journey", date: "Coming Soon", instructor: "", price: "SGD 85", location: "Dharma Space Studio" },
   { title: "Meditation Intensive", date: "Coming Soon", instructor: "", price: "SGD 150", location: "Dharma Space Studio" },
@@ -93,7 +98,7 @@ const EVENTS = [
   { title: "Sound Healing Journey", date: "Coming Soon", time: "", location: "Dharma Space Studio", facilitator: "Yana An", desc: "Deep vibrational healing with Tibetan and crystal bowls, gongs, and guided relaxation.", img: IMAGES.outdoorMed, price: "SGD 75" },
   { title: "Breathwork Circle", date: "Coming Soon", time: "", location: "Dharma Space Studio", facilitator: "Oxana Shilina", desc: "Transformational connected breathwork for emotional release, clarity, and nervous system reset.", img: IMAGES.yogaClass, price: "SGD 85" },
   { title: "Full Moon Ceremony", date: "Coming Soon", time: "", location: "Labrador Nature Reserve", facilitator: "Vera Pleshakova", desc: "Outdoor full moon ritual with meditation, singing, sharing circles, and intention weaving.", img: IMAGES.womenGroup, price: "SGD 55" },
-  { title: "Wellness Networking Evening", date: "Coming Soon", time: "", location: "TBC, Singapore", facilitator: "Dharma Space Team", desc: "Connect with Singapore's conscious wellness community. Light yoga, drinks, and meaningful conversations.", img: IMAGES.community, price: "SGD 45" },
+  { title: "Glow Yoga", date: "Coming Soon", time: "", location: "Dharma Space Studio", facilitator: "Dharma Space Team", desc: "Yoga in a UV-lit studio with neon body paint — under the lamps, every move glows. A playful, high-energy night you won't forget.", img: glowYogaImg, price: "SGD 45" },
 ];
 
 const CLASS_SCHEDULE = [
@@ -109,11 +114,10 @@ const CLASS_SCHEDULE = [
   { day: "Sunday", time: "9:00 AM", type: "Yin & Meditation", instructor: "Ryan Ng", level: "All Levels", location: "Studio A" },
 ];
 
-const GALLERY_IMGS = [IMAGES.yogaClass, IMAGES.community, IMAGES.outdoorMed, IMAGES.soundBowl, IMAGES.womenGroup, IMAGES.raisingHands, IMAGES.yogaExercise, IMAGES.soloYoga, IMAGES.corporate];
-
 // ── Navigation ────────────────────────────────────────────────────────────────
 
-function Nav({ page, setPage, onContact }: { page: Page; setPage: (p: Page) => void; onContact: () => void }) {
+function Nav({ page, setPage, onContact, onAccount }: { page: Page; setPage: (p: Page) => void; onContact: () => void; onAccount: () => void }) {
+  const { isLoggedIn, member } = useMemberAuth();
   const navigate = useNavigate();
   const [scrolled, setScrolled] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
@@ -166,11 +170,10 @@ function Nav({ page, setPage, onContact }: { page: Page; setPage: (p: Page) => v
       className={`fixed top-0 left-0 right-0 z-50 transition-all duration-500 ${scrolled ? "bg-[#FAF8F3]/95 backdrop-blur-md shadow-sm" : "bg-transparent"}`}
     >
       <div className="max-w-7xl mx-auto px-6 lg:px-12 h-20 flex items-center justify-between">
-        <button onClick={() => nav("about")} className="flex items-center gap-3 group">
-          <img src={logoImg} alt="Dharma Space logo mark" className="h-9 w-auto" />
-          <span className="font-bold tracking-[0.18em] text-[11px] uppercase text-[#2A2825] leading-none self-center" style={{ fontFamily: "var(--font-body)" }}>
-            Dharma Space
-          </span>
+        <button onClick={() => nav("about")} className="group">
+          <BrandLogo
+            textClassName="text-[11px] font-medium uppercase tracking-[0.2em] text-[#2A2825]"
+          />
         </button>
 
         <nav className="hidden md:flex items-center gap-8">
@@ -218,6 +221,14 @@ function Nav({ page, setPage, onContact }: { page: Page; setPage: (p: Page) => v
             </button>
           )}
           <button
+            type="button"
+            onClick={onAccount}
+            className="hidden md:flex items-center gap-1.5 px-4 py-2.5 text-[12px] tracking-[0.12em] uppercase text-[#2A2825]/70 hover:text-[#2A2825] transition-all duration-300"
+            style={{ fontFamily: "var(--font-body)" }}
+          >
+            <User size={14} /> {isLoggedIn ? (member?.name?.split(" ")[0] || "Account") : "Sign in"}
+          </button>
+          <button
             onClick={onContact}
             className="hidden md:block px-6 py-2.5 text-[12px] tracking-[0.12em] uppercase border border-[#C4785A] text-[#C4785A] hover:bg-[#C4785A] hover:text-white transition-all duration-300"
             style={{ fontFamily: "var(--font-body)" }}
@@ -237,6 +248,9 @@ function Nav({ page, setPage, onContact }: { page: Page; setPage: (p: Page) => v
               {label}
             </button>
           ))}
+          <button type="button" onClick={() => { onAccount(); setMenuOpen(false); }} className="text-left text-[14px] tracking-[0.1em] uppercase text-[#2A2825]/70 flex items-center gap-2" style={{ fontFamily: "var(--font-body)" }}>
+            <User size={14} /> {isLoggedIn ? "My account" : "Sign in"}
+          </button>
           <button onClick={() => { onContact(); setMenuOpen(false); }} className="mt-2 px-6 py-3 text-[12px] tracking-[0.12em] uppercase border border-[#C4785A] text-[#C4785A]" style={{ fontFamily: "var(--font-body)" }}>
             Contact Us
           </button>
@@ -395,7 +409,7 @@ function AboutPage({ setPage, specialists }: { setPage: (p: Page) => void; speci
                   <img
                     src={img}
                     alt={name}
-                    className={`w-full aspect-[3/4] object-cover group-hover:scale-105 transition-transform duration-700 ${portraitFocus ? "object-[center_15%] scale-125" : "object-top"}`}
+                    className={`w-full aspect-[3/4] object-cover group-hover:scale-105 transition-transform duration-700 ${portraitFocus && !img.includes("/api/media/trainers/") ? "object-[center_15%] scale-125" : "object-top"}`}
                   />
                   <div className="absolute inset-0 bg-[#C4785A]/0 group-hover:bg-[#C4785A]/10 transition-all duration-400" />
                 </div>
@@ -435,13 +449,7 @@ function AboutPage({ setPage, specialists }: { setPage: (p: Page) => void; speci
 
       {/* Community gallery strip */}
       <section className="pb-28">
-        <div className="grid grid-cols-3 md:grid-cols-5 gap-1.5 px-6 lg:px-12 max-w-7xl mx-auto">
-          {GALLERY_IMGS.slice(0, 5).map((src, i) => (
-            <div key={i} className="aspect-square overflow-hidden bg-[#D4B896]">
-              <img src={src} alt="Dharma Space community moment" className="w-full h-full object-cover hover:scale-110 transition-transform duration-700 cursor-pointer" />
-            </div>
-          ))}
-        </div>
+        <InstagramCommunityGallery variant="strip" limit={5} showFollowLink={false} />
       </section>
     </div>
   );
@@ -520,7 +528,7 @@ function CorporatePage({ onContact }: { onContact: () => void }) {
               { stat: "↑ 42%", label: "Leadership effectiveness", desc: "Mindful leaders make better decisions, communicate more clearly, and inspire greater trust." },
             ].map(({ stat, label, desc }) => (
               <div key={label} className="bg-white p-10">
-                <div className="text-3xl font-light text-[#C4785A] mb-3" style={{ fontFamily: "var(--font-display)" }}>{stat}</div>
+                <div className="text-3xl font-light text-[#C4785A] mb-3" style={{ fontFamily: "Montserrat, sans-serif" }}>{stat}</div>
                 <h3 className="font-medium text-[#2A2825] mb-3 text-sm uppercase tracking-wider" style={{ fontFamily: "var(--font-body)" }}>{label}</h3>
                 <p className="text-[#7A7468] text-[13px] leading-[1.8]" style={{ fontFamily: "var(--font-body)" }}>{desc}</p>
               </div>
@@ -650,16 +658,17 @@ function CorporatePage({ onContact }: { onContact: () => void }) {
 
 function EducationPage({
   onContact,
+  onReserve,
   flagship,
   certifications,
   workshops
 }: {
   onContact: () => void;
+  onReserve: (info: ReserveInfo) => void;
   flagship: SiteProgram | null;
   certifications: SiteProgram[];
   workshops: SiteProgram[];
 }) {
-  const [reserve, setReserve] = useState<ReserveInfo | null>(null);
   const curriculum = flagship?.curriculumItems?.length
     ? flagship.curriculumItems
     : ["Yoga Philosophy & History", "Anatomy & Physiology", "Teaching Methodology", "Alignment & Adjustments", "Breathwork (Pranayama)", "Meditation Techniques", "Practicum Teaching Hours", "Ayurvedic Lifestyle"];
@@ -715,7 +724,7 @@ function EducationPage({
               const flagshipFinished = Boolean(flagshipReserve?.finished);
               return (
             <button
-              onClick={() => setReserve(flagshipReserve ?? {
+              onClick={() => onReserve(flagshipReserve ?? {
                 title: "200-Hour Yoga Teacher Training",
                 date: "Sep 11 – Oct 6, 2026",
                 time: "Thu 7–9PM (Online) · Fri 6:30–9:30PM · Sat & Sun 2–9PM",
@@ -774,7 +783,7 @@ function EducationPage({
                   </div>
                 </div>
                 <button
-                  onClick={() => setReserve(reserve)}
+                  onClick={() => onReserve(reserve)}
                   disabled={reserve.finished}
                   className={`w-full py-3 border text-[11px] tracking-[0.15em] uppercase transition-all duration-300 ${reserve.finished ? "border-[#7A7468] text-[#7A7468] cursor-not-allowed" : "border-[#C4785A] text-[#C4785A] hover:bg-[#C4785A] hover:text-white"}`}
                   style={{ fontFamily: "var(--font-body)" }}
@@ -808,7 +817,7 @@ function EducationPage({
               <div className="flex items-center gap-6">
                 <span className="text-[#2A2825] font-medium" style={{ fontFamily: "var(--font-body)" }}>{program.price}</span>
                 <button
-                  onClick={() => setReserve(reserve)}
+                  onClick={() => onReserve(reserve)}
                   disabled={reserve.soldOut || reserve.finished}
                   className={`px-5 py-2.5 text-[11px] tracking-[0.12em] uppercase transition-all duration-300 whitespace-nowrap ${reserve.soldOut || reserve.finished ? "border border-[#7A7468] text-[#7A7468] cursor-not-allowed" : "border border-[#C4785A] text-[#C4785A] hover:bg-[#C4785A] hover:text-white"}`}
                   style={{ fontFamily: "var(--font-body)" }}
@@ -833,7 +842,6 @@ function EducationPage({
         </div>
       </section>
 
-      {reserve && <ReserveModal info={reserve} onClose={() => setReserve(null)} />}
     </div>
   );
 }
@@ -954,16 +962,34 @@ function ClassScheduleNotifyModal({ onClose }: { onClose: () => void }) {
   );
 }
 
+// ── Events Page ───────────────────────────────────────────────────────────────
+
+interface BookingInfo {
+  type: string;
+  day: string;
+  time: string;
+  instructor: string;
+  level: string;
+  location: string;
+  code?: string;
+  classId?: string;
+  stripeLink?: string | null;
+  price?: string;
+  comingSoon?: boolean;
+}
+
 function EventsPage({
   events,
-  classSchedule
+  classSchedule,
+  onReserve,
+  onBookClass
 }: {
   events: Array<ReserveInfo & { desc: string; img: string }>;
   classSchedule: Array<{ id?: string; day: string; date?: string; time: string; type: string; instructor: string; level: string; location: string; price?: string; stripeLink?: string | null; comingSoon?: boolean }>;
+  onReserve: (info: ReserveInfo) => void;
+  onBookClass: (info: BookingInfo) => void;
 }) {
   const [activeDay, setActiveDay] = useState<string | null>(null);
-  const [booking, setBooking] = useState<BookingInfo | null>(null);
-  const [reserve, setReserve] = useState<ReserveInfo | null>(null);
   const [notifyOpen, setNotifyOpen] = useState(false);
   const dayKey = (c: (typeof classSchedule)[number]) => c.date || c.day;
   const days = [...new Set(classSchedule.map(dayKey))];
@@ -1016,7 +1042,7 @@ function EventsPage({
                   <span className="text-[12px] text-[#7A7468]" style={{ fontFamily: "var(--font-body)" }}>{event.location}</span>
                 </div>
                 <p className="text-[12px] text-[#7A7468] mb-6" style={{ fontFamily: "var(--font-body)" }}>with {event.facilitator}</p>
-                <button onClick={() => setReserve(event)} disabled={event.soldOut || event.finished} className={`w-full py-3 text-[11px] tracking-[0.15em] uppercase transition-colors duration-300 ${event.soldOut || event.finished ? "bg-[#7A7468] text-white cursor-not-allowed" : "bg-[#2A2825] text-white hover:bg-[#C4785A]"}`} style={{ fontFamily: "var(--font-body)" }}>
+                <button onClick={() => onReserve(event)} disabled={event.soldOut || event.finished} className={`w-full py-3 text-[11px] tracking-[0.15em] uppercase transition-colors duration-300 ${event.soldOut || event.finished ? "bg-[#7A7468] text-white cursor-not-allowed" : "bg-[#2A2825] text-white hover:bg-[#C4785A]"}`} style={{ fontFamily: "var(--font-body)" }}>
                   {programActionLabel(event)}
                 </button>
               </div>
@@ -1063,7 +1089,7 @@ function EventsPage({
                       <span className="text-[11px] text-[#7A7468] tracking-wide" style={{ fontFamily: "var(--font-body)" }}>{cls.date || cls.day}</span>
                       <span className="bg-[#F2EBE0] text-[#2A2825]/60 text-[10px] tracking-wider px-3 py-1 uppercase" style={{ fontFamily: "var(--font-body)" }}>{cls.level}</span>
                       <span className="text-[#7A7468] text-[12px]" style={{ fontFamily: "var(--font-body)" }}>{cls.location}</span>
-                      <button onClick={() => setBooking({
+                      <button onClick={() => onBookClass({
                         type: cls.type,
                         day: cls.comingSoon ? "Coming Soon" : (cls.date || cls.day),
                         time: cls.time,
@@ -1116,17 +1142,9 @@ function EventsPage({
             Life at Dharma Space
           </h2>
         </div>
-        <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
-          {GALLERY_IMGS.map((src, i) => (
-            <div key={i} className={`overflow-hidden bg-[#D4B896] ${i === 0 ? "md:col-span-2 md:row-span-2" : ""}`}>
-              <img src={src} alt="Dharma Space community" className={`w-full h-full object-cover hover:scale-105 transition-transform duration-700 ${i === 0 ? "aspect-square md:aspect-auto md:h-full" : "aspect-square"}`} style={{ minHeight: i === 0 ? "300px" : undefined }} />
-            </div>
-          ))}
-        </div>
+        <InstagramCommunityGallery />
       </section>
 
-      {booking && <BookingModal info={booking} onClose={() => setBooking(null)} />}
-      {reserve && <ReserveModal info={reserve} onClose={() => setReserve(null)} />}
       {notifyOpen && <ClassScheduleNotifyModal onClose={() => setNotifyOpen(false)} />}
     </div>
   );
@@ -1204,14 +1222,19 @@ interface PayNowStepProps {
   facilitator?: string;
   price?: string;
   audienceType?: "student" | "practitioner";
+  memberBooking?: boolean;
   onDone: () => void;
 }
 
-function PayNowStep({ amount, reference, name, email, phone, notes, title, bookingType, date, schedule, siteProgramId, programCategory, location, facilitator, price, audienceType, onDone }: PayNowStepProps) {
+function PayNowStep({ amount, reference, name, email, phone, notes, title, bookingType, date, schedule, siteProgramId, programCategory, location, facilitator, price, audienceType, memberBooking, onDone }: PayNowStepProps) {
   const [sending, setSending] = useState(false);
   const [sendError, setSendError] = useState(false);
 
   const handleDone = async () => {
+    if (memberBooking) {
+      onDone();
+      return;
+    }
     setSending(true);
     setSendError(false);
     try {
@@ -1320,49 +1343,51 @@ function ConfirmedStep({ name, title, variant = "stripe" }: { name: string; titl
 }
 
 function BookingSuccessModal({ booking, onClose }: { booking: PendingStripeBooking; onClose: () => void }) {
+  const { token, isLoggedIn } = useMemberAuth();
   const [confirming, setConfirming] = useState(true);
   const [confirmError, setConfirmError] = useState("");
 
   useEffect(() => {
     let cancelled = false;
     (async () => {
-      if (!booking.email) {
-        setConfirming(false);
-        return;
-      }
       try {
-        await submitInquiry({
-          type: "booking_confirmed",
-          name: booking.name,
-          email: booking.email,
-          phone: booking.phone,
-          notes: booking.notes,
-          guests: booking.guests,
-          siteProgramId: booking.siteProgramId,
-          siteClassId: booking.siteClassId,
-          context: {
-            title: booking.title,
-            date: booking.date,
-            time: booking.time,
-            location: booking.location,
-            facilitator: booking.facilitator,
-            price: booking.price,
-            bookingType: "Stripe checkout",
-            reference: booking.reference,
-            programCategory: booking.programCategory,
-            paymentStatus: "PAID"
-          }
-        });
+        if (isLoggedIn && token && booking.reference) {
+          const sessionId = new URLSearchParams(window.location.search).get("session_id") || undefined;
+          await confirmMemberBookingReturn(token, booking.reference, sessionId);
+        } else if (booking.email) {
+          await submitInquiry({
+            type: "booking_confirmed",
+            name: booking.name,
+            email: booking.email,
+            phone: booking.phone,
+            notes: booking.notes,
+            guests: booking.guests,
+            siteProgramId: booking.siteProgramId,
+            siteClassId: booking.siteClassId,
+            context: {
+              title: booking.title,
+              date: booking.date,
+              time: booking.time,
+              location: booking.location,
+              facilitator: booking.facilitator,
+              price: booking.price,
+              bookingType: "Stripe checkout",
+              reference: booking.reference,
+              programCategory: booking.programCategory,
+              paymentStatus: "PAID"
+            }
+          });
+        }
       } catch (err) {
         if (!cancelled) {
-          setConfirmError(err instanceof Error ? err.message : "Could not confirm booking by email.");
+          setConfirmError(err instanceof Error ? err.message : "Could not confirm booking.");
         }
       } finally {
         if (!cancelled) setConfirming(false);
       }
     })();
     return () => { cancelled = true; };
-  }, [booking]);
+  }, [booking, isLoggedIn, token]);
 
   return (
     <div className="fixed inset-0 z-[100] flex items-end sm:items-center justify-center bg-[#1A1815]/70 backdrop-blur-sm p-0 sm:p-6" onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
@@ -1393,32 +1418,54 @@ function BookingSuccessModal({ booking, onClose }: { booking: PendingStripeBooki
 
 // ── Reserve Modal ─────────────────────────────────────────────────────────────
 
-function ReserveModal({ info, onClose }: { info: ReserveInfo; onClose: () => void }) {
-  const [step, setStep] = useState<"form" | "paynow" | "done">("form");
-  const [form, setForm] = useState({ name: "", email: "", phone: "", guests: "1", notes: "" });
-  const [waitlistSent, setWaitlistSent] = useState(false);
-  const [submitError, setSubmitError] = useState("");
-  const [submitting, setSubmitting] = useState(false);
-  const code = info.code ?? info.title.replace(/\s+/g, "").slice(0, 8);
-  const payReference = `DS-${code}`;
+function memberPhoneDigits(phone?: string | null) {
+  return phone?.replace(/^\+65\s?/, "") ?? "";
+}
 
+function ReserveModal({ info, onClose }: { info: ReserveInfo; onClose: () => void }) {
+  const { isLoggedIn, member, token, refreshMember } = useMemberAuth();
   const isComingSoon = Boolean(info.comingSoon ?? info.date === "Coming Soon");
   const isFinished = Boolean(info.finished);
   const usePayNow = Boolean(info.usePayNow && !isComingSoon);
-  const payAmount = info.depositAmount || info.price || "—";
-  const handleSubmit = (e: React.FormEvent) => e.preventDefault();
+  const bookable = !isComingSoon && !isFinished && !info.soldOut;
+
+  type Step = "auth" | "confirm" | "waitlist" | "paynow" | "done";
+  const needsAuth = bookable || isComingSoon;
+  const [step, setStep] = useState<Step>(() => {
+    if (!needsAuth) return "done";
+    if (isLoggedIn) return isComingSoon ? "waitlist" : "confirm";
+    return "auth";
+  });
+  const [phone, setPhone] = useState("");
+  const [guests, setGuests] = useState("1");
+  const [notes, setNotes] = useState("");
+  const [waitlistSent, setWaitlistSent] = useState(false);
+  const [submitError, setSubmitError] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+  const [payReference, setPayReference] = useState("");
+  const [payAmount, setPayAmount] = useState("");
+  const code = info.code ?? info.title.replace(/\s+/g, "").slice(0, 8);
+
+  useEffect(() => {
+    if (member?.phone) setPhone(memberPhoneDigits(member.phone));
+  }, [member]);
 
   const handleWaitlist = async () => {
+    if (!member) return;
     setSubmitting(true);
     setSubmitError("");
     try {
+      if (token && phone.trim()) {
+        await updateMemberProfile(token, { phone: formatPhone(phone) || null });
+        await refreshMember();
+      }
       await submitInquiry({
         type: "waitlist",
-        name: form.name,
-        email: form.email,
-        phone: formatPhone(form.phone),
-        notes: form.notes || undefined,
-        guests: form.guests,
+        name: member.name,
+        email: member.email,
+        phone: formatPhone(phone),
+        notes: notes || undefined,
+        guests: info.singlePerson ? "1" : guests,
         siteProgramId: info.programId,
         context: {
           title: info.title,
@@ -1433,6 +1480,7 @@ function ReserveModal({ info, onClose }: { info: ReserveInfo; onClose: () => voi
         }
       });
       setWaitlistSent(true);
+      setStep("done");
     } catch (err) {
       setSubmitError(err instanceof Error ? err.message : "Could not save your request. Please try again.");
     } finally {
@@ -1440,164 +1488,183 @@ function ReserveModal({ info, onClose }: { info: ReserveInfo; onClose: () => voi
     }
   };
 
-  const handleStripe = async () => {
-    const base = info.stripeLink?.trim();
-    if (!base) {
-      setSubmitError("Online booking is not available for this session yet.");
-      return;
-    }
-
+  const handleBook = async () => {
+    if (!token || !member) return;
     setSubmitting(true);
     setSubmitError("");
     try {
-      await submitInquiry({
-        type: "booking_intent",
-        name: form.name,
-        email: form.email,
-        phone: formatPhone(form.phone),
-        notes: form.notes || undefined,
-        guests: form.guests,
+      if (phone.trim()) {
+        await updateMemberProfile(token, { phone: formatPhone(phone) || null });
+        await refreshMember();
+      }
+      const guestCount = info.singlePerson ? 1 : parseInt(guests.replace("+", ""), 10) || 1;
+      const result = await createMemberBooking(token, {
         siteProgramId: info.programId,
-        context: {
+        guests: guestCount,
+        notes: notes || undefined,
+        paymentMethod: usePayNow ? "PAYNOW" : "STRIPE"
+      });
+      if (usePayNow) {
+        setPayReference(result.booking.reference);
+        setPayAmount(result.payNowAmount || result.booking.price);
+        setStep("paynow");
+        setSubmitting(false);
+        return;
+      }
+      if (result.checkoutUrl) {
+        savePendingStripeBooking({
+          name: member.name,
+          email: member.email,
           title: info.title,
           date: info.date,
           time: info.time,
           location: info.location,
           facilitator: info.facilitator,
           price: info.price,
-          bookingType: "Stripe checkout",
-          reference: code,
+          reference: result.booking.reference,
+          siteProgramId: info.programId,
           programCategory: info.category,
-          paymentStatus: "NOT_PAID"
-        }
-      });
-      savePendingStripeBooking({
-        name: form.name,
-        email: form.email,
-        title: info.title,
-        date: info.date,
-        time: info.time,
-        location: info.location,
-        facilitator: info.facilitator,
-        price: info.price,
-        reference: code,
-        siteProgramId: info.programId,
-        programCategory: info.category,
-        phone: formatPhone(form.phone),
-        notes: form.notes || undefined,
-        guests: form.guests
-      });
-      window.location.href = stripeCheckoutUrl(base, form.email, code);
+          phone: formatPhone(phone),
+          notes: notes || undefined,
+          guests: String(guestCount),
+          memberBooking: true
+        });
+        window.location.href = result.checkoutUrl;
+        return;
+      }
+      setSubmitError("Online payment is not available for this session yet.");
     } catch (err) {
-      setSubmitError(err instanceof Error ? err.message : "Could not save your booking. Please try again.");
+      setSubmitError(err instanceof Error ? err.message : "Could not create booking. Please try again.");
+    } finally {
       setSubmitting(false);
     }
   };
 
-  const formFields = (
-    <>
-      <div className="px-8 pt-6 pb-5 grid grid-cols-2 gap-4 bg-[#F2EBE0]">
-        {[{ label: "Date", val: info.date }, { label: "Time", val: info.time }, { label: "Location", val: info.location }, { label: "Facilitator", val: info.facilitator }, { label: "Investment", val: info.price }].map(({ label, val }) => (
-          <div key={label}>
-            <p className="text-[9px] tracking-[0.2em] text-[#C4785A] uppercase mb-0.5" style={{ fontFamily: "var(--font-body)" }}>{label}</p>
-            <p className="text-[#2A2825] text-[13px]" style={{ fontFamily: "var(--font-body)" }}>{val}</p>
-          </div>
-        ))}
-      </div>
-      <div className="p-8">
-        <form onSubmit={handleSubmit} className="space-y-5">
-          {[
-            { label: "Full Name", key: "name", type: "text", placeholder: "Your name" },
-            { label: "Email Address", key: "email", type: "email", placeholder: "your@email.com" },
-          ].map(({ label, key, type, placeholder }) => (
-            <div key={key}>
-              <label className="block text-[11px] tracking-[0.2em] uppercase text-[#2A2825]/60 mb-2" style={{ fontFamily: "var(--font-body)" }}>{label}</label>
-              <input type={type} placeholder={placeholder} required value={form[key as keyof typeof form]} onChange={e => setForm(f => ({ ...f, [key]: e.target.value }))} className="w-full bg-[#EDE5D8] px-4 py-3 text-[14px] text-[#2A2825] placeholder-[#7A7468]/60 focus:outline-none focus:ring-1 focus:ring-[#C4785A]" style={{ fontFamily: "var(--font-body)" }} />
-            </div>
-          ))}
-          <div>
-            <label className="block text-[11px] tracking-[0.2em] uppercase text-[#2A2825]/60 mb-2" style={{ fontFamily: "var(--font-body)" }}>Phone / WhatsApp</label>
-            <div className="flex bg-[#EDE5D8] focus-within:ring-1 focus-within:ring-[#C4785A]">
-              <span className="px-4 py-3 text-[14px] text-[#2A2825]/60 select-none border-r border-[#2A2825]/10 shrink-0" style={{ fontFamily: "var(--font-body)" }}>+65</span>
-              <input type="tel" placeholder="···· ····" value={form.phone} onChange={e => setForm(f => ({ ...f, phone: e.target.value.replace(/[^0-9 \-]/g, "") }))} className="flex-1 bg-transparent px-4 py-3 text-[14px] text-[#2A2825] placeholder-[#7A7468]/60 focus:outline-none" style={{ fontFamily: "var(--font-body)" }} />
-            </div>
-          </div>
-          {!info.singlePerson && (
-            <div>
-              <label className="block text-[11px] tracking-[0.2em] uppercase text-[#2A2825]/60 mb-2" style={{ fontFamily: "var(--font-body)" }}>Number of Guests</label>
-              <select value={form.guests} onChange={e => setForm(f => ({ ...f, guests: e.target.value }))} className="w-full bg-[#EDE5D8] px-4 py-3 text-[14px] text-[#2A2825] focus:outline-none focus:ring-1 focus:ring-[#C4785A]" style={{ fontFamily: "var(--font-body)" }}>
-                {["1", "2", "3", "4", "5+"].map(n => <option key={n} value={n}>{n}</option>)}
-              </select>
-            </div>
-          )}
-          <div>
-            <label className="block text-[11px] tracking-[0.2em] uppercase text-[#2A2825]/60 mb-2" style={{ fontFamily: "var(--font-body)" }}>Notes (optional)</label>
-            <textarea rows={3} placeholder="Any questions or special requirements..." value={form.notes} onChange={e => setForm(f => ({ ...f, notes: e.target.value }))} className="w-full bg-[#EDE5D8] px-4 py-3 text-[14px] text-[#2A2825] placeholder-[#7A7468]/60 focus:outline-none focus:ring-1 focus:ring-[#C4785A] resize-none" style={{ fontFamily: "var(--font-body)" }} />
-          </div>
-
-          {submitError && (
-            <p className="text-center text-[12px] text-red-500" style={{ fontFamily: "var(--font-body)" }}>{submitError}</p>
-          )}
-
-          {form.name && form.email ? (
-            isFinished ? (
-              <div className="flex items-center gap-3 bg-[#F2EBE0] p-4">
-                <p className="text-[#2A2825] text-[13px]" style={{ fontFamily: "var(--font-body)" }}>This program has finished and is no longer open for booking.</p>
-              </div>
-            ) : info.soldOut ? (
-              <div className="flex items-center gap-3 bg-[#F2EBE0] p-4">
-                <p className="text-[#2A2825] text-[13px]" style={{ fontFamily: "var(--font-body)" }}>This workshop is sold out. Contact us to join a cancellation waitlist.</p>
-              </div>
-            ) : isComingSoon ? (
-              waitlistSent ? (
-                <div className="flex items-center gap-3 bg-[#F2EBE0] p-4">
-                  <Check size={16} className="text-[#7A9A7A] flex-shrink-0" />
-                  <p className="text-[#2A2825] text-[13px]" style={{ fontFamily: "var(--font-body)" }}>Thank you! We've received your reservation and sent a confirmation to your email.</p>
-                </div>
-              ) : (
-                <button type="button" onClick={handleWaitlist} disabled={submitting} className="w-full py-4 bg-[#C4785A] text-white text-[12px] tracking-[0.15em] uppercase hover:bg-[#B86848] transition-colors duration-300 flex items-center justify-center gap-2 disabled:opacity-60" style={{ fontFamily: "var(--font-body)" }}>
-                  {submitting ? "Saving…" : "Reserve Spot"} <ChevronRight size={14} />
-                </button>
-              )
-            ) : usePayNow ? (
-              <button type="button" onClick={() => setStep("paynow")} disabled={submitting} className="w-full py-4 bg-[#C4785A] text-white text-[12px] tracking-[0.15em] uppercase hover:bg-[#B86848] transition-colors duration-300 flex items-center justify-center gap-2 disabled:opacity-60" style={{ fontFamily: "var(--font-body)" }}>
-                Book — Pay via PayNow <ChevronRight size={14} />
-              </button>
-            ) : (
-              <button type="button" onClick={handleStripe} disabled={submitting} className="w-full py-4 bg-[#C4785A] text-white text-[12px] tracking-[0.15em] uppercase hover:bg-[#B86848] transition-colors duration-300 flex items-center justify-center gap-2 disabled:opacity-60" style={{ fontFamily: "var(--font-body)" }}>
-                {submitting ? "Saving…" : "Book"} <ChevronRight size={14} />
-              </button>
-            )
-          ) : (
-            <p className="text-center text-[12px] text-[#7A7468] pt-2" style={{ fontFamily: "var(--font-body)" }}>Fill in your name and email to continue.</p>
-          )}
-        </form>
-      </div>
-    </>
+  const sessionDetails = (
+    <div className="px-8 pt-6 pb-5 grid grid-cols-2 gap-4 bg-[#F2EBE0]">
+      {[{ label: "Date", val: info.date }, { label: "Time", val: info.time }, { label: "Location", val: info.location }, { label: "Facilitator", val: info.facilitator }, { label: "Investment", val: info.price }].map(({ label, val }) => (
+        <div key={label}>
+          <p className="text-[9px] tracking-[0.2em] text-[#C4785A] uppercase mb-0.5" style={{ fontFamily: "var(--font-body)" }}>{label}</p>
+          <p className="text-[#2A2825] text-[13px]" style={{ fontFamily: "var(--font-body)" }}>{val}</p>
+        </div>
+      ))}
+    </div>
   );
+
+  const stepLabel =
+    step === "paynow" ? "PayNow payment" :
+    step === "done" ? "Confirmed" :
+    step === "waitlist" ? "Reserve Spot" :
+    step === "auth" ? "Sign in" : "Confirm booking";
 
   return (
     <div className="fixed inset-0 z-[100] flex items-end sm:items-center justify-center bg-[#1A1815]/70 backdrop-blur-sm p-0 sm:p-6" onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
       <div className="bg-[#FAF8F3] w-full sm:max-w-lg max-h-[95vh] overflow-y-auto">
         <div className="flex items-start justify-between p-8 border-b border-[#2A2825]/8">
           <div>
-            <p className="text-[10px] tracking-[0.25em] text-[#C4785A] uppercase mb-1" style={{ fontFamily: "var(--font-body)" }}>
-              {step === "paynow" ? "PayNow payment" : step === "done" ? "Confirmed" : isComingSoon ? "Reserve Spot" : "Book"}
-            </p>
+            <p className="text-[10px] tracking-[0.25em] text-[#C4785A] uppercase mb-1" style={{ fontFamily: "var(--font-body)" }}>{stepLabel}</p>
             <h2 className="text-2xl font-normal text-[#2A2825]" style={{ fontFamily: "var(--font-display)" }}>{info.title}</h2>
           </div>
           <button onClick={onClose} className="text-[#2A2825]/40 hover:text-[#2A2825] transition-colors p-1 mt-1"><X size={20} /></button>
         </div>
 
-        {step === "form" && formFields}
-        {step === "paynow" && (
+        {step === "auth" && needsAuth && (
+          <>
+            {sessionDetails}
+            <MemberAuthPanel compact onSuccess={() => setStep(isComingSoon ? "waitlist" : "confirm")} />
+          </>
+        )}
+
+        {step === "confirm" && bookable && member && (
+          <>
+            {sessionDetails}
+            <div className="p-8">
+              <div className="space-y-5">
+                <div className="bg-[#F2EBE0] p-4">
+                  <p className="text-[11px] tracking-[0.15em] text-[#7A7468] uppercase mb-1" style={{ fontFamily: "var(--font-body)" }}>Booking as</p>
+                  <p className="text-[#2A2825] text-[15px]" style={{ fontFamily: "var(--font-display)" }}>{member.name}</p>
+                  <p className="text-[#7A7468] text-[13px]" style={{ fontFamily: "var(--font-body)" }}>{member.email}</p>
+                </div>
+                <div>
+                  <label className="block text-[11px] tracking-[0.2em] uppercase text-[#2A2825]/60 mb-2" style={{ fontFamily: "var(--font-body)" }}>Phone / WhatsApp</label>
+                  <div className="flex bg-[#EDE5D8] focus-within:ring-1 focus-within:ring-[#C4785A]">
+                    <span className="px-4 py-3 text-[14px] text-[#2A2825]/60 select-none border-r border-[#2A2825]/10 shrink-0" style={{ fontFamily: "var(--font-body)" }}>+65</span>
+                    <input type="tel" placeholder="···· ····" value={phone} onChange={e => setPhone(e.target.value.replace(/[^0-9 \-]/g, ""))} className="flex-1 bg-transparent px-4 py-3 text-[14px] text-[#2A2825] placeholder-[#7A7468]/60 focus:outline-none" style={{ fontFamily: "var(--font-body)" }} />
+                  </div>
+                </div>
+                {!info.singlePerson && (
+                  <div>
+                    <label className="block text-[11px] tracking-[0.2em] uppercase text-[#2A2825]/60 mb-2" style={{ fontFamily: "var(--font-body)" }}>Number of Guests</label>
+                    <select value={guests} onChange={e => setGuests(e.target.value)} className="w-full bg-[#EDE5D8] px-4 py-3 text-[14px] text-[#2A2825] focus:outline-none focus:ring-1 focus:ring-[#C4785A]" style={{ fontFamily: "var(--font-body)" }}>
+                      {["1", "2", "3", "4", "5+"].map(n => <option key={n} value={n}>{n}</option>)}
+                    </select>
+                  </div>
+                )}
+                <div>
+                  <label className="block text-[11px] tracking-[0.2em] uppercase text-[#2A2825]/60 mb-2" style={{ fontFamily: "var(--font-body)" }}>Notes (optional)</label>
+                  <textarea rows={3} placeholder="Any questions or special requirements..." value={notes} onChange={e => setNotes(e.target.value)} className="w-full bg-[#EDE5D8] px-4 py-3 text-[14px] text-[#2A2825] placeholder-[#7A7468]/60 focus:outline-none focus:ring-1 focus:ring-[#C4785A] resize-none" style={{ fontFamily: "var(--font-body)" }} />
+                </div>
+                {submitError && <p className="text-center text-[12px] text-red-500" style={{ fontFamily: "var(--font-body)" }}>{submitError}</p>}
+                <button type="button" onClick={handleBook} disabled={submitting} className="w-full py-4 bg-[#C4785A] text-white text-[12px] tracking-[0.15em] uppercase hover:bg-[#B86848] transition-colors duration-300 flex items-center justify-center gap-2 disabled:opacity-60" style={{ fontFamily: "var(--font-body)" }}>
+                  {submitting ? "Please wait…" : usePayNow ? "Continue to PayNow" : "Book & pay securely"} <ChevronRight size={14} />
+                </button>
+              </div>
+            </div>
+          </>
+        )}
+
+        {step === "waitlist" && isComingSoon && member && (
+          <>
+            {sessionDetails}
+            <div className="p-8">
+              <div className="space-y-5">
+                <div className="bg-[#F2EBE0] p-4">
+                  <p className="text-[11px] tracking-[0.15em] text-[#7A7468] uppercase mb-1" style={{ fontFamily: "var(--font-body)" }}>Reserving as</p>
+                  <p className="text-[#2A2825] text-[15px]" style={{ fontFamily: "var(--font-display)" }}>{member.name}</p>
+                  <p className="text-[#7A7468] text-[13px]" style={{ fontFamily: "var(--font-body)" }}>{member.email}</p>
+                </div>
+                <div>
+                  <label className="block text-[11px] tracking-[0.2em] uppercase text-[#2A2825]/60 mb-2" style={{ fontFamily: "var(--font-body)" }}>Phone / WhatsApp</label>
+                  <div className="flex bg-[#EDE5D8] focus-within:ring-1 focus-within:ring-[#C4785A]">
+                    <span className="px-4 py-3 text-[14px] text-[#2A2825]/60 select-none border-r border-[#2A2825]/10 shrink-0" style={{ fontFamily: "var(--font-body)" }}>+65</span>
+                    <input type="tel" placeholder="···· ····" value={phone} onChange={e => setPhone(e.target.value.replace(/[^0-9 \-]/g, ""))} className="flex-1 bg-transparent px-4 py-3 text-[14px] text-[#2A2825] placeholder-[#7A7468]/60 focus:outline-none" style={{ fontFamily: "var(--font-body)" }} />
+                  </div>
+                </div>
+                {!info.singlePerson && (
+                  <div>
+                    <label className="block text-[11px] tracking-[0.2em] uppercase text-[#2A2825]/60 mb-2" style={{ fontFamily: "var(--font-body)" }}>Number of Guests</label>
+                    <select value={guests} onChange={e => setGuests(e.target.value)} className="w-full bg-[#EDE5D8] px-4 py-3 text-[14px] text-[#2A2825] focus:outline-none focus:ring-1 focus:ring-[#C4785A]" style={{ fontFamily: "var(--font-body)" }}>
+                      {["1", "2", "3", "4", "5+"].map(n => <option key={n} value={n}>{n}</option>)}
+                    </select>
+                  </div>
+                )}
+                <div>
+                  <label className="block text-[11px] tracking-[0.2em] uppercase text-[#2A2825]/60 mb-2" style={{ fontFamily: "var(--font-body)" }}>Notes (optional)</label>
+                  <textarea rows={3} placeholder="Any questions or special requirements..." value={notes} onChange={e => setNotes(e.target.value)} className="w-full bg-[#EDE5D8] px-4 py-3 text-[14px] text-[#2A2825] placeholder-[#7A7468]/60 focus:outline-none focus:ring-1 focus:ring-[#C4785A] resize-none" style={{ fontFamily: "var(--font-body)" }} />
+                </div>
+                {submitError && <p className="text-center text-[12px] text-red-500" style={{ fontFamily: "var(--font-body)" }}>{submitError}</p>}
+                {isFinished ? (
+                  <p className="text-[#2A2825] text-[13px] text-center" style={{ fontFamily: "var(--font-body)" }}>This program has finished and is no longer open for booking.</p>
+                ) : info.soldOut ? (
+                  <p className="text-[#2A2825] text-[13px] text-center" style={{ fontFamily: "var(--font-body)" }}>This workshop is sold out. Contact us to join a cancellation waitlist.</p>
+                ) : (
+                  <button type="button" onClick={handleWaitlist} disabled={submitting} className="w-full py-4 bg-[#C4785A] text-white text-[12px] tracking-[0.15em] uppercase hover:bg-[#B86848] transition-colors duration-300 flex items-center justify-center gap-2 disabled:opacity-60" style={{ fontFamily: "var(--font-body)" }}>
+                    {submitting ? "Saving…" : "Reserve Spot"} <ChevronRight size={14} />
+                  </button>
+                )}
+              </div>
+            </div>
+          </>
+        )}
+
+        {step === "paynow" && member && (
           <PayNowStep
             amount={payAmount}
             reference={payReference}
-            name={form.name}
-            email={form.email}
-            phone={formatPhone(form.phone) || ""}
-            notes={form.notes}
+            name={member.name}
+            email={member.email}
+            phone={formatPhone(phone) || ""}
+            notes={notes}
             title={info.title}
             bookingType="PayNow deposit"
             date={info.date}
@@ -1607,15 +1674,28 @@ function ReserveModal({ info, onClose }: { info: ReserveInfo; onClose: () => voi
             location={info.location}
             facilitator={info.facilitator}
             price={info.price}
+            memberBooking
             onDone={() => setStep("done")}
           />
         )}
+
         {step === "done" && (
           <ConfirmedStep
-            name={form.name}
+            name={member?.name || ""}
             title={info.title}
-            variant={usePayNow ? "paynow" : "stripe"}
+            variant={waitlistSent ? "waitlist" : usePayNow ? "paynow" : "stripe"}
           />
+        )}
+
+        {!bookable && !isComingSoon && (
+          <>
+            {sessionDetails}
+            <div className="p-8 text-center">
+              <p className="text-[#2A2825] text-[14px]" style={{ fontFamily: "var(--font-body)" }}>
+                {isFinished ? "This program has finished and is no longer open for booking." : "This session is sold out. Contact us to join a cancellation waitlist."}
+              </p>
+            </div>
+          </>
         )}
       </div>
     </div>
@@ -1624,42 +1704,43 @@ function ReserveModal({ info, onClose }: { info: ReserveInfo; onClose: () => voi
 
 // ── Booking Modal ─────────────────────────────────────────────────────────────
 
-interface BookingInfo {
-  type: string;
-  day: string;
-  time: string;
-  instructor: string;
-  level: string;
-  location: string;
-  code?: string;
-  classId?: string;
-  stripeLink?: string;
-  price?: string;
-  comingSoon?: boolean;
-}
-
 function BookingModal({ info, onClose }: { info: BookingInfo; onClose: () => void }) {
-  const [step, setStep] = useState<"form" | "done">("form");
-  const [form, setForm] = useState({ name: "", email: "", phone: "", notes: "" });
+  const { isLoggedIn, member, token, refreshMember } = useMemberAuth();
+  const CLASS_PRICE = info.price ?? "SGD 35";
+  const isComingSoon = Boolean(info.comingSoon ?? info.day === "Coming Soon");
+  const bookable = !isComingSoon;
+
+  type Step = "auth" | "confirm" | "waitlist" | "done";
+  const [step, setStep] = useState<Step>(() => {
+    if (isLoggedIn) return isComingSoon ? "waitlist" : "confirm";
+    return "auth";
+  });
+  const [phone, setPhone] = useState("");
+  const [notes, setNotes] = useState("");
   const [waitlistSent, setWaitlistSent] = useState(false);
   const [submitError, setSubmitError] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const code = info.code ?? info.type.replace(/\s+/g, "").slice(0, 8);
-  const CLASS_PRICE = info.price ?? "SGD 35";
-  const isComingSoon = Boolean(info.comingSoon ?? info.day === "Coming Soon");
 
-  const handleSubmit = (e: React.FormEvent) => e.preventDefault();
+  useEffect(() => {
+    if (member?.phone) setPhone(memberPhoneDigits(member.phone));
+  }, [member]);
 
   const handleWaitlist = async () => {
+    if (!member) return;
     setSubmitting(true);
     setSubmitError("");
     try {
+      if (token && phone.trim()) {
+        await updateMemberProfile(token, { phone: formatPhone(phone) || null });
+        await refreshMember();
+      }
       await submitInquiry({
         type: "class_waitlist",
-        name: form.name,
-        email: form.email,
-        phone: formatPhone(form.phone),
-        notes: form.notes || undefined,
+        name: member.name,
+        email: member.email,
+        phone: formatPhone(phone),
+        notes: notes || undefined,
         siteClassId: info.classId,
         context: {
           title: info.type,
@@ -1674,6 +1755,7 @@ function BookingModal({ info, onClose }: { info: BookingInfo; onClose: () => voi
         }
       });
       setWaitlistSent(true);
+      setStep("done");
     } catch (err) {
       setSubmitError(err instanceof Error ? err.message : "Could not save your request. Please try again.");
     } finally {
@@ -1681,134 +1763,143 @@ function BookingModal({ info, onClose }: { info: BookingInfo; onClose: () => voi
     }
   };
 
-  const handleStripe = async () => {
-    const base = info.stripeLink?.trim();
-    if (!base) {
-      setSubmitError("Online booking is not available for this class yet.");
-      return;
-    }
-
+  const handleBook = async () => {
+    if (!token || !member) return;
     setSubmitting(true);
     setSubmitError("");
     try {
-      await submitInquiry({
-        type: "booking_intent",
-        name: form.name,
-        email: form.email,
-        phone: formatPhone(form.phone),
-        notes: form.notes || undefined,
+      if (phone.trim()) {
+        await updateMemberProfile(token, { phone: formatPhone(phone) || null });
+        await refreshMember();
+      }
+      const result = await createMemberBooking(token, {
         siteClassId: info.classId,
-        context: {
+        notes: notes || undefined,
+        paymentMethod: "STRIPE"
+      });
+      if (result.checkoutUrl) {
+        savePendingStripeBooking({
+          name: member.name,
+          email: member.email,
           title: info.type,
           date: info.day,
           time: info.time,
           location: info.location,
           facilitator: info.instructor,
           price: CLASS_PRICE,
-          bookingType: "Stripe checkout",
-          reference: code,
+          reference: result.booking.reference,
+          siteClassId: info.classId,
           programCategory: "REGULAR_CLASS",
-          paymentStatus: "NOT_PAID"
-        }
-      });
-      savePendingStripeBooking({
-        name: form.name,
-        email: form.email,
-        title: info.type,
-        date: info.day,
-        time: info.time,
-        location: info.location,
-        facilitator: info.instructor,
-        price: CLASS_PRICE,
-        reference: code,
-        siteClassId: info.classId,
-        programCategory: "REGULAR_CLASS",
-        phone: formatPhone(form.phone),
-        notes: form.notes || undefined
-      });
-      window.location.href = stripeCheckoutUrl(base, form.email, code);
+          phone: formatPhone(phone),
+          notes: notes || undefined,
+          memberBooking: true
+        });
+        window.location.href = result.checkoutUrl;
+        return;
+      }
+      setSubmitError("Online booking is not available for this class yet.");
     } catch (err) {
-      setSubmitError(err instanceof Error ? err.message : "Could not save your booking. Please try again.");
+      setSubmitError(err instanceof Error ? err.message : "Could not create booking. Please try again.");
+    } finally {
       setSubmitting(false);
     }
   };
+
+  const classDetails = (
+    <div className="px-8 pt-6 pb-4 grid grid-cols-2 gap-4 bg-[#F2EBE0]">
+      {[{ label: "Day", val: info.day }, { label: "Time", val: info.time }, { label: "Instructor", val: info.instructor }, { label: "Level", val: info.level }, { label: "Location", val: info.location }, { label: "Price", val: CLASS_PRICE }].map(({ label, val }) => (
+        <div key={label}>
+          <p className="text-[9px] tracking-[0.2em] text-[#C4785A] uppercase mb-0.5" style={{ fontFamily: "var(--font-body)" }}>{label}</p>
+          <p className="text-[#2A2825] text-[13px]" style={{ fontFamily: "var(--font-body)" }}>{val}</p>
+        </div>
+      ))}
+    </div>
+  );
+
+  const stepLabel =
+    step === "done" ? "Confirmed" :
+    step === "waitlist" ? "Reserve Spot" :
+    step === "auth" ? "Sign in" : "Book a Class";
 
   return (
     <div className="fixed inset-0 z-[100] flex items-end sm:items-center justify-center bg-[#1A1815]/70 backdrop-blur-sm p-0 sm:p-6" onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
       <div className="bg-[#FAF8F3] w-full sm:max-w-lg max-h-[95vh] overflow-y-auto">
         <div className="flex items-start justify-between p-8 border-b border-[#2A2825]/8">
           <div>
-            <p className="text-[10px] tracking-[0.25em] text-[#C4785A] uppercase mb-1" style={{ fontFamily: "var(--font-body)" }}>
-              {step === "form" ? (isComingSoon ? "Reserve Spot" : "Book a Class") : "Confirmed"}
-            </p>
+            <p className="text-[10px] tracking-[0.25em] text-[#C4785A] uppercase mb-1" style={{ fontFamily: "var(--font-body)" }}>{stepLabel}</p>
             <h2 className="text-2xl font-normal text-[#2A2825]" style={{ fontFamily: "var(--font-display)" }}>{info.type}</h2>
           </div>
           <button onClick={onClose} className="text-[#2A2825]/40 hover:text-[#2A2825] transition-colors p-1 mt-1"><X size={20} /></button>
         </div>
 
-        {step === "form" && (
+        {step === "auth" && (
           <>
-            <div className="px-8 pt-6 pb-4 grid grid-cols-2 gap-4 bg-[#F2EBE0]">
-              {[{ label: "Day", val: info.day }, { label: "Time", val: info.time }, { label: "Instructor", val: info.instructor }, { label: "Level", val: info.level }, { label: "Location", val: info.location }, { label: "Price", val: CLASS_PRICE }].map(({ label, val }) => (
-                <div key={label}>
-                  <p className="text-[9px] tracking-[0.2em] text-[#C4785A] uppercase mb-0.5" style={{ fontFamily: "var(--font-body)" }}>{label}</p>
-                  <p className="text-[#2A2825] text-[13px]" style={{ fontFamily: "var(--font-body)" }}>{val}</p>
-                </div>
-              ))}
-            </div>
+            {classDetails}
+            <MemberAuthPanel compact onSuccess={() => setStep(isComingSoon ? "waitlist" : "confirm")} />
+          </>
+        )}
+
+        {step === "confirm" && bookable && member && (
+          <>
+            {classDetails}
             <div className="p-8">
-              <form onSubmit={handleSubmit} className="space-y-5">
-                {[
-                  { label: "Full Name", key: "name", type: "text", placeholder: "Your name" },
-                  { label: "Email Address", key: "email", type: "email", placeholder: "your@email.com" },
-                ].map(({ label, key, type, placeholder }) => (
-                  <div key={key}>
-                    <label className="block text-[11px] tracking-[0.2em] uppercase text-[#2A2825]/60 mb-2" style={{ fontFamily: "var(--font-body)" }}>{label}</label>
-                    <input type={type} placeholder={placeholder} required value={form[key as keyof typeof form]} onChange={e => setForm(f => ({ ...f, [key]: e.target.value }))} className="w-full bg-[#EDE5D8] px-4 py-3 text-[14px] text-[#2A2825] placeholder-[#7A7468]/60 focus:outline-none focus:ring-1 focus:ring-[#C4785A]" style={{ fontFamily: "var(--font-body)" }} />
-                  </div>
-                ))}
+              <div className="space-y-5">
+                <div className="bg-[#F2EBE0] p-4">
+                  <p className="text-[11px] tracking-[0.15em] text-[#7A7468] uppercase mb-1" style={{ fontFamily: "var(--font-body)" }}>Booking as</p>
+                  <p className="text-[#2A2825] text-[15px]" style={{ fontFamily: "var(--font-display)" }}>{member.name}</p>
+                  <p className="text-[#7A7468] text-[13px]" style={{ fontFamily: "var(--font-body)" }}>{member.email}</p>
+                </div>
                 <div>
                   <label className="block text-[11px] tracking-[0.2em] uppercase text-[#2A2825]/60 mb-2" style={{ fontFamily: "var(--font-body)" }}>Phone / WhatsApp</label>
                   <div className="flex bg-[#EDE5D8] focus-within:ring-1 focus-within:ring-[#C4785A]">
                     <span className="px-4 py-3 text-[14px] text-[#2A2825]/60 select-none border-r border-[#2A2825]/10 shrink-0" style={{ fontFamily: "var(--font-body)" }}>+65</span>
-                    <input type="tel" placeholder="···· ····" value={form.phone} onChange={e => setForm(f => ({ ...f, phone: e.target.value.replace(/[^0-9 \-]/g, "") }))} className="flex-1 bg-transparent px-4 py-3 text-[14px] text-[#2A2825] placeholder-[#7A7468]/60 focus:outline-none" style={{ fontFamily: "var(--font-body)" }} />
+                    <input type="tel" placeholder="···· ····" value={phone} onChange={e => setPhone(e.target.value.replace(/[^0-9 \-]/g, ""))} className="flex-1 bg-transparent px-4 py-3 text-[14px] text-[#2A2825] placeholder-[#7A7468]/60 focus:outline-none" style={{ fontFamily: "var(--font-body)" }} />
                   </div>
                 </div>
                 <div>
                   <label className="block text-[11px] tracking-[0.2em] uppercase text-[#2A2825]/60 mb-2" style={{ fontFamily: "var(--font-body)" }}>Notes (optional)</label>
-                  <textarea rows={3} placeholder="Any injuries, questions, or special requirements..." value={form.notes} onChange={e => setForm(f => ({ ...f, notes: e.target.value }))} className="w-full bg-[#EDE5D8] px-4 py-3 text-[14px] text-[#2A2825] placeholder-[#7A7468]/60 focus:outline-none focus:ring-1 focus:ring-[#C4785A] resize-none" style={{ fontFamily: "var(--font-body)" }} />
+                  <textarea rows={3} placeholder="Any injuries, questions, or special requirements..." value={notes} onChange={e => setNotes(e.target.value)} className="w-full bg-[#EDE5D8] px-4 py-3 text-[14px] text-[#2A2825] placeholder-[#7A7468]/60 focus:outline-none focus:ring-1 focus:ring-[#C4785A] resize-none" style={{ fontFamily: "var(--font-body)" }} />
                 </div>
-
-                {submitError && (
-                  <p className="text-center text-[12px] text-red-500" style={{ fontFamily: "var(--font-body)" }}>{submitError}</p>
-                )}
-
-                {form.name && form.email ? (
-                  isComingSoon ? (
-                    waitlistSent ? (
-                      <div className="flex items-center gap-3 bg-[#F2EBE0] p-4">
-                        <Check size={16} className="text-[#7A9A7A] flex-shrink-0" />
-                        <p className="text-[#2A2825] text-[13px]" style={{ fontFamily: "var(--font-body)" }}>Thank you! We've received your reservation and sent a confirmation to your email.</p>
-                      </div>
-                    ) : (
-                      <button type="button" onClick={handleWaitlist} disabled={submitting} className="w-full py-4 border border-[#C4785A] text-[#C4785A] text-[12px] tracking-[0.15em] uppercase hover:bg-[#C4785A] hover:text-white transition-all duration-300 flex items-center justify-center gap-2 disabled:opacity-60" style={{ fontFamily: "var(--font-body)" }}>
-                        {submitting ? "Saving…" : "Reserve Spot"} <ChevronRight size={14} />
-                      </button>
-                    )
-                  ) : (
-                    <button type="button" onClick={handleStripe} disabled={submitting} className="w-full py-4 bg-[#C4785A] text-white text-[12px] tracking-[0.15em] uppercase hover:bg-[#B86848] transition-colors duration-300 flex items-center justify-center gap-2 disabled:opacity-60" style={{ fontFamily: "var(--font-body)" }}>
-                      {submitting ? "Saving…" : "Book a Class — Pay Securely"} <ChevronRight size={14} />
-                    </button>
-                  )
-                ) : (
-                  <p className="text-center text-[12px] text-[#7A7468] pt-2" style={{ fontFamily: "var(--font-body)" }}>Fill in your name and email to continue.</p>
-                )}
-              </form>
+                {submitError && <p className="text-center text-[12px] text-red-500" style={{ fontFamily: "var(--font-body)" }}>{submitError}</p>}
+                <button type="button" onClick={handleBook} disabled={submitting} className="w-full py-4 bg-[#C4785A] text-white text-[12px] tracking-[0.15em] uppercase hover:bg-[#B86848] transition-colors duration-300 flex items-center justify-center gap-2 disabled:opacity-60" style={{ fontFamily: "var(--font-body)" }}>
+                  {submitting ? "Please wait…" : "Book a Class — Pay Securely"} <ChevronRight size={14} />
+                </button>
+              </div>
             </div>
           </>
         )}
 
-        {step === "done" && <ConfirmedStep name={form.name} title={info.type} />}
+        {step === "waitlist" && isComingSoon && member && (
+          <>
+            {classDetails}
+            <div className="p-8">
+              <div className="space-y-5">
+                <div className="bg-[#F2EBE0] p-4">
+                  <p className="text-[11px] tracking-[0.15em] text-[#7A7468] uppercase mb-1" style={{ fontFamily: "var(--font-body)" }}>Reserving as</p>
+                  <p className="text-[#2A2825] text-[15px]" style={{ fontFamily: "var(--font-display)" }}>{member.name}</p>
+                  <p className="text-[#7A7468] text-[13px]" style={{ fontFamily: "var(--font-body)" }}>{member.email}</p>
+                </div>
+                <div>
+                  <label className="block text-[11px] tracking-[0.2em] uppercase text-[#2A2825]/60 mb-2" style={{ fontFamily: "var(--font-body)" }}>Phone / WhatsApp</label>
+                  <div className="flex bg-[#EDE5D8] focus-within:ring-1 focus-within:ring-[#C4785A]">
+                    <span className="px-4 py-3 text-[14px] text-[#2A2825]/60 select-none border-r border-[#2A2825]/10 shrink-0" style={{ fontFamily: "var(--font-body)" }}>+65</span>
+                    <input type="tel" placeholder="···· ····" value={phone} onChange={e => setPhone(e.target.value.replace(/[^0-9 \-]/g, ""))} className="flex-1 bg-transparent px-4 py-3 text-[14px] text-[#2A2825] placeholder-[#7A7468]/60 focus:outline-none" style={{ fontFamily: "var(--font-body)" }} />
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-[11px] tracking-[0.2em] uppercase text-[#2A2825]/60 mb-2" style={{ fontFamily: "var(--font-body)" }}>Notes (optional)</label>
+                  <textarea rows={3} placeholder="Any injuries, questions, or special requirements..." value={notes} onChange={e => setNotes(e.target.value)} className="w-full bg-[#EDE5D8] px-4 py-3 text-[14px] text-[#2A2825] placeholder-[#7A7468]/60 focus:outline-none focus:ring-1 focus:ring-[#C4785A] resize-none" style={{ fontFamily: "var(--font-body)" }} />
+                </div>
+                {submitError && <p className="text-center text-[12px] text-red-500" style={{ fontFamily: "var(--font-body)" }}>{submitError}</p>}
+                <button type="button" onClick={handleWaitlist} disabled={submitting} className="w-full py-4 border border-[#C4785A] text-[#C4785A] text-[12px] tracking-[0.15em] uppercase hover:bg-[#C4785A] hover:text-white transition-all duration-300 flex items-center justify-center gap-2 disabled:opacity-60" style={{ fontFamily: "var(--font-body)" }}>
+                  {submitting ? "Saving…" : "Reserve Spot"} <ChevronRight size={14} />
+                </button>
+              </div>
+            </div>
+          </>
+        )}
+
+        {step === "done" && <ConfirmedStep name={member?.name || ""} title={info.type} variant={waitlistSent ? "waitlist" : "stripe"} />}
       </div>
     </div>
   );
@@ -1950,9 +2041,8 @@ function Footer({ setPage, onContact }: { setPage: (p: Page) => void; onContact:
       <div className="max-w-7xl mx-auto px-6 lg:px-12">
         <div className="grid md:grid-cols-4 gap-12 mb-16">
           <div className="md:col-span-2">
-            <div className="flex items-center gap-3 mb-6">
-              <img src={logoImg} alt="Dharma Space" className="h-10 w-auto" style={{ filter: "brightness(0) invert(1)" }} />
-              <span className="font-bold tracking-[0.18em] text-[11px] uppercase leading-none self-center" style={{ fontFamily: "var(--font-body)" }}>Dharma Space</span>
+            <div className="mb-6">
+              <BrandLogo invert textClassName="text-[11px] font-medium uppercase tracking-[0.2em] text-white" />
             </div>
             <p className="text-white/50 text-[14px] leading-[1.9] max-w-sm mb-8" style={{ fontFamily: "var(--font-body)" }}>
               A space where wellness meets education, purpose, and community. Building conscious communities across Singapore and beyond.
@@ -2070,6 +2160,9 @@ function AdminLoginModal({ onClose, onSuccess }: { onClose: () => void; onSucces
 export default function MarketingSite({ initialPage = "about" }: { initialPage?: Page }) {
   const [page, setPage] = useState<Page>(initialPage);
   const [contactOpen, setContactOpen] = useState(false);
+  const [accountOpen, setAccountOpen] = useState(false);
+  const [reserve, setReserve] = useState<ReserveInfo | null>(null);
+  const [booking, setBooking] = useState<BookingInfo | null>(null);
   const [stripeBooking, setStripeBooking] = useState<PendingStripeBooking | null>(null);
   const site = useSiteContent();
 
@@ -2090,7 +2183,19 @@ export default function MarketingSite({ initialPage = "about" }: { initialPage?:
 
   const openContact = () => setContactOpen(true);
 
-  const specialists: SpecialistCard[] = LIVE_SITE_SPECIALISTS;
+  const specialists: SpecialistCard[] = site?.trainers?.length
+    ? site.trainers.map((t) => {
+        const fallback = LIVE_SITE_SPECIALISTS.find((s) => s.name === t.name);
+        return {
+          name: t.name,
+          role: t.role,
+          desc: t.description,
+          cert: t.credentials,
+          img: t.imageUrl || fallback?.img || "",
+          portraitFocus: fallback?.portraitFocus
+        };
+      })
+    : LIVE_SITE_SPECIALISTS;
 
   const events = site?.programs?.events?.length
     ? site.programs.events.map((p) => ({
@@ -2141,15 +2246,24 @@ export default function MarketingSite({ initialPage = "about" }: { initialPage?:
 
   return (
     <div className="marketing-site min-h-screen bg-[#FAF8F3]" style={{ fontFamily: "var(--font-body)" }}>
-      <Nav page={page} setPage={setPage} onContact={openContact} />
+      <Nav page={page} setPage={setPage} onContact={openContact} onAccount={() => setAccountOpen(true)} />
       <main>
         {page === "about" && <AboutPage setPage={setPage} specialists={specialists} />}
         {page === "corporate" && <CorporatePage onContact={openContact} />}
-        {page === "education" && <EducationPage onContact={openContact} flagship={flagship} certifications={certifications} workshops={workshops} />}
-        {page === "events" && <EventsPage events={events} classSchedule={classSchedule} />}
+        {page === "education" && <EducationPage onContact={openContact} onReserve={setReserve} flagship={flagship} certifications={certifications} workshops={workshops} />}
+        {page === "events" && <EventsPage events={events} classSchedule={classSchedule} onReserve={setReserve} onBookClass={setBooking} />}
       </main>
       <Footer setPage={setPage} onContact={openContact} />
       {contactOpen && <ContactModal onClose={() => setContactOpen(false)} />}
+      {accountOpen && (
+        <MemberAccountModal
+          onClose={() => setAccountOpen(false)}
+          onBookProgram={setReserve}
+          onBookClass={setBooking}
+        />
+      )}
+      {reserve && <ReserveModal info={reserve} onClose={() => setReserve(null)} />}
+      {booking && <BookingModal info={booking} onClose={() => setBooking(null)} />}
       {stripeBooking && <BookingSuccessModal booking={stripeBooking} onClose={() => setStripeBooking(null)} />}
     </div>
   );

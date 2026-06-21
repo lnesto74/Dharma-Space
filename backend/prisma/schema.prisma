@@ -291,4 +291,51 @@ model SiteProgram {
   sortOrder          Int      @default(0)
   createdAt          DateTime @default(now())
   updatedAt          DateTime @updatedAt
+  bookings           Booking[]
+}
+
+model SiteMember {
+  id           String    @id @default(cuid())
+  name         String
+  email        String    @unique
+  phone        String?
+  passwordHash String
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+  bookings     Booking[]
+}
+
+model Booking {
+  id                String      @id @default(cuid())
+  reference         String      @unique
+  memberId          String?
+  member            SiteMember? @relation(fields: [memberId], references: [id], onDelete: SetNull)
+  siteProgramId     String?
+  siteClassId       String?
+  offeringType      String
+  offeringTitle     String
+  category          String
+  scheduledLabel    String      @default("")
+  time              String      @default("")
+  location          String      @default("")
+  facilitator       String      @default("")
+  price             String      @default("")
+  guests            Int         @default(1)
+  notes             String?
+  customerName      String
+  customerEmail     String
+  customerPhone     String?
+  status            String      @default("AWAITING_PAYMENT")
+  paymentMethod     String?
+  stripeCheckoutUrl String?
+  paidAt            DateTime?
+  createdAt         DateTime    @default(now())
+  updatedAt         DateTime    @updatedAt
+  siteProgram       SiteProgram? @relation(fields: [siteProgramId], references: [id], onDelete: SetNull)
+
+  @@index([siteProgramId])
+  @@index([siteClassId])
+  @@index([memberId])
+  @@index([customerEmail])
+  @@index([status])
 }

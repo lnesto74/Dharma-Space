@@ -11,6 +11,7 @@ import {
   Plus,
   RefreshCw,
   Shield,
+  Ticket,
   Type
 } from "lucide-react";
 import { adminApi, checkAdminApiHealth } from "./adminApi";
@@ -133,6 +134,7 @@ export function AdminShell({
 
   const nav = [
     ["Overview", "/admin", Shield],
+    ["Bookings", "/admin/bookings", Ticket],
     ["Inquiries", "/admin/inquiries", Mail],
     ["Trainers", "/admin/site/trainers", GraduationCap],
     ["Regular Class Schedule", "/admin/site/classes", CalendarDays],
@@ -208,12 +210,14 @@ export function AdminOverviewPage({ auth }: { auth: Auth }) {
 
   const stats = [
     { label: "New inquiries", value: data?.newInquiries ?? "—", to: "/admin/inquiries" },
+    { label: "Bookings", value: "View roster", to: "/admin/bookings" },
     { label: "Trainers", value: data?.trainers ?? "—", to: "/admin/site/trainers" },
     { label: "Regular classes", value: data?.classes ?? "—", to: "/admin/site/classes" },
     { label: "Education & events", value: data?.programs ?? "—", to: "/admin/site/programs" },
   ];
 
   const links = [
+    ["Bookings", "Paid / unpaid rosters by class, workshop, or event", "/admin/bookings"],
     ["Inquiries", "Contact form, waitlists, PayNow bookings", "/admin/inquiries"],
     ["Trainers", "Specialist profiles on About page", "/admin/site/trainers"],
     ["Regular class schedule", "Weekly yoga & wellness timetable", "/admin/site/classes"],
@@ -780,6 +784,163 @@ export function AdminInquiriesPage({ auth }: { auth: Auth }) {
             );
           })}
         </div>
+      )}
+    </AdminShell>
+  );
+}
+
+type BookingRow = {
+  id: string;
+  reference: string;
+  customerName: string;
+  customerEmail: string;
+  customerPhone?: string | null;
+  guests: number;
+  status: string;
+  paymentStatus: string;
+  paymentMethod?: string | null;
+  price: string;
+  createdAt: string;
+};
+
+type OfferingGroup = {
+  key: string;
+  offeringTitle: string;
+  category: string;
+  scheduledLabel: string;
+  paidCount: number;
+  unpaidCount: number;
+  guestTotal: number;
+  bookings: BookingRow[];
+};
+
+export function AdminBookingsPage({ auth }: { auth: Auth }) {
+  const [data, setData] = useState<{ totals: { bookings: number; paid: number; awaitingPayment: number }; offerings: OfferingGroup[] } | null>(null);
+  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(true);
+  const [expanded, setExpanded] = useState<string | null>(null);
+  const [markingPaidId, setMarkingPaidId] = useState<string | null>(null);
+
+  const load = () => {
+    setLoading(true);
+    setError("");
+    adminApi<{ totals: { bookings: number; paid: number; awaitingPayment: number }; offerings: OfferingGroup[] }>(
+      "/api/admin/bookings/overview",
+      auth.token
+    )
+      .then(setData)
+      .catch((e) => setError(e.message))
+      .finally(() => setLoading(false));
+  };
+
+  useEffect(() => { load(); }, [auth.token]);
+
+  const markPaid = async (id: string) => {
+    setMarkingPaidId(id);
+    try {
+      await adminApi(`/api/admin/bookings/${id}/mark-paid`, auth.token, { method: "POST" });
+      load();
+    } catch (e: any) {
+      setError(e.message || "Could not mark booking as paid.");
+    } finally {
+      setMarkingPaidId(null);
+    }
+  };
+
+  return (
+    <AdminShell
+      auth={auth}
+      title="Bookings"
+      subtitle="Roster by offering — names, guest count, paid / not paid"
+      icon={Ticket}
+      toolbar={
+        <button type="button" className="admin-btn" onClick={load}>
+          <RefreshCw style={{ width: 14, height: 14 }} />
+          Refresh
+        </button>
+      }
+    >
+      {error && <div className="admin-alert">{error}</div>}
+      {loading ? (
+        <p className="admin-muted">Loading bookings…</p>
+      ) : !data?.offerings.length ? (
+        <p className="admin-muted">No bookings yet. New member bookings will appear here once customers sign in and book.</p>
+      ) : (
+        <>
+          <div className="admin-stat-row">
+            <div className="admin-stat"><div className="admin-stat-label">Total bookings</div><div className="admin-stat-value">{data.totals.bookings}</div></div>
+            <div className="admin-stat"><div className="admin-stat-label">Paid</div><div className="admin-stat-value">{data.totals.paid}</div></div>
+            <div className="admin-stat"><div className="admin-stat-label">Awaiting payment</div><div className="admin-stat-value">{data.totals.awaitingPayment}</div></div>
+          </div>
+
+          <div className="admin-list">
+            {data.offerings.map((offering) => (
+              <div key={offering.key} className="admin-card">
+                <button
+                  type="button"
+                  className="admin-card-header admin-card-header-btn"
+                  onClick={() => setExpanded(expanded === offering.key ? null : offering.key)}
+                >
+                  <div>
+                    <div className="admin-card-title">{offering.offeringTitle}</div>
+                    <div className="admin-card-subtitle">
+                      {offering.category.replace(/_/g, " ")} · {offering.scheduledLabel || "Schedule TBC"}
+                    </div>
+                  </div>
+                  <div className="admin-card-meta">
+                    <StatusPill variant="green" label={`${offering.paidCount} paid`} />
+                    <StatusPill variant="orange" label={`${offering.unpaidCount} unpaid`} />
+                    <StatusPill variant="gray" label={`${offering.guestTotal} guests`} />
+                  </div>
+                </button>
+
+                {expanded === offering.key && (
+                  <div className="admin-table-wrap">
+                    <table className="admin-table">
+                      <thead>
+                        <tr>
+                          <th>Name</th>
+                          <th>Email</th>
+                          <th>Guests</th>
+                          <th>Status</th>
+                          <th>Reference</th>
+                          <th />
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {offering.bookings.map((booking) => (
+                          <tr key={booking.id}>
+                            <td>{booking.customerName}</td>
+                            <td>{booking.customerEmail}</td>
+                            <td>{booking.guests}</td>
+                            <td>
+                              {booking.status === "PAID"
+                                ? <StatusPill variant="green" label="Paid" />
+                                : <StatusPill variant="orange" label="Not paid" />}
+                            </td>
+                            <td>{booking.reference}</td>
+                            <td>
+                              {booking.status !== "PAID" && (
+                                <button
+                                  type="button"
+                                  className="admin-btn admin-btn-primary"
+                                  disabled={markingPaidId === booking.id}
+                                  onClick={() => markPaid(booking.id)}
+                                >
+                                  {markingPaidId === booking.id ? "Saving…" : "Mark paid"}
+                                </button>
+                              )}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        </>
       )}
     </AdminShell>
   );

@@ -272,7 +272,8 @@ export async function streamProxiedImage(remoteUrl: string, res: Response) {
   const upstream = await fetch(remoteUrl, {
     headers: {
       "User-Agent": "Mozilla/5.0 (compatible; DharmaSpace/1.0)",
-      Accept: "image/*,*/*"
+      Accept: "image/*,*/*",
+      Referer: "https://www.instagram.com/"
     },
     redirect: "follow"
   });

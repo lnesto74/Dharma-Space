@@ -16,7 +16,7 @@ envs:
   value: EV[1:04OQtsOkkCnqMH9ZRqRP2308TjOn08b1:pdHFDHtyeoMt1zQAmncWXa2k1eLaHqQPrz5fnfjXA5SDz+jlBe3bSf1/glEqDF6P5fKeEJHz+v6d5oZ1]
 - key: FRONTEND_URL
   scope: RUN_AND_BUILD_TIME
-  value: https://hammerhead-app-9ae2w.ondigitalocean.app
+  value: https://dharma-space.com
 - key: SMTP_HOST
   scope: RUN_AND_BUILD_TIME
   value: smtp.gmail.com
@@ -59,6 +59,11 @@ envs:
   scope: RUN_AND_BUILD_TIME
   type: SECRET
   value: EV[1:YWULLepWHmQKzO6yTdHdL1wFcH93hR0P:ar6SPg7W9aHj41Cqj4Y2Tyh7Y1cv]
+domains:
+- domain: dharma-space.com
+  type: PRIMARY
+- domain: www.dharma-space.com
+  type: ALIAS
 features:
 - buildpack-stack=ubuntu-22
 ingress:

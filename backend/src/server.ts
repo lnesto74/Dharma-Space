@@ -16,6 +16,7 @@ import { inquirySchema, markInquiryPaid, processInquiry, serializeSubmission } f
 import { assertProgramHasCapacity } from "./program-bookings.js";
 import { mailConfigured, sourceFromInbox, logMailStatus, verifyMailConnection, sendMail, inboxFor, resetMailTransporter } from "./mail.js";
 import { registerSiteContentRoutes, migrateProgramCategories } from "./site-content.js";
+import { registerSiteBookingRoutes } from "./site-bookings.js";
 import { migrateClassScheduleFields } from "./class-schedule.js";
 import { migrateProgramScheduleFields } from "./program-schedule.js";
 import { verifyGoogleIdToken, isCorporateRole } from "./google-auth.js";
@@ -27,9 +28,12 @@ import {
 } from "./trainer-media-cache.js";
 import { PROGRAM_MEDIA_DIR } from "./program-media-cache.js";
 import { ensureDatabaseSchema } from "./ensure-schema.js";
+import { registerStripeWebhook, stripeStatusPayload } from "./stripe.js";
 
 let prisma!: PrismaClient;
 const app = express();
+
+registerStripeWebhook(app, () => prisma);
 const port = Number(process.env.PORT || 7010);
 const jwtSecret = process.env.JWT_SECRET || "dev-secret";
 
@@ -152,7 +156,7 @@ async function companyUserIds(user: User) {
 }
 
 app.get("/api/health", (_req, res) =>
-  res.json({ status: "ok", mailConfigured: mailConfigured() })
+  res.json({ status: "ok", mailConfigured: mailConfigured(), stripe: stripeStatusPayload() })
 );
 
 app.post("/api/inquiries", async (req, res, next) => {
@@ -927,6 +931,7 @@ async function startServer() {
   }
   prisma = new PrismaClient();
   registerSiteContentRoutes(app, prisma, auth, requireRole);
+  registerSiteBookingRoutes(app, prisma, jwtSecret, auth, requireRole("SUPER_ADMIN"));
   await ensureSiteAdmin().catch((error) => console.error("[startup] site admin:", error));
   await ensureSiteContent(prisma).catch((error) => console.error("[startup] site content:", error));
   await migrateProgramCategories(prisma).catch((error) => console.error("[startup] program migrate:", error));

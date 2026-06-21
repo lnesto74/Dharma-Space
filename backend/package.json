@@ -11,12 +11,14 @@
     "typecheck": "tsc --noEmit",
     "db:push": "tsx scripts/db-push.ts",
     "db:seed": "tsx prisma/seed.ts",
+    "import:specialist-photo": "tsx scripts/import-specialist-photo.ts",
+    "import:program-photo": "tsx scripts/import-program-photo.ts",
+    "import:all-media": "tsx scripts/import-all-site-media.ts",
     "prisma:generate": "prisma generate",
     "postinstall": "prisma generate"
   },
   "dependencies": {
     "@prisma/client": "^5.22.0",
-    "prisma": "^5.22.0",
     "bcryptjs": "^2.4.3",
     "cors": "^2.8.5",
     "dotenv": "^16.4.7",
@@ -25,6 +27,8 @@
     "jsonwebtoken": "^9.0.2",
     "morgan": "^1.10.0",
     "nodemailer": "^8.0.10",
+    "prisma": "^5.22.0",
+    "stripe": "^17.7.0",
     "tsx": "^4.19.2",
     "zod": "^3.24.1"
   },

@@ -1,10 +1,10 @@
 /** Local + live asset paths for marketing pages. Specialist photos from dharma-space.com. */
-import { LOGO_URL } from "../brand";
+import { LOGO_MARK_URL } from "../brand";
 import { LIVE_SITE_SPECIALISTS } from "./specialists-from-live-site";
 
 const u = (path: string) => path;
 
-export const logoImg = LOGO_URL;
+export const logoImg = LOGO_MARK_URL;
 
 export const heroImg =
   "https://images.unsplash.com/photo-1597151429864-c3b530575201?w=1600&h=900&fit=crop&auto=format";
@@ -21,7 +21,7 @@ export const bolorImg = byName["Bolor Lorinet"];
 export const kristinaImg = byName["Kristina Gazi"];
 export const oxanaImg = byName["Oxana Shilina"];
 export const yanaImg = byName["Yana An"];
-export const kjImg = byName["KJ"];
+export const kjImg = byName["Kanthan Jeganathan"];
 export const nirmalImg = byName["Dr. Nirmal Bhusal"];
 export const manjeetImg = byName["Manjeet Mathur"];
 

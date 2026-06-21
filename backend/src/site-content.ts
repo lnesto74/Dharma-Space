@@ -26,6 +26,7 @@ import {
   saveUploadedTrainerFile,
   trainerHasExternalMedia
 } from "./trainer-media-cache.js";
+import { getInstagramFeed } from "./instagram-feed.js";
 
 const jsonStringArray = z.union([z.array(z.string()), z.string()]).optional().transform((v) => {
   if (v == null) return undefined;
@@ -195,7 +196,7 @@ export async function getPublicSiteContent(prisma: PrismaClient) {
   ]);
   const enrichedPrograms = await Promise.all(programs.map((program) => serializeProgramWithStats(prisma, program)));
   return {
-    trainers: trainers.map(serializeTrainer),
+    trainers: trainers.map((t) => displayTrainerMedia(serializeTrainer(t))),
     classes: sortClasses(classes.map(serializeClass)),
     programs: groupProgramsByCategory(enrichedPrograms)
   };
@@ -246,6 +247,14 @@ export function registerSiteContentRoutes(app: import("express").Express, prisma
       });
       const enriched = await Promise.all(programs.map((program) => serializeProgramWithStats(prisma, program)));
       res.json(groupProgramsByCategory(enriched));
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  app.get("/api/site/instagram-feed", async (_req, res, next) => {
+    try {
+      res.json(await getInstagramFeed());
     } catch (error) {
       next(error);
     }
