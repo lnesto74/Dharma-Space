@@ -3,6 +3,7 @@ import { Link, useNavigate } from "react-router-dom";
 import {
   heroImg, yttImg, payNowQR,
   aerialSoundBathImg, glowYogaImg, handpanImg, cookingImg, yachtImg,
+  natureWalkImg, creativeMovementImg, padelImg,
   platformImg1, platformImg2, platformImg3
 } from "./assets";
 import { BrandLogo } from "../components/BrandLogo";
@@ -26,6 +27,19 @@ import {
 } from "../lib/stripe-booking";
 
 type Page = "about" | "corporate" | "education" | "events";
+type EventsSection = "upcoming-events" | "regular-classes";
+type EducationSection = "flagship-program" | "courses-certifications" | "workshops-intensives";
+
+const EVENTS_SUBMENU: { label: string; section: EventsSection }[] = [
+  { label: "Upcoming Events", section: "upcoming-events" },
+  { label: "Regular Classes", section: "regular-classes" },
+];
+
+const EDUCATION_SUBMENU: { label: string; section: EducationSection }[] = [
+  { label: "Flagship Program", section: "flagship-program" },
+  { label: "Courses & Certifications", section: "courses-certifications" },
+  { label: "Workshops & Intensives", section: "workshops-intensives" },
+];
 
 const IMAGES = {
   hero: "https://images.unsplash.com/photo-1597151429864-c3b530575201?w=1600&h=900&fit=crop&auto=format",
@@ -62,11 +76,11 @@ const TEAM_ACTIVITIES = [
   { title: "Aerial Sound Bath", desc: "Immersive Tibetan and crystal bowl experience enjoyed from the comfort of aerial hammocks — deep collective relaxation and reset like no other.", img: aerialSoundBathImg },
   { title: "Glow Yoga", desc: "Yoga in a UV-lit studio with neon body paint — under the lamps, every move glows. A playful, high-energy night you won't forget.", img: glowYogaImg },
   { title: "Learning Handpan Class", desc: "Discover the meditative magic of the handpan together — no experience needed, pure presence required.", img: handpanImg },
-  { title: "Nature Walk & Mindfulness", desc: "Guided outdoor walk blending movement, breath, and sensory awareness in Singapore's green spaces.", img: "https://images.unsplash.com/photo-1759304426080-c2c31753db86?w=600&h=800&fit=crop&auto=format" },
+  { title: "Nature Walk & Mindfulness", desc: "Guided outdoor walk blending movement, breath, and sensory awareness in Singapore's green spaces.", img: natureWalkImg },
   { title: "Healthy Meals Cooking Classes", desc: "Hands-on cooking class focused on healthy, nourishing meals — learn together, eat well, and bond as a team.", img: cookingImg },
-  { title: "Creative Movement", desc: "Freeform expressive dance to music — no steps, just authentic movement, joy, and connection.", img: "https://images.unsplash.com/photo-1550026593-cb89847b168d?w=600&h=800&fit=crop&auto=format" },
+  { title: "Creative Movement", desc: "Freeform expressive dance to music — no steps, just authentic movement, joy, and connection.", img: creativeMovementImg },
   { title: "Corporate Yacht Events", desc: "Exclusive sailing experiences on Singapore's waters — the ultimate backdrop for team connection.", img: yachtImg },
-  { title: "Padel Team-Building", desc: "Fast-paced, beginner-friendly padel sessions that spark healthy competition and team spirit.", img: "https://images.unsplash.com/photo-1770230901556-4e1c0bacfb09?w=600&h=800&fit=crop&auto=format" },
+  { title: "Padel Team-Building", desc: "Fast-paced, beginner-friendly padel sessions that spark healthy competition and team spirit.", img: padelImg },
 ];
 
 const CORP_FORMATS = [
@@ -117,11 +131,27 @@ const CLASS_SCHEDULE = [
 
 // ── Navigation ────────────────────────────────────────────────────────────────
 
-function Nav({ page, setPage, onContact, onAccount }: { page: Page; setPage: (p: Page) => void; onContact: () => void; onAccount: () => void }) {
+function Nav({
+  page,
+  setPage,
+  onContact,
+  onAccount,
+  onEventsSection,
+  onEducationSection
+}: {
+  page: Page;
+  setPage: (p: Page) => void;
+  onContact: () => void;
+  onAccount: () => void;
+  onEventsSection: (section: EventsSection) => void;
+  onEducationSection: (section: EducationSection) => void;
+}) {
   const { isLoggedIn, member } = useMemberAuth();
   const navigate = useNavigate();
   const [scrolled, setScrolled] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
+  const [mobileEventsOpen, setMobileEventsOpen] = useState(false);
+  const [mobileEducationOpen, setMobileEducationOpen] = useState(false);
   const [adminOpen, setAdminOpen] = useState(false);
   const [isAdmin, setIsAdmin] = useState(false);
 
@@ -160,24 +190,42 @@ function Nav({ page, setPage, onContact, onAccount }: { page: Page; setPage: (p:
   const links: { label: string; key: Page }[] = [
     { label: "About", key: "about" },
     { label: "Corporate", key: "corporate" },
-    { label: "Education", key: "education" },
-    { label: "Events", key: "events" },
   ];
 
-  const nav = (p: Page) => { setPage(p); setMenuOpen(false); window.scrollTo({ top: 0, behavior: "smooth" }); };
+  const nav = (p: Page) => {
+    setPage(p);
+    setMenuOpen(false);
+    setMobileEventsOpen(false);
+    setMobileEducationOpen(false);
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  };
+
+  const goEventsSection = (section: EventsSection) => {
+    onEventsSection(section);
+    setMobileEventsOpen(false);
+    setMobileEducationOpen(false);
+    setMenuOpen(false);
+  };
+
+  const goEducationSection = (section: EducationSection) => {
+    onEducationSection(section);
+    setMobileEducationOpen(false);
+    setMobileEventsOpen(false);
+    setMenuOpen(false);
+  };
 
   return (
     <header
-      className={`fixed top-0 left-0 right-0 z-50 transition-all duration-500 ${scrolled ? "bg-[#FAF8F3]/95 backdrop-blur-md shadow-sm" : "bg-transparent"}`}
+      className={`fixed top-0 left-0 right-0 z-50 overflow-visible transition-all duration-500 ${scrolled ? "bg-[#FAF8F3]/95 backdrop-blur-md shadow-sm" : "bg-[#FAF8F3]/95 backdrop-blur-md"}`}
     >
-      <div className="max-w-7xl mx-auto px-6 lg:px-12 h-20 flex items-center justify-between">
+      <div className="max-w-7xl mx-auto px-6 lg:px-12 h-20 flex items-center justify-between overflow-visible">
         <button onClick={() => nav("about")} className="group">
           <BrandLogo
             textClassName="text-[11px] font-medium uppercase tracking-[0.2em] text-[#2A2825]"
           />
         </button>
 
-        <nav className="hidden md:flex items-center gap-8">
+        <nav className="hidden md:flex items-center gap-8 overflow-visible">
           {links.map(({ label, key }) => (
             <button
               key={key}
@@ -190,6 +238,64 @@ function Nav({ page, setPage, onContact, onAccount }: { page: Page; setPage: (p:
               {label}
             </button>
           ))}
+          <div className="nav-submenu-menu group relative">
+            <button
+              type="button"
+              onClick={() => nav("education")}
+              className={`flex items-center gap-1.5 text-[13px] tracking-[0.08em] uppercase transition-all duration-200 relative after:absolute after:bottom-[-4px] after:left-0 after:h-px after:bg-[#C4785A] after:transition-all after:duration-300 ${
+                page === "education" ? "text-[#C4785A] after:w-full" : "text-[#2A2825]/70 hover:text-[#2A2825] after:w-0 hover:after:w-full"
+              }`}
+              style={{ fontFamily: "var(--font-body)" }}
+              aria-haspopup="true"
+            >
+              Education
+              <ChevronDown size={14} className="nav-submenu-chevron shrink-0 transition-transform duration-200" />
+            </button>
+            <div className="nav-submenu-dropdown absolute left-1/2 top-full z-[100] w-[260px] -translate-x-1/2 pt-2">
+              <div className="border border-[#2A2825]/10 bg-[#FAF8F3] py-2 shadow-xl">
+                {EDUCATION_SUBMENU.map(({ label, section }) => (
+                  <button
+                    key={section}
+                    type="button"
+                    onClick={() => goEducationSection(section)}
+                    className="block w-full px-5 py-2.5 text-left text-[12px] tracking-[0.08em] uppercase text-[#2A2825]/75 transition-colors hover:bg-[#F2EBE0] hover:text-[#C4785A]"
+                    style={{ fontFamily: "var(--font-body)" }}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+          <div className="nav-submenu-menu group relative">
+            <button
+              type="button"
+              onClick={() => nav("events")}
+              className={`flex items-center gap-1.5 text-[13px] tracking-[0.08em] uppercase transition-all duration-200 relative after:absolute after:bottom-[-4px] after:left-0 after:h-px after:bg-[#C4785A] after:transition-all after:duration-300 ${
+                page === "events" ? "text-[#C4785A] after:w-full" : "text-[#2A2825]/70 hover:text-[#2A2825] after:w-0 hover:after:w-full"
+              }`}
+              style={{ fontFamily: "var(--font-body)" }}
+              aria-haspopup="true"
+            >
+              Events
+              <ChevronDown size={14} className="nav-submenu-chevron shrink-0 transition-transform duration-200" />
+            </button>
+            <div className="nav-submenu-dropdown absolute left-1/2 top-full z-[100] w-[240px] -translate-x-1/2 pt-2">
+              <div className="border border-[#2A2825]/10 bg-[#FAF8F3] py-2 shadow-xl">
+                {EVENTS_SUBMENU.map(({ label, section }) => (
+                  <button
+                    key={section}
+                    type="button"
+                    onClick={() => goEventsSection(section)}
+                    className="block w-full px-5 py-2.5 text-left text-[12px] tracking-[0.08em] uppercase text-[#2A2825]/75 transition-colors hover:bg-[#F2EBE0] hover:text-[#C4785A]"
+                    style={{ fontFamily: "var(--font-body)" }}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
         </nav>
 
         <div className="flex items-center gap-3 md:gap-4">
@@ -249,6 +355,60 @@ function Nav({ page, setPage, onContact, onAccount }: { page: Page; setPage: (p:
               {label}
             </button>
           ))}
+          <div>
+            <button
+              type="button"
+              onClick={() => setMobileEducationOpen((open) => !open)}
+              className={`flex w-full items-center justify-between text-left text-[14px] tracking-[0.1em] uppercase ${page === "education" ? "text-[#C4785A]" : "text-[#2A2825]/70"}`}
+              style={{ fontFamily: "var(--font-body)" }}
+              aria-expanded={mobileEducationOpen}
+            >
+              Education
+              <ChevronDown size={16} className={`transition-transform duration-200 ${mobileEducationOpen ? "rotate-180" : ""}`} />
+            </button>
+            {mobileEducationOpen && (
+              <div className="mt-3 flex flex-col gap-3 border-l border-[#C4785A]/30 pl-4">
+                {EDUCATION_SUBMENU.map(({ label, section }) => (
+                  <button
+                    key={section}
+                    type="button"
+                    onClick={() => goEducationSection(section)}
+                    className="text-left text-[13px] tracking-[0.08em] uppercase text-[#2A2825]/65 hover:text-[#C4785A]"
+                    style={{ fontFamily: "var(--font-body)" }}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+          <div>
+            <button
+              type="button"
+              onClick={() => setMobileEventsOpen((open) => !open)}
+              className={`flex w-full items-center justify-between text-left text-[14px] tracking-[0.1em] uppercase ${page === "events" ? "text-[#C4785A]" : "text-[#2A2825]/70"}`}
+              style={{ fontFamily: "var(--font-body)" }}
+              aria-expanded={mobileEventsOpen}
+            >
+              Events
+              <ChevronDown size={16} className={`transition-transform duration-200 ${mobileEventsOpen ? "rotate-180" : ""}`} />
+            </button>
+            {mobileEventsOpen && (
+              <div className="mt-3 flex flex-col gap-3 border-l border-[#C4785A]/30 pl-4">
+                {EVENTS_SUBMENU.map(({ label, section }) => (
+                  <button
+                    key={section}
+                    type="button"
+                    onClick={() => goEventsSection(section)}
+                    className="text-left text-[13px] tracking-[0.08em] uppercase text-[#2A2825]/65 hover:text-[#C4785A]"
+                    style={{ fontFamily: "var(--font-body)" }}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
           <button type="button" onClick={() => { onAccount(); setMenuOpen(false); }} className="text-left text-[14px] tracking-[0.1em] uppercase text-[#2A2825]/70 flex items-center gap-2" style={{ fontFamily: "var(--font-body)" }}>
             <User size={14} /> {isLoggedIn ? "My account" : "Sign in"}
           </button>
@@ -665,17 +825,30 @@ function EducationPage({
   onReserve,
   flagship,
   certifications,
-  workshops
+  workshops,
+  scrollTarget,
+  onScrollTargetHandled
 }: {
   onContact: () => void;
   onReserve: (info: ReserveInfo) => void;
   flagship: SiteProgram | null;
   certifications: SiteProgram[];
   workshops: SiteProgram[];
+  scrollTarget?: EducationSection | null;
+  onScrollTargetHandled?: () => void;
 }) {
   const curriculum = flagship?.curriculumItems?.length
     ? flagship.curriculumItems
     : ["Yoga Philosophy & History", "Anatomy & Physiology", "Teaching Methodology", "Alignment & Adjustments", "Breathwork (Pranayama)", "Meditation Techniques", "Practicum Teaching Hours", "Ayurvedic Lifestyle"];
+
+  useEffect(() => {
+    if (!scrollTarget) return;
+    const scroll = () => {
+      document.getElementById(scrollTarget)?.scrollIntoView({ behavior: "smooth", block: "start" });
+      onScrollTargetHandled?.();
+    };
+    requestAnimationFrame(() => requestAnimationFrame(scroll));
+  }, [scrollTarget, onScrollTargetHandled]);
 
   return (
     <div>
@@ -695,7 +868,7 @@ function EducationPage({
       </section>
 
       {/* Flagship Program */}
-      <section className="py-28 max-w-7xl mx-auto px-6 lg:px-12">
+      <section id="flagship-program" className="scroll-mt-24 py-28 max-w-7xl mx-auto px-6 lg:px-12">
         <div className="grid lg:grid-cols-2 gap-20 items-start">
           <div>
             <p className="text-[#C4785A] text-[11px] tracking-[0.3em] uppercase mb-5" style={{ fontFamily: "var(--font-body)" }}>Flagship Program</p>
@@ -761,7 +934,7 @@ function EducationPage({
       </section>
 
       {/* Certifications */}
-      <section className="bg-[#F2EBE0] py-28">
+      <section id="courses-certifications" className="scroll-mt-24 bg-[#F2EBE0] py-28">
         <div className="max-w-7xl mx-auto px-6 lg:px-12">
           <div className="text-center mb-16">
             <p className="text-[#C4785A] text-[11px] tracking-[0.3em] uppercase mb-5" style={{ fontFamily: "var(--font-body)" }}>Certifications</p>
@@ -819,7 +992,7 @@ function EducationPage({
       </section>
 
       {/* Workshops */}
-      <section className="py-28 max-w-7xl mx-auto px-6 lg:px-12">
+      <section id="workshops-intensives" className="scroll-mt-24 py-28 max-w-7xl mx-auto px-6 lg:px-12">
         <div className="text-center mb-16">
           <p className="text-[#C4785A] text-[11px] tracking-[0.3em] uppercase mb-5" style={{ fontFamily: "var(--font-body)" }}>Upcoming</p>
           <h2 className="text-3xl md:text-4xl font-normal text-[#2A2825] leading-[1.15]" style={{ fontFamily: "var(--font-display)" }}>
@@ -1021,12 +1194,16 @@ function EventsPage({
   events,
   classSchedule,
   onReserve,
-  onBookClass
+  onBookClass,
+  scrollTarget,
+  onScrollTargetHandled
 }: {
   events: Array<ReserveInfo & { desc: string; img: string }>;
   classSchedule: Array<{ id?: string; day: string; date?: string; time: string; type: string; instructor: string; level: string; location: string; price?: string; stripeLink?: string | null; comingSoon?: boolean }>;
   onReserve: (info: ReserveInfo) => void;
   onBookClass: (info: BookingInfo) => void;
+  scrollTarget?: EventsSection | null;
+  onScrollTargetHandled?: () => void;
 }) {
   const [activeDay, setActiveDay] = useState<string | null>(null);
   const [notifyOpen, setNotifyOpen] = useState(false);
@@ -1035,6 +1212,15 @@ function EventsPage({
   const filtered = activeDay ? classSchedule.filter((c) => dayKey(c) === activeDay) : classSchedule;
   const schedulePublished = classSchedule.some((c) => !c.comingSoon);
   const showSchedulePreview = classSchedule.length > 0 && !schedulePublished;
+
+  useEffect(() => {
+    if (!scrollTarget) return;
+    const scroll = () => {
+      document.getElementById(scrollTarget)?.scrollIntoView({ behavior: "smooth", block: "start" });
+      onScrollTargetHandled?.();
+    };
+    requestAnimationFrame(() => requestAnimationFrame(scroll));
+  }, [scrollTarget, onScrollTargetHandled]);
 
   return (
     <div>
@@ -1054,7 +1240,7 @@ function EventsPage({
       </section>
 
       {/* Upcoming Events */}
-      <section className="py-28 max-w-7xl mx-auto px-6 lg:px-12">
+      <section id="upcoming-events" className="scroll-mt-24 py-28 max-w-7xl mx-auto px-6 lg:px-12">
         <div className="text-center mb-16">
           <p className="text-[#C4785A] text-[11px] tracking-[0.3em] uppercase mb-5" style={{ fontFamily: "var(--font-body)" }}>What&apos;s On</p>
           <h2 className="text-3xl md:text-4xl font-normal text-[#2A2825] leading-[1.15]" style={{ fontFamily: "var(--font-display)" }}>
@@ -1091,7 +1277,7 @@ function EventsPage({
       </section>
 
       {/* Class Schedule */}
-      <section className="bg-[#F2EBE0] py-28">
+      <section id="regular-classes" className="scroll-mt-24 bg-[#F2EBE0] py-28">
         <div className="max-w-7xl mx-auto px-6 lg:px-12">
           <div className="text-center mb-12">
             <p className="text-[#C4785A] text-[11px] tracking-[0.3em] uppercase mb-5" style={{ fontFamily: "var(--font-body)" }}>Regular Classes</p>
@@ -2263,6 +2449,8 @@ export default function MarketingSite({ initialPage = "about" }: { initialPage?:
   const [reserve, setReserve] = useState<ReserveInfo | null>(null);
   const [booking, setBooking] = useState<BookingInfo | null>(null);
   const [stripeBooking, setStripeBooking] = useState<PendingStripeBooking | null>(null);
+  const [eventsScrollTarget, setEventsScrollTarget] = useState<EventsSection | null>(null);
+  const [educationScrollTarget, setEducationScrollTarget] = useState<EducationSection | null>(null);
   const site = useSiteContent();
 
   useEffect(() => {
@@ -2281,6 +2469,18 @@ export default function MarketingSite({ initialPage = "about" }: { initialPage?:
   }, []);
 
   const openContact = () => setContactOpen(true);
+
+  const handleEventsSection = (section: EventsSection) => {
+    setPage("events");
+    setEventsScrollTarget(section);
+    window.history.replaceState({}, "", "/events");
+  };
+
+  const handleEducationSection = (section: EducationSection) => {
+    setPage("education");
+    setEducationScrollTarget(section);
+    window.history.replaceState({}, "", "/education");
+  };
 
   const specialists: SpecialistCard[] = site?.trainers?.length
     ? site.trainers.map((t) => {
@@ -2372,12 +2572,38 @@ export default function MarketingSite({ initialPage = "about" }: { initialPage?:
 
   return (
     <div className="marketing-site min-h-screen bg-[#FAF8F3]" style={{ fontFamily: "var(--font-body)" }}>
-      <Nav page={page} setPage={setPage} onContact={openContact} onAccount={() => setAccountOpen(true)} />
+      <Nav
+        page={page}
+        setPage={setPage}
+        onContact={openContact}
+        onAccount={() => setAccountOpen(true)}
+        onEventsSection={handleEventsSection}
+        onEducationSection={handleEducationSection}
+      />
       <main>
         {page === "about" && <AboutPage setPage={setPage} specialists={specialists} />}
         {page === "corporate" && <CorporatePage onContact={openContact} />}
-        {page === "education" && <EducationPage onContact={openContact} onReserve={setReserve} flagship={flagship} certifications={certifications} workshops={workshops} />}
-        {page === "events" && <EventsPage events={events} classSchedule={classSchedule} onReserve={setReserve} onBookClass={setBooking} />}
+        {page === "education" && (
+          <EducationPage
+            onContact={openContact}
+            onReserve={setReserve}
+            flagship={flagship}
+            certifications={certifications}
+            workshops={workshops}
+            scrollTarget={educationScrollTarget}
+            onScrollTargetHandled={() => setEducationScrollTarget(null)}
+          />
+        )}
+        {page === "events" && (
+          <EventsPage
+            events={events}
+            classSchedule={classSchedule}
+            onReserve={setReserve}
+            onBookClass={setBooking}
+            scrollTarget={eventsScrollTarget}
+            onScrollTargetHandled={() => setEventsScrollTarget(null)}
+          />
+        )}
       </main>
       <Footer setPage={setPage} onContact={openContact} />
       {contactOpen && <ContactModal onClose={() => setContactOpen(false)} />}

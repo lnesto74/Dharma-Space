@@ -25,14 +25,16 @@ export const kjImg = byName["Kanthan Jeganathan"];
 export const nirmalImg = byName["Dr. Nirmal Bhusal"];
 export const manjeetImg = byName["Manjeet Mathur"];
 
-export const aerialSoundBathImg =
-  "https://images.unsplash.com/photo-1623764211727-5a8278662af0?w=600&h=800&fit=crop&auto=format";
-export const glowYogaImg =
-  "https://images.unsplash.com/photo-1588286840104-8957b019727f?w=600&h=800&fit=crop&auto=format";
-export const handpanImg = yanaImg;
-export const cookingImg = bolorImg;
-export const yachtImg =
-  "https://images.unsplash.com/photo-1567894340315-735d7c361db0?w=600&h=800&fit=crop&auto=format";
+const teamBuilding = (file: string) => u(`/team-building/${file}`);
+
+export const aerialSoundBathImg = teamBuilding("aerial-sound-bath.jpg");
+export const glowYogaImg = teamBuilding("glow-yoga.jpg");
+export const handpanImg = teamBuilding("handpan-class.jpg");
+export const cookingImg = teamBuilding("cooking-class.jpg");
+export const yachtImg = teamBuilding("corporate-yacht.jpg");
+export const natureWalkImg = teamBuilding("nature-walk.jpg");
+export const creativeMovementImg = teamBuilding("creative-movement.jpg");
+export const padelImg = teamBuilding("padel.jpg");
 
 export const platformImg1 = founderImg;
 export const platformImg2 = oxanaImg;
