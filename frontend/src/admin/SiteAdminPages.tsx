@@ -609,13 +609,21 @@ export function AdminInquiriesPage({ auth }: { auth: Auth }) {
     setMailTest("");
     setError("");
     try {
-      const result = await adminApi<{ results: Array<{ category: string; ok: boolean; inbox?: string; error?: string }> }>(
+      const result = await adminApi<{
+        results: Array<{ category: string; ok: boolean; inbox?: string; error?: string }>;
+        customer?: { ok: boolean; to: string; error?: string };
+      }>(
         "/api/admin/test-mail",
         auth.token,
-        { method: "POST", body: JSON.stringify({ category }) }
+        { method: "POST", body: JSON.stringify({ category, customerEmail: "vera@dharma-space.com" }) }
       );
-      const summary = result.results
-        .map((r) => `${r.category}: ${r.ok ? `sent to ${r.inbox}` : r.error || "failed"}`)
+      const summary = [
+        ...result.results.map((r) => `${r.category}: ${r.ok ? `sent to ${r.inbox}` : r.error || "failed"}`),
+        result.customer
+          ? `customer: ${result.customer.ok ? `confirmation sent to ${result.customer.to}` : result.customer.error || "failed"}`
+          : null
+      ]
+        .filter(Boolean)
         .join(" · ");
       setMailTest(summary);
       load();

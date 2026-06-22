@@ -14,9 +14,10 @@ import { PrismaClient, User } from "@prisma/client";
 import { z } from "zod";
 import { inquirySchema, markInquiryPaid, processInquiry, serializeSubmission } from "./inquiries.js";
 import { assertProgramHasCapacity } from "./program-bookings.js";
-import { mailConfigured, sourceFromInbox, logMailStatus, verifyMailConnection, sendMail, inboxFor, resetMailTransporter } from "./mail.js";
+import { mailConfigured, sourceFromInbox, logMailStatus, verifyMailConnection, sendMail, inboxFor, resetMailTransporter, notifyInbox, isMailConfigured } from "./mail.js";
 import { registerSiteContentRoutes, migrateProgramCategories } from "./site-content.js";
 import { registerSiteBookingRoutes } from "./site-bookings.js";
+import { sendBookingConfirmedEmails } from "./booking-emails.js";
 import { migrateClassScheduleFields } from "./class-schedule.js";
 import { migrateProgramScheduleFields } from "./program-schedule.js";
 import { verifyGoogleIdToken, isCorporateRole } from "./google-auth.js";
@@ -231,7 +232,13 @@ app.post("/api/inquiries/:id/mark-paid", auth, requireRole("SUPER_ADMIN"), async
 
 app.post("/api/admin/test-mail", auth, requireRole("SUPER_ADMIN"), async (req, res, next) => {
   try {
-    const category = z.enum(["corporate", "education", "both"]).parse(req.body?.category ?? "both");
+    const body = z
+      .object({
+        category: z.enum(["corporate", "education", "both"]).optional(),
+        customerEmail: z.string().email().optional()
+      })
+      .parse(req.body ?? {});
+    const category = body.category ?? "both";
     const categories = category === "both" ? (["corporate", "education"] as const) : ([category] as const);
     const results: Array<{ category: string; ok: boolean; inbox?: string; error?: string }> = [];
 
@@ -264,7 +271,36 @@ app.post("/api/admin/test-mail", auth, requireRole("SUPER_ADMIN"), async (req, r
       });
     }
 
-    res.json({ results, mailConfigured: mailConfigured() });
+    let customer: { ok: boolean; to: string; error?: string } | undefined;
+    const runCustomerTest = category === "education" || category === "both";
+    if (runCustomerTest && isMailConfigured("education")) {
+      const to = body.customerEmail || notifyInbox();
+      const customerSent = await sendBookingConfirmedEmails({
+        reference: `DS-TEST-${Date.now()}`,
+        offeringTitle: "Yoga Alignments Workshop (test email)",
+        scheduledLabel: "September 24, 2026",
+        time: "2:00 PM",
+        location: "Dharma Space Studio",
+        facilitator: "Vera Pleshakova",
+        price: "SGD 5",
+        guests: 1,
+        notes: "This is a test booking confirmation — no action needed.",
+        customerName: "Test Guest",
+        customerEmail: to,
+        customerPhone: null,
+        category: "WORKSHOP",
+        siteProgramId: null,
+        siteClassId: null,
+        paymentMethod: "STRIPE"
+      });
+      customer = {
+        ok: customerSent,
+        to,
+        error: customerSent ? undefined : "Customer confirmation send failed — check backend logs"
+      };
+    }
+
+    res.json({ results, customer, mailConfigured: mailConfigured() });
   } catch (error) {
     next(error);
   }
