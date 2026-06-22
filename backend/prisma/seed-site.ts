@@ -2,6 +2,7 @@ import { PrismaClient } from "@prisma/client";
 import { dayToIndex, formatMinutesToTime, migrateClassScheduleFields, parseTimeToMinutes, snapMinutes } from "../src/class-schedule.js";
 import { migrateProgramCategories } from "../src/site-content.js";
 import { LIVE_SITE_TRAINERS, syncTrainersFromLiveSite } from "../src/live-site-specialists.js";
+import { ensureTeamActivities, restoreBundledTeamBuildingImages } from "../src/team-building.js";
 import { importBundledSiteMedia } from "../src/import-site-media.js";
 
 const FLAGSHIP_CURRICULUM = [
@@ -209,7 +210,9 @@ async function upgradeYogaAlignmentsTestWorkshop(prisma: PrismaClient) {
 export async function ensureSiteContent(prisma: PrismaClient) {
   await seedSiteContent(prisma);
   await syncTrainersFromLiveSite(prisma);
+  await ensureTeamActivities(prisma);
   await importBundledSiteMedia(prisma).catch((error) => console.error("[startup] site media:", error));
+  await restoreBundledTeamBuildingImages(prisma).catch((error) => console.error("[startup] team building images:", error));
   await migrateProgramCategories(prisma);
   await migrateClassScheduleFields(prisma);
   await upgradeFlagshipProgram(prisma);

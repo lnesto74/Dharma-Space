@@ -10,9 +10,9 @@ export default function App() {
     <Routes>
       <Route path="/" element={<MarketingSite initialPage="about" />} />
       <Route path="/about" element={<Navigate to="/" replace />} />
-      <Route path="/corporate" element={<MarketingSite initialPage="corporate" />} />
-      <Route path="/education" element={<MarketingSite initialPage="education" />} />
-      <Route path="/events" element={<MarketingSite initialPage="events" />} />
+      <Route path="/corporate" element={<Navigate to="/" replace />} />
+      <Route path="/education" element={<Navigate to="/" replace />} />
+      <Route path="/events" element={<Navigate to="/" replace />} />
       <Route path="/booking/success" element={<MarketingSite initialPage="events" />} />
       <Route path="/login" element={<Navigate to="/" replace />} />
       <Route path="/register" element={<Navigate to="/" replace />} />

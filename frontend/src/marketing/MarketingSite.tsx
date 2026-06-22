@@ -9,7 +9,7 @@ import {
 import { BrandLogo } from "../components/BrandLogo";
 import { InstagramCommunityGallery } from "../components/InstagramCommunityGallery";
 import { LIVE_SITE_SPECIALISTS, type LiveSpecialist } from "./specialists-from-live-site";
-import { Menu, X, ChevronRight, ChevronDown, MapPin, Mail, Phone, Instagram, MessageCircle, Star, Check, Building2, Leaf, Bell, Wind, Compass, Moon, BookOpen, Activity, Lock, LogOut, User } from "lucide-react";
+import { Menu, X, ChevronRight, ChevronLeft, ChevronDown, MapPin, Mail, Phone, Instagram, MessageCircle, Star, Check, Building2, Leaf, Bell, Wind, Compass, Moon, BookOpen, Activity, Lock, LogOut, User } from "lucide-react";
 import { MemberAuthPanel } from "../components/MemberAuthPanel";
 import { MemberAccountModal } from "../components/MemberAccountModal";
 import { useMemberAuth } from "../auth/MemberAuthContext";
@@ -29,6 +29,7 @@ import {
 type Page = "about" | "corporate" | "education" | "events";
 type EventsSection = "upcoming-events" | "regular-classes";
 type EducationSection = "flagship-program" | "courses-certifications" | "workshops-intensives";
+type CorporateSection = "digital-platform";
 
 const EVENTS_SUBMENU: { label: string; section: EventsSection }[] = [
   { label: "Upcoming Events", section: "upcoming-events" },
@@ -39,6 +40,10 @@ const EDUCATION_SUBMENU: { label: string; section: EducationSection }[] = [
   { label: "Flagship Program", section: "flagship-program" },
   { label: "Courses & Certifications", section: "courses-certifications" },
   { label: "Workshops & Intensives", section: "workshops-intensives" },
+];
+
+const CORPORATE_SUBMENU: { label: string; section: CorporateSection }[] = [
+  { label: "CWP Platform", section: "digital-platform" },
 ];
 
 const IMAGES = {
@@ -136,6 +141,7 @@ function Nav({
   setPage,
   onContact,
   onAccount,
+  onCorporateSection,
   onEventsSection,
   onEducationSection
 }: {
@@ -143,6 +149,7 @@ function Nav({
   setPage: (p: Page) => void;
   onContact: () => void;
   onAccount: () => void;
+  onCorporateSection: (section: CorporateSection) => void;
   onEventsSection: (section: EventsSection) => void;
   onEducationSection: (section: EducationSection) => void;
 }) {
@@ -150,6 +157,7 @@ function Nav({
   const navigate = useNavigate();
   const [scrolled, setScrolled] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
+  const [mobileCorporateOpen, setMobileCorporateOpen] = useState(false);
   const [mobileEventsOpen, setMobileEventsOpen] = useState(false);
   const [mobileEducationOpen, setMobileEducationOpen] = useState(false);
   const [adminOpen, setAdminOpen] = useState(false);
@@ -189,19 +197,28 @@ function Nav({
 
   const links: { label: string; key: Page }[] = [
     { label: "About", key: "about" },
-    { label: "Corporate", key: "corporate" },
   ];
 
   const nav = (p: Page) => {
     setPage(p);
     setMenuOpen(false);
+    setMobileCorporateOpen(false);
     setMobileEventsOpen(false);
     setMobileEducationOpen(false);
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
 
+  const goCorporateSection = (section: CorporateSection) => {
+    onCorporateSection(section);
+    setMobileCorporateOpen(false);
+    setMobileEventsOpen(false);
+    setMobileEducationOpen(false);
+    setMenuOpen(false);
+  };
+
   const goEventsSection = (section: EventsSection) => {
     onEventsSection(section);
+    setMobileCorporateOpen(false);
     setMobileEventsOpen(false);
     setMobileEducationOpen(false);
     setMenuOpen(false);
@@ -209,6 +226,7 @@ function Nav({
 
   const goEducationSection = (section: EducationSection) => {
     onEducationSection(section);
+    setMobileCorporateOpen(false);
     setMobileEducationOpen(false);
     setMobileEventsOpen(false);
     setMenuOpen(false);
@@ -238,6 +256,35 @@ function Nav({
               {label}
             </button>
           ))}
+          <div className="nav-submenu-menu group relative">
+            <button
+              type="button"
+              onClick={() => nav("corporate")}
+              className={`flex items-center gap-1.5 text-[13px] tracking-[0.08em] uppercase transition-all duration-200 relative after:absolute after:bottom-[-4px] after:left-0 after:h-px after:bg-[#C4785A] after:transition-all after:duration-300 ${
+                page === "corporate" ? "text-[#C4785A] after:w-full" : "text-[#2A2825]/70 hover:text-[#2A2825] after:w-0 hover:after:w-full"
+              }`}
+              style={{ fontFamily: "var(--font-body)" }}
+              aria-haspopup="true"
+            >
+              Corporate
+              <ChevronDown size={14} className="nav-submenu-chevron shrink-0 transition-transform duration-200" />
+            </button>
+            <div className="nav-submenu-dropdown absolute left-1/2 top-full z-[100] w-[240px] -translate-x-1/2 pt-2">
+              <div className="border border-[#2A2825]/10 bg-[#FAF8F3] py-2 shadow-xl">
+                {CORPORATE_SUBMENU.map(({ label, section }) => (
+                  <button
+                    key={section}
+                    type="button"
+                    onClick={() => goCorporateSection(section)}
+                    className="block w-full px-5 py-2.5 text-left text-[12px] tracking-[0.08em] uppercase text-[#2A2825]/75 transition-colors hover:bg-[#F2EBE0] hover:text-[#C4785A]"
+                    style={{ fontFamily: "var(--font-body)" }}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
           <div className="nav-submenu-menu group relative">
             <button
               type="button"
@@ -358,6 +405,33 @@ function Nav({
           <div>
             <button
               type="button"
+              onClick={() => setMobileCorporateOpen((open) => !open)}
+              className={`flex w-full items-center justify-between text-left text-[14px] tracking-[0.1em] uppercase ${page === "corporate" ? "text-[#C4785A]" : "text-[#2A2825]/70"}`}
+              style={{ fontFamily: "var(--font-body)" }}
+              aria-expanded={mobileCorporateOpen}
+            >
+              Corporate
+              <ChevronDown size={16} className={`transition-transform duration-200 ${mobileCorporateOpen ? "rotate-180" : ""}`} />
+            </button>
+            {mobileCorporateOpen && (
+              <div className="mt-3 flex flex-col gap-3 border-l border-[#C4785A]/30 pl-4">
+                {CORPORATE_SUBMENU.map(({ label, section }) => (
+                  <button
+                    key={section}
+                    type="button"
+                    onClick={() => goCorporateSection(section)}
+                    className="text-left text-[13px] tracking-[0.08em] uppercase text-[#2A2825]/65 hover:text-[#C4785A]"
+                    style={{ fontFamily: "var(--font-body)" }}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+          <div>
+            <button
+              type="button"
               onClick={() => setMobileEducationOpen((open) => !open)}
               className={`flex w-full items-center justify-between text-left text-[14px] tracking-[0.1em] uppercase ${page === "education" ? "text-[#C4785A]" : "text-[#2A2825]/70"}`}
               style={{ fontFamily: "var(--font-body)" }}
@@ -440,6 +514,105 @@ function Nav({
 // ── About Page ────────────────────────────────────────────────────────────────
 
 type SpecialistCard = LiveSpecialist;
+
+function SpecialistsScroller({ specialists }: { specialists: SpecialistCard[] }) {
+  const trackRef = useRef<HTMLDivElement>(null);
+  const [canScrollLeft, setCanScrollLeft] = useState(false);
+  const [canScrollRight, setCanScrollRight] = useState(false);
+  const [overflows, setOverflows] = useState(false);
+
+  const updateScrollState = () => {
+    const el = trackRef.current;
+    if (!el) return;
+    const { scrollLeft, scrollWidth, clientWidth } = el;
+    const hasOverflow = scrollWidth > clientWidth + 2;
+    setOverflows(hasOverflow);
+    setCanScrollLeft(hasOverflow && scrollLeft > 4);
+    setCanScrollRight(hasOverflow && scrollLeft < scrollWidth - clientWidth - 4);
+  };
+
+  useEffect(() => {
+    const el = trackRef.current;
+    if (!el) return;
+    updateScrollState();
+    el.addEventListener("scroll", updateScrollState, { passive: true });
+    const ro = new ResizeObserver(updateScrollState);
+    ro.observe(el);
+    return () => {
+      el.removeEventListener("scroll", updateScrollState);
+      ro.disconnect();
+    };
+  }, [specialists]);
+
+  const scrollBy = (dir: -1 | 1) => {
+    trackRef.current?.scrollBy({ left: dir * 300, behavior: "smooth" });
+  };
+
+  return (
+    <div className="specialists-scroll-wrap -mx-6 lg:-mx-12">
+      {overflows && (
+        <p
+          className="specialists-scroll-hint text-center text-[#7A7468] text-[12px] tracking-wide mb-5 px-6 lg:px-12"
+          style={{ fontFamily: "var(--font-body)" }}
+        >
+          <span className="md:hidden">Swipe</span>
+          <span className="hidden md:inline">Scroll</span>
+          {" "}to meet everyone
+          <ChevronRight size={14} className="specialists-scroll-hint-icon inline ml-0.5 -mt-px" aria-hidden />
+        </p>
+      )}
+      <div
+        className={[
+          "specialists-scroll-stage relative",
+          canScrollLeft ? "specialists-scroll-fade-left" : "",
+          canScrollRight ? "specialists-scroll-fade-right" : ""
+        ].filter(Boolean).join(" ")}
+      >
+        {overflows && canScrollLeft && (
+          <button
+            type="button"
+            onClick={() => scrollBy(-1)}
+            className="specialists-scroll-btn specialists-scroll-btn-left"
+            aria-label="Previous specialists"
+          >
+            <ChevronLeft size={20} strokeWidth={1.75} />
+          </button>
+        )}
+        {overflows && canScrollRight && (
+          <button
+            type="button"
+            onClick={() => scrollBy(1)}
+            className="specialists-scroll-btn specialists-scroll-btn-right"
+            aria-label="Next specialists"
+          >
+            <ChevronRight size={20} strokeWidth={1.75} />
+          </button>
+        )}
+        <div ref={trackRef} className="specialists-scroll-track px-6 lg:px-12 pb-3">
+          <div className="flex gap-8 min-w-max snap-x snap-mandatory scroll-px-6 lg:scroll-px-12">
+            {specialists.map(({ name, role, desc, cert, img, portraitFocus }) => (
+              <div key={name} className="group cursor-default w-[260px] sm:w-[280px] flex-shrink-0 snap-start">
+                <div className="relative overflow-hidden mb-5 bg-[#D4B896]">
+                  <img
+                    src={img}
+                    alt={name}
+                    className={`w-full aspect-[3/4] object-cover group-hover:scale-105 transition-transform duration-700 ${portraitFocus && !img.includes("/api/media/trainers/") ? "object-[center_15%] scale-125" : "object-top"}`}
+                  />
+                  <div className="absolute inset-0 bg-[#C4785A]/0 group-hover:bg-[#C4785A]/10 transition-all duration-400" />
+                </div>
+                <p className="text-[10px] tracking-[0.25em] text-[#C4785A] uppercase mb-1.5" style={{ fontFamily: "var(--font-body)" }}>{role}</p>
+                <h3 className="text-[#2A2825] text-lg font-normal mb-2" style={{ fontFamily: "var(--font-display)" }}>{name}</h3>
+                <p className="text-[#7A7468] text-[13px] leading-[1.75] mb-3" style={{ fontFamily: "var(--font-body)" }}>{desc}</p>
+                <p className="text-[11px] text-[#2A2825]/40 tracking-wide" style={{ fontFamily: "var(--font-body)" }}>{cert}</p>
+              </div>
+            ))}
+            <div className="shrink-0 w-2" aria-hidden />
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 function AboutPage({ setPage, specialists }: { setPage: (p: Page) => void; specialists: SpecialistCard[] }) {
   return (
@@ -563,27 +736,7 @@ function AboutPage({ setPage, specialists }: { setPage: (p: Page) => void; speci
               Meet Our Specialists
             </h2>
           </div>
-          <div className="-mx-6 lg:-mx-12 px-6 lg:px-12 overflow-x-auto pb-2 [scrollbar-width:thin]">
-            <div className="flex gap-8 min-w-max snap-x snap-mandatory">
-            {specialists.map(({ name, role, desc, cert, img, portraitFocus }) => (
-              <div key={name} className="group cursor-default w-[260px] sm:w-[280px] flex-shrink-0 snap-start">
-                <div className="relative overflow-hidden mb-5 bg-[#D4B896]">
-                  <img
-                    src={img}
-                    alt={name}
-                    className={`w-full aspect-[3/4] object-cover group-hover:scale-105 transition-transform duration-700 ${portraitFocus && !img.includes("/api/media/trainers/") ? "object-[center_15%] scale-125" : "object-top"}`}
-                  />
-                  <div className="absolute inset-0 bg-[#C4785A]/0 group-hover:bg-[#C4785A]/10 transition-all duration-400" />
-                </div>
-                <p className="text-[10px] tracking-[0.25em] text-[#C4785A] uppercase mb-1.5" style={{ fontFamily: "var(--font-body)" }}>{role}</p>
-                <h3 className="text-[#2A2825] text-lg font-normal mb-2" style={{ fontFamily: "var(--font-display)" }}>{name}</h3>
-                <p className="text-[#7A7468] text-[13px] leading-[1.75] mb-3" style={{ fontFamily: "var(--font-body)" }}>{desc}</p>
-                <p className="text-[11px] text-[#2A2825]/40 tracking-wide" style={{ fontFamily: "var(--font-body)" }}>{cert}</p>
-              </div>
-            ))}
-            <div className="shrink-0 w-6" aria-hidden />
-            </div>
-          </div>
+          <SpecialistsScroller specialists={specialists} />
         </div>
       </section>
 
@@ -621,7 +774,26 @@ function AboutPage({ setPage, specialists }: { setPage: (p: Page) => void; speci
 
 // ── Corporate Page ─────────────────────────────────────────────────────────────
 
-function CorporatePage({ onContact }: { onContact: () => void }) {
+function CorporatePage({
+  onContact,
+  teamActivities,
+  scrollTarget,
+  onScrollTargetHandled
+}: {
+  onContact: () => void;
+  teamActivities: Array<{ title: string; desc: string; img: string }>;
+  scrollTarget?: CorporateSection | null;
+  onScrollTargetHandled?: () => void;
+}) {
+  useEffect(() => {
+    if (!scrollTarget) return;
+    const scroll = () => {
+      document.getElementById(scrollTarget)?.scrollIntoView({ behavior: "smooth", block: "start" });
+      onScrollTargetHandled?.();
+    };
+    requestAnimationFrame(() => requestAnimationFrame(scroll));
+  }, [scrollTarget, onScrollTargetHandled]);
+
   return (
     <div>
       {/* Hero */}
@@ -702,7 +874,7 @@ function CorporatePage({ onContact }: { onContact: () => void }) {
       </section>
 
       {/* Platform */}
-      <section className="py-28 bg-[#2A2825]">
+      <section id="digital-platform" className="scroll-mt-24 py-28 bg-[#2A2825]">
         <div className="max-w-7xl mx-auto px-6 lg:px-12">
           <div className="grid lg:grid-cols-2 gap-20 items-center">
             <div>
@@ -778,7 +950,7 @@ function CorporatePage({ onContact }: { onContact: () => void }) {
           className="flex gap-4 overflow-x-auto pb-4 px-6 lg:px-12 snap-x snap-mandatory"
           style={{ scrollbarWidth: "none", msOverflowStyle: "none" }}
         >
-          {TEAM_ACTIVITIES.map(({ title, desc, img }) => (
+          {teamActivities.map(({ title, desc, img }) => (
             <div
               key={title}
               className="snap-start shrink-0 w-72 h-[420px] relative overflow-hidden group cursor-default"
@@ -2451,6 +2623,7 @@ export default function MarketingSite({ initialPage = "about" }: { initialPage?:
   const [stripeBooking, setStripeBooking] = useState<PendingStripeBooking | null>(null);
   const [eventsScrollTarget, setEventsScrollTarget] = useState<EventsSection | null>(null);
   const [educationScrollTarget, setEducationScrollTarget] = useState<EducationSection | null>(null);
+  const [corporateScrollTarget, setCorporateScrollTarget] = useState<CorporateSection | null>(null);
   const site = useSiteContent();
 
   useEffect(() => {
@@ -2465,21 +2638,24 @@ export default function MarketingSite({ initialPage = "about" }: { initialPage?:
       setStripeBooking(pending);
       clearPendingStripeBooking();
     }
-    window.history.replaceState({}, "", "/events");
+    window.history.replaceState({}, "", "/booking/success");
   }, []);
 
   const openContact = () => setContactOpen(true);
 
+  const handleCorporateSection = (section: CorporateSection) => {
+    setPage("corporate");
+    setCorporateScrollTarget(section);
+  };
+
   const handleEventsSection = (section: EventsSection) => {
     setPage("events");
     setEventsScrollTarget(section);
-    window.history.replaceState({}, "", "/events");
   };
 
   const handleEducationSection = (section: EducationSection) => {
     setPage("education");
     setEducationScrollTarget(section);
-    window.history.replaceState({}, "", "/education");
   };
 
   const specialists: SpecialistCard[] = site?.trainers?.length
@@ -2570,6 +2746,14 @@ export default function MarketingSite({ initialPage = "about" }: { initialPage?:
   );
   const workshops = sortProgramsForDisplay(site?.programs?.workshops?.length ? site.programs.workshops : []);
 
+  const teamActivities = site?.teamActivities?.length
+    ? site.teamActivities.map((activity) => ({
+        title: activity.title,
+        desc: activity.description,
+        img: activity.imageUrl
+      }))
+    : TEAM_ACTIVITIES;
+
   return (
     <div className="marketing-site min-h-screen bg-[#FAF8F3]" style={{ fontFamily: "var(--font-body)" }}>
       <Nav
@@ -2577,12 +2761,20 @@ export default function MarketingSite({ initialPage = "about" }: { initialPage?:
         setPage={setPage}
         onContact={openContact}
         onAccount={() => setAccountOpen(true)}
+        onCorporateSection={handleCorporateSection}
         onEventsSection={handleEventsSection}
         onEducationSection={handleEducationSection}
       />
       <main>
         {page === "about" && <AboutPage setPage={setPage} specialists={specialists} />}
-        {page === "corporate" && <CorporatePage onContact={openContact} />}
+        {page === "corporate" && (
+          <CorporatePage
+            onContact={openContact}
+            teamActivities={teamActivities}
+            scrollTarget={corporateScrollTarget}
+            onScrollTargetHandled={() => setCorporateScrollTarget(null)}
+          />
+        )}
         {page === "education" && (
           <EducationPage
             onContact={openContact}

@@ -28,6 +28,7 @@ import {
   TRAINER_MEDIA_DIR
 } from "./trainer-media-cache.js";
 import { PROGRAM_MEDIA_DIR } from "./program-media-cache.js";
+import { TEAM_BUILDING_MEDIA_DIR } from "./data-root.js";
 import { ensureDatabaseSchema } from "./ensure-schema.js";
 import { registerStripeWebhook, stripeStatusPayload } from "./stripe.js";
 
@@ -71,6 +72,7 @@ app.use((req, _res, next) => {
 
 app.use("/api/media/trainers", express.static(TRAINER_MEDIA_DIR, { maxAge: "7d" }));
 app.use("/api/media/programs", express.static(PROGRAM_MEDIA_DIR, { maxAge: "7d" }));
+app.use("/api/media/team-building", express.static(TEAM_BUILDING_MEDIA_DIR, { maxAge: "7d" }));
 
 app.get("/api/media/proxy", async (req, res, next) => {
   try {

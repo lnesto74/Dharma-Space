@@ -6,3 +6,4 @@ export const BACKEND_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.
 export const DATA_ROOT = path.join(BACKEND_ROOT, "data");
 export const TRAINER_MEDIA_DIR = path.join(DATA_ROOT, "trainer-media");
 export const PROGRAM_MEDIA_DIR = path.join(DATA_ROOT, "program-media");
+export const TEAM_BUILDING_MEDIA_DIR = path.join(DATA_ROOT, "team-building-media");

@@ -48,6 +48,14 @@ export type SiteProgram = {
   status?: "COMING_SOON" | "SCHEDULED" | "FINISHED";
 };
 
+export type SiteTeamActivity = {
+  id: string;
+  title: string;
+  description: string;
+  imageUrl: string;
+  sortOrder: number;
+};
+
 export type SiteContent = {
   trainers: SiteTrainer[];
   classes: Array<{
@@ -74,6 +82,7 @@ export type SiteContent = {
     ytt: SiteProgram[];
     courses: SiteProgram[];
   };
+  teamActivities?: SiteTeamActivity[];
 };
 
 export function useSiteContent() {

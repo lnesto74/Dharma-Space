@@ -26,3 +26,112 @@
     transform: rotate(180deg);
   }
 }
+
+/* Specialists horizontal scroll */
+.specialists-scroll-stage {
+  position: relative;
+}
+
+.specialists-scroll-fade-right::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: 3.5rem;
+  pointer-events: none;
+  z-index: 1;
+  background: linear-gradient(to left, #f2ebe0 20%, transparent);
+}
+
+.specialists-scroll-fade-left::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  bottom: 0;
+  width: 3.5rem;
+  pointer-events: none;
+  z-index: 1;
+  background: linear-gradient(to right, #f2ebe0 20%, transparent);
+}
+
+.specialists-scroll-track {
+  overflow-x: auto;
+  overflow-y: hidden;
+  scroll-behavior: smooth;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: thin;
+  scrollbar-color: #c4785a66 #f2ebe0;
+}
+
+.specialists-scroll-track::-webkit-scrollbar {
+  height: 6px;
+}
+
+.specialists-scroll-track::-webkit-scrollbar-track {
+  background: #e8dfd2;
+  border-radius: 999px;
+  margin: 0 1.5rem;
+}
+
+.specialists-scroll-track::-webkit-scrollbar-thumb {
+  background: #c4785a88;
+  border-radius: 999px;
+}
+
+.specialists-scroll-hint-icon {
+  color: #c4785a;
+  vertical-align: middle;
+  animation: specialists-scroll-nudge 1.8s ease-in-out infinite;
+}
+
+@keyframes specialists-scroll-nudge {
+  0%,
+  100% {
+    transform: translateX(0);
+    opacity: 0.55;
+  }
+  50% {
+    transform: translateX(4px);
+    opacity: 1;
+  }
+}
+
+.specialists-scroll-btn {
+  position: absolute;
+  top: 38%;
+  z-index: 2;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  width: 2.5rem;
+  height: 2.5rem;
+  border: 1px solid #2a28251a;
+  border-radius: 999px;
+  background: #faf8f3ee;
+  color: #2a2825;
+  box-shadow: 0 4px 16px #2a282514;
+  cursor: pointer;
+  transition: background 0.2s, border-color 0.2s, transform 0.2s;
+}
+
+.specialists-scroll-btn:hover {
+  background: #fff;
+  border-color: #c4785a55;
+  transform: scale(1.05);
+}
+
+@media (min-width: 768px) {
+  .specialists-scroll-btn {
+    display: flex;
+  }
+
+  .specialists-scroll-btn-left {
+    left: 0.75rem;
+  }
+
+  .specialists-scroll-btn-right {
+    right: 0.75rem;
+  }
+}

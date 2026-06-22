@@ -27,6 +27,7 @@ import {
   trainerHasExternalMedia
 } from "./trainer-media-cache.js";
 import { getInstagramFeed } from "./instagram-feed.js";
+import { serializeTeamActivity } from "./team-building.js";
 
 const jsonStringArray = z.union([z.array(z.string()), z.string()]).optional().transform((v) => {
   if (v == null) return undefined;
@@ -189,16 +190,18 @@ export async function migrateProgramCategories(prisma: PrismaClient) {
 }
 
 export async function getPublicSiteContent(prisma: PrismaClient) {
-  const [trainers, classes, programs] = await Promise.all([
+  const [trainers, classes, programs, teamActivities] = await Promise.all([
     prisma.siteTrainer.findMany({ where: { published: true }, orderBy: { sortOrder: "asc" } }),
     prisma.siteClass.findMany({ where: { published: true }, orderBy: [{ dayIndex: "asc" }, { startMinutes: "asc" }] }),
-    prisma.siteProgram.findMany({ where: { published: true }, orderBy: { sortOrder: "asc" } })
+    prisma.siteProgram.findMany({ where: { published: true }, orderBy: { sortOrder: "asc" } }),
+    prisma.siteTeamActivity.findMany({ where: { published: true }, orderBy: { sortOrder: "asc" } })
   ]);
   const enrichedPrograms = await Promise.all(programs.map((program) => serializeProgramWithStats(prisma, program)));
   return {
     trainers: trainers.map((t) => displayTrainerMedia(serializeTrainer(t))),
     classes: sortClasses(classes.map(serializeClass)),
-    programs: groupProgramsByCategory(enrichedPrograms)
+    programs: groupProgramsByCategory(enrichedPrograms),
+    teamActivities: teamActivities.map(serializeTeamActivity)
   };
 }
 
