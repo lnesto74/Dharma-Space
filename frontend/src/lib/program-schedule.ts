@@ -163,3 +163,40 @@ export function inputTimeToMinutes(value: string): number {
 export function defaultComingSoonForCategory(category: string): boolean {
   return isSessionProgram(category) || isTrainingProgram(category);
 }
+
+export function sortProgramsForDisplay<T extends ProgramScheduleFields & { sortOrder?: number }>(programs: T[]): T[] {
+  return [...programs].sort((a, b) => {
+    const aFinished = Boolean(a.finished);
+    const bFinished = Boolean(b.finished);
+    if (aFinished !== bFinished) return aFinished ? 1 : -1;
+
+    const aScheduled = !a.comingSoon && Boolean(a.scheduledDate?.trim());
+    const bScheduled = !b.comingSoon && Boolean(b.scheduledDate?.trim());
+    if (aScheduled !== bScheduled) return aScheduled ? -1 : 1;
+
+    if (aScheduled && bScheduled) {
+      const byDate = (a.scheduledDate || "").localeCompare(b.scheduledDate || "");
+      if (byDate !== 0) return byDate;
+    }
+
+    return (a.sortOrder ?? 0) - (b.sortOrder ?? 0);
+  });
+}
+
+export function sortClassesForDisplay<T extends { comingSoon?: boolean; classDate?: string; dayIndex?: number; startMinutes?: number; sortOrder?: number; time?: string }>(
+  classes: T[]
+): T[] {
+  return [...classes].sort((a, b) => {
+    if (Boolean(a.comingSoon) !== Boolean(b.comingSoon)) return a.comingSoon ? 1 : -1;
+    const aDate = a.classDate || "";
+    const bDate = b.classDate || "";
+    if (aDate !== bDate) return aDate.localeCompare(bDate);
+    const aDay = a.dayIndex ?? 0;
+    const bDay = b.dayIndex ?? 0;
+    if (aDay !== bDay) return aDay - bDay;
+    const aStart = a.startMinutes ?? 0;
+    const bStart = b.startMinutes ?? 0;
+    if (aStart !== bStart) return aStart - bStart;
+    return (a.sortOrder ?? 0) - (b.sortOrder ?? 0);
+  });
+}

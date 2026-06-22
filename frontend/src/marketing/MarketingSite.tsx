@@ -16,6 +16,7 @@ import { createMemberBooking, confirmMemberBookingReturn, updateMemberProfile, f
 import { submitInquiry } from "../lib/inquiries";
 import { useSiteContent, type SiteProgram } from "../lib/site-content";
 import { programToReserveInfo, programActionLabel, type ReserveInfo } from "../lib/education";
+import { sortProgramsForDisplay, sortClassesForDisplay } from "../lib/program-schedule";
 import {
   clearPendingStripeBooking,
   isStripeBookingReturn,
@@ -402,9 +403,10 @@ function AboutPage({ setPage, specialists }: { setPage: (p: Page) => void; speci
               Meet Our Specialists
             </h2>
           </div>
-          <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-8">
+          <div className="-mx-6 lg:-mx-12 px-6 lg:px-12 overflow-x-auto pb-2 [scrollbar-width:thin]">
+            <div className="flex gap-8 min-w-max snap-x snap-mandatory">
             {specialists.map(({ name, role, desc, cert, img, portraitFocus }) => (
-              <div key={name} className="group cursor-default">
+              <div key={name} className="group cursor-default w-[260px] sm:w-[280px] flex-shrink-0 snap-start">
                 <div className="relative overflow-hidden mb-5 bg-[#D4B896]">
                   <img
                     src={img}
@@ -419,6 +421,8 @@ function AboutPage({ setPage, specialists }: { setPage: (p: Page) => void; speci
                 <p className="text-[11px] text-[#2A2825]/40 tracking-wide" style={{ fontFamily: "var(--font-body)" }}>{cert}</p>
               </div>
             ))}
+            <div className="shrink-0 w-6" aria-hidden />
+            </div>
           </div>
         </div>
       </section>
@@ -766,7 +770,24 @@ function EducationPage({
             </h2>
           </div>
           <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-6">
-            {(certifications.length ? certifications : COURSES.map((c) => ({ id: c.title, title: c.title, description: c.desc, dates: c.dates, price: c.price, time: "", location: "Dharma Space Studio", facilitator: "Dharma Space Team", usePayNow: false, singlePerson: true, category: "CERTIFICATION" } as SiteProgram))).map((program) => {
+            {sortProgramsForDisplay(
+              certifications.length
+                ? certifications
+                : COURSES.map((c) => ({
+                    id: c.title,
+                    title: c.title,
+                    description: c.desc,
+                    dates: c.dates,
+                    price: c.price,
+                    time: "",
+                    location: "Dharma Space Studio",
+                    facilitator: "Dharma Space Team",
+                    usePayNow: false,
+                    singlePerson: true,
+                    category: "CERTIFICATION",
+                    comingSoon: c.dates === "Coming Soon"
+                  } as SiteProgram))
+            ).map((program) => {
               const reserve = programToReserveInfo(program);
               return (
               <div key={program.id || program.title} className="bg-white p-8 flex flex-col">
@@ -806,7 +827,25 @@ function EducationPage({
           </h2>
         </div>
         <div className="space-y-3">
-          {(workshops.length ? workshops : WORKSHOPS.map((w) => ({ id: w.title, title: w.title, dates: w.date, facilitator: w.instructor, price: w.price, location: w.location, time: "", description: "", usePayNow: false, singlePerson: true, category: "WORKSHOP" } as SiteProgram))).map((program) => {
+          {sortProgramsForDisplay(
+            workshops.length
+              ? workshops
+              : WORKSHOPS.map((w) => ({
+                  id: w.title,
+                  title: w.title,
+                  dates: w.date,
+                  scheduledDate: w.date.includes("2026") ? "2026-09-24" : "",
+                  facilitator: w.instructor,
+                  price: w.price,
+                  location: w.location,
+                  time: "",
+                  description: "",
+                  usePayNow: false,
+                  singlePerson: true,
+                  category: "WORKSHOP",
+                  comingSoon: w.date === "Coming Soon"
+                } as SiteProgram))
+          ).map((program) => {
             const reserve = programToReserveInfo(program);
             return (
             <div key={program.id || program.title} className="flex flex-col sm:flex-row sm:items-center justify-between p-7 border border-[#2A2825]/8 hover:border-[#C4785A] transition-colors duration-300 group gap-4">
@@ -1452,6 +1491,12 @@ function ReserveModal({ info, onClose }: { info: ReserveInfo; onClose: () => voi
   }, [member]);
 
   useEffect(() => {
+    if (isLoggedIn && step === "auth" && needsAuth) {
+      setStep(isComingSoon ? "waitlist" : "confirm");
+    }
+  }, [isLoggedIn, step, needsAuth, isComingSoon]);
+
+  useEffect(() => {
     if (!token || step !== "confirm" || !info.programId) {
       setAlreadyBooked(false);
       return;
@@ -1501,6 +1546,10 @@ function ReserveModal({ info, onClose }: { info: ReserveInfo; onClose: () => voi
 
   const handleBook = async () => {
     if (!token || !member) return;
+    if (!info.programId) {
+      setSubmitError("Online booking is not available for this session yet. Please contact us.");
+      return;
+    }
     setSubmitting(true);
     setSubmitError("");
     try {
@@ -1748,6 +1797,12 @@ function BookingModal({ info, onClose }: { info: BookingInfo; onClose: () => voi
   }, [member]);
 
   useEffect(() => {
+    if (isLoggedIn && step === "auth") {
+      setStep(isComingSoon ? "waitlist" : "confirm");
+    }
+  }, [isLoggedIn, step, isComingSoon]);
+
+  useEffect(() => {
     if (!token || step !== "confirm" || !info.classId) {
       setAlreadyBooked(false);
       return;
@@ -1796,6 +1851,10 @@ function BookingModal({ info, onClose }: { info: BookingInfo; onClose: () => voi
 
   const handleBook = async () => {
     if (!token || !member) return;
+    if (!info.classId) {
+      setSubmitError("Online booking is not available for this class yet. Please contact us.");
+      return;
+    }
     setSubmitting(true);
     setSubmitError("");
     try {
@@ -2238,51 +2297,78 @@ export default function MarketingSite({ initialPage = "about" }: { initialPage?:
     : LIVE_SITE_SPECIALISTS;
 
   const events = site?.programs?.events?.length
-    ? site.programs.events.map((p) => ({
+    ? sortProgramsForDisplay(site.programs.events).map((p) => ({
         ...programToReserveInfo(p),
         desc: p.description,
         img: p.imageUrl || IMAGES.soundBowl
       }))
-    : EVENTS.map((e) => ({ ...programToReserveInfo({
-        id: e.title,
-        category: "EVENT",
-        title: e.title,
-        description: e.desc,
-        comingSoon: e.date === "Coming Soon",
-        dates: e.date,
-        time: e.time,
-        location: e.location,
-        facilitator: e.facilitator,
-        price: e.price,
-        singlePerson: true,
-        usePayNow: false
-      } as SiteProgram), desc: e.desc, img: e.img }));
+    : sortProgramsForDisplay(
+        EVENTS.map((e) => ({
+          id: e.title,
+          category: "EVENT",
+          title: e.title,
+          description: e.desc,
+          comingSoon: e.date === "Coming Soon",
+          scheduledDate: e.date === "Coming Soon" ? "" : e.date,
+          dates: e.date,
+          time: e.time,
+          location: e.location,
+          facilitator: e.facilitator,
+          price: e.price,
+          singlePerson: true,
+          usePayNow: false,
+          sortOrder: 0
+        } as SiteProgram))
+      ).map((p) => ({
+        ...programToReserveInfo(p),
+        desc: p.description,
+        img: EVENTS.find((e) => e.title === p.title)?.img || IMAGES.soundBowl
+      }));
 
-  const classSchedule = site?.classes?.length
-    ? site.classes.map((c) => ({
-        id: c.id,
-        day: c.day,
-        date: c.classDate
-          ? new Date(`${c.classDate}T12:00:00`).toLocaleDateString(undefined, { weekday: "short", day: "numeric", month: "short" })
-          : undefined,
-        time: c.time,
-        type: c.classType,
-        instructor: c.instructor,
-        level: c.level,
-        location: c.location,
-        price: c.price,
-        stripeLink: c.stripeLink,
-        comingSoon: c.comingSoon
-      }))
-    : CLASS_SCHEDULE.map((c) => ({ ...c, price: "SGD 35", stripeLink: null, comingSoon: true }));
+  const classSchedule = sortClassesForDisplay(
+    site?.classes?.length
+      ? site.classes.map((c) => ({
+          id: c.id,
+          day: c.day,
+          dayIndex: c.dayIndex,
+          startMinutes: c.startMinutes,
+          sortOrder: c.sortOrder,
+          classDate: c.classDate,
+          date: c.classDate
+            ? new Date(`${c.classDate}T12:00:00`).toLocaleDateString(undefined, { weekday: "short", day: "numeric", month: "short" })
+            : undefined,
+          time: c.time,
+          type: c.classType,
+          instructor: c.instructor,
+          level: c.level,
+          location: c.location,
+          price: c.price,
+          stripeLink: c.stripeLink,
+          comingSoon: c.comingSoon
+        }))
+      : CLASS_SCHEDULE.map((c) => ({
+          ...c,
+          id: c.type,
+          price: "SGD 35",
+          stripeLink: null,
+          comingSoon: true,
+          sortOrder: 0,
+          dayIndex: 0,
+          startMinutes: 0,
+          classDate: undefined,
+          date: undefined
+        }))
+  );
 
   const flagship = site?.programs?.flagship?.[0] || site?.programs?.ytt?.[0] || null;
-  const certifications = site?.programs?.certifications?.length
-    ? site.programs.certifications
-    : site?.programs?.courses?.length
-      ? site.programs.courses
-      : [];
-  const workshops = site?.programs?.workshops?.length ? site.programs.workshops : [];
+  const certifications = sortProgramsForDisplay(
+    site?.programs?.certifications?.length
+      ? site.programs.certifications
+      : site?.programs?.courses?.length
+        ? site.programs.courses
+        : []
+  );
+  const workshops = sortProgramsForDisplay(site?.programs?.workshops?.length ? site.programs.workshops : []);
 
   return (
     <div className="marketing-site min-h-screen bg-[#FAF8F3]" style={{ fontFamily: "var(--font-body)" }}>

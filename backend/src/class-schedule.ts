@@ -195,12 +195,14 @@ export async function migrateClassScheduleFields(prisma: PrismaClient) {
   }
 }
 
-export function sortClasses<T extends { classDate?: string; dayIndex: number; startMinutes: number; sortOrder: number }>(rows: T[]): T[] {
-  return [...rows].sort(
-    (a, b) =>
+export function sortClasses<T extends { classDate?: string | null; dayIndex: number; startMinutes: number; sortOrder: number; comingSoon?: boolean }>(rows: T[]): T[] {
+  return [...rows].sort((a, b) => {
+    if (Boolean(a.comingSoon) !== Boolean(b.comingSoon)) return a.comingSoon ? 1 : -1;
+    return (
       (a.classDate || "").localeCompare(b.classDate || "") ||
       a.dayIndex - b.dayIndex ||
       a.startMinutes - b.startMinutes ||
       a.sortOrder - b.sortOrder
-  );
+    );
+  });
 }

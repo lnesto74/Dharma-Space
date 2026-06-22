@@ -32,6 +32,7 @@ export type ProgramScheduleFields = {
   startMinutes?: number;
   dates?: string;
   duration?: string;
+  finished?: boolean;
 };
 
 function parseDurationToMinutes(duration: string): number | null {
@@ -164,6 +165,25 @@ export function normalizeProgramSchedule(input: ProgramScheduleInput): ProgramSc
   }
 
   return next;
+}
+
+export function sortProgramsForDisplay<T extends ProgramScheduleFields & { sortOrder?: number }>(programs: T[]): T[] {
+  return [...programs].sort((a, b) => {
+    const aFinished = Boolean(a.finished);
+    const bFinished = Boolean(b.finished);
+    if (aFinished !== bFinished) return aFinished ? 1 : -1;
+
+    const aScheduled = !a.comingSoon && Boolean(a.scheduledDate?.trim());
+    const bScheduled = !b.comingSoon && Boolean(b.scheduledDate?.trim());
+    if (aScheduled !== bScheduled) return aScheduled ? -1 : 1;
+
+    if (aScheduled && bScheduled) {
+      const byDate = (a.scheduledDate || "").localeCompare(b.scheduledDate || "");
+      if (byDate !== 0) return byDate;
+    }
+
+    return (a.sortOrder ?? 0) - (b.sortOrder ?? 0);
+  });
 }
 
 export async function migrateProgramScheduleFields(prisma: PrismaClient) {

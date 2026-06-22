@@ -51,8 +51,8 @@ export function MemberAccountModal({ onClose, onBookProgram, onBookClass }: Memb
     Promise.all([fetchMemberBookings(token), fetchBookableOfferings()])
       .then(([bookingsRes, offeringsRes]) => {
         setBookings(bookingsRes.bookings);
-        setPrograms(offeringsRes.programs.filter((p) => p.bookable !== false));
-        setClasses(offeringsRes.classes.filter((c) => c.bookable !== false));
+        setPrograms(offeringsRes.programs);
+        setClasses(offeringsRes.classes);
       })
       .catch((e) => setError(e.message || "Could not load account"))
       .finally(() => setLoading(false));

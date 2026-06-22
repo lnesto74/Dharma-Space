@@ -1,5 +1,5 @@
 /** Education program categories shown on the public site. */
-import { isProgramFinished, programScheduleStatus } from "./program-schedule.js";
+import { isProgramFinished, programScheduleStatus, sortProgramsForDisplay } from "./program-schedule.js";
 
 export const PROGRAM_CATEGORIES = ["FLAGSHIP", "CERTIFICATION", "WORKSHOP", "EVENT"] as const;
 export type ProgramCategory = (typeof PROGRAM_CATEGORIES)[number];
@@ -51,13 +51,14 @@ export function serializeProgram(program: any) {
 
 export function groupProgramsByCategory(programs: any[]) {
   const normalized = programs.map(serializeProgram);
+  const sortList = (items: typeof normalized) => sortProgramsForDisplay(items);
   return {
-    flagship: normalized.filter((p) => p.category === "FLAGSHIP"),
-    certifications: normalized.filter((p) => p.category === "CERTIFICATION"),
-    workshops: normalized.filter((p) => p.category === "WORKSHOP"),
-    events: normalized.filter((p) => p.category === "EVENT"),
+    flagship: sortList(normalized.filter((p) => p.category === "FLAGSHIP")),
+    certifications: sortList(normalized.filter((p) => p.category === "CERTIFICATION")),
+    workshops: sortList(normalized.filter((p) => p.category === "WORKSHOP")),
+    events: sortList(normalized.filter((p) => p.category === "EVENT")),
     // Legacy keys for gradual frontend migration
-    ytt: normalized.filter((p) => p.category === "FLAGSHIP"),
-    courses: normalized.filter((p) => p.category === "CERTIFICATION")
+    ytt: sortList(normalized.filter((p) => p.category === "FLAGSHIP")),
+    courses: sortList(normalized.filter((p) => p.category === "CERTIFICATION"))
   };
 }

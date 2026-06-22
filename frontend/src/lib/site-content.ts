@@ -44,12 +44,28 @@ export type SiteProgram = {
   spotsRemaining?: number | null;
   soldOut?: boolean;
   finished?: boolean;
+  sortOrder?: number;
   status?: "COMING_SOON" | "SCHEDULED" | "FINISHED";
 };
 
 export type SiteContent = {
   trainers: SiteTrainer[];
-  classes: Array<{ id: string; classDate?: string; day: string; time: string; classType: string; instructor: string; level: string; location: string; price: string; stripeLink?: string | null; comingSoon: boolean }>;
+  classes: Array<{
+    id: string;
+    classDate?: string;
+    day: string;
+    dayIndex?: number;
+    startMinutes?: number;
+    sortOrder?: number;
+    time: string;
+    classType: string;
+    instructor: string;
+    level: string;
+    location: string;
+    price: string;
+    stripeLink?: string | null;
+    comingSoon: boolean;
+  }>;
   programs: {
     flagship: SiteProgram[];
     certifications: SiteProgram[];

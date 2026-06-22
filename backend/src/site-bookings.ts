@@ -6,6 +6,7 @@ import type { PrismaClient, SiteMember } from "@prisma/client";
 import { z } from "zod";
 import { assertProgramHasCapacity, getProgramBookingStats } from "./program-bookings.js";
 import { serializeProgram } from "./education.js";
+import { sortProgramsForDisplay } from "./program-schedule.js";
 import { serializeClass, sortClasses } from "./class-schedule.js";
 import {
   createStripeCheckoutSession,
@@ -252,7 +253,7 @@ export async function getBookableOfferings(prisma: PrismaClient) {
   );
 
   return {
-    programs: enrichedPrograms,
+    programs: sortProgramsForDisplay(enrichedPrograms),
     classes: sortClasses(classes.map(serializeClass)).map((siteClass) => ({
       ...siteClass,
       offeringType: "CLASS" as const,
