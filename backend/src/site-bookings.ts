@@ -10,7 +10,11 @@ import { serializeClass, sortClasses } from "./class-schedule.js";
 import {
   createStripeCheckoutSession,
   stripeConfigured,
-  verifyCheckoutSessionPaid
+  verifyCheckoutSessionPaid,
+  syncStripePaymentIds,
+  refundStripeBooking,
+  markBookingRefundedManual,
+  retrieveCheckoutSession
 } from "./stripe.js";
 import { completeBookingPayment, sendBookingPayNowPendingEmails } from "./booking-emails.js";
 
@@ -53,10 +57,18 @@ export function serializeBooking(booking: {
   status: string;
   paymentMethod: string | null;
   stripeCheckoutUrl: string | null;
+  stripeSessionId: string | null;
+  stripePaymentIntentId: string | null;
   paidAt: Date | null;
+  refundedAt: Date | null;
   createdAt: Date;
   updatedAt: Date;
 }) {
+  const refundable =
+    booking.status === "PAID" &&
+    !booking.refundedAt &&
+    (booking.paymentMethod === "STRIPE" || booking.paymentMethod === "PAYNOW");
+
   return {
     id: booking.id,
     reference: booking.reference,
@@ -80,9 +92,18 @@ export function serializeBooking(booking: {
     paymentMethod: booking.paymentMethod,
     stripeCheckoutUrl: booking.stripeCheckoutUrl,
     paidAt: booking.paidAt?.toISOString() ?? null,
+    refundedAt: booking.refundedAt?.toISOString() ?? null,
+    refundable,
     createdAt: booking.createdAt.toISOString(),
     updatedAt: booking.updatedAt.toISOString(),
-    paymentStatus: booking.status === "PAID" ? "PAID" : "NOT_PAID"
+    paymentStatus:
+      booking.status === "REFUNDED"
+        ? "REFUNDED"
+        : booking.status === "CANCELLED"
+          ? "CANCELLED"
+          : booking.status === "PAID"
+            ? "PAID"
+            : "NOT_PAID"
   };
 }
 
@@ -259,6 +280,7 @@ export async function createSiteBooking(
   const priceLabel = offering.depositAmount || offering.price;
 
   let checkoutUrl: string | null = null;
+  let stripeSessionId: string | null = null;
   if (paymentMethod === "STRIPE") {
     if (stripeConfigured()) {
       const session = await createStripeCheckoutSession({
@@ -272,6 +294,7 @@ export async function createSiteBooking(
         siteClassId: offering.siteClassId
       });
       checkoutUrl = session?.url ?? null;
+      stripeSessionId = session?.sessionId ?? null;
     } else if (offering.stripeLink?.trim()) {
       checkoutUrl = stripeCheckoutUrl(offering.stripeLink, member.email, reference);
     }
@@ -301,7 +324,8 @@ export async function createSiteBooking(
       customerPhone: member.phone,
       status: "AWAITING_PAYMENT",
       paymentMethod,
-      stripeCheckoutUrl: checkoutUrl
+      stripeCheckoutUrl: checkoutUrl,
+      stripeSessionId
     }
   });
 
@@ -455,6 +479,8 @@ export function registerSiteBookingRoutes(
         if (!paid) {
           return res.status(402).json({ message: "Payment not completed yet. Please wait a moment and refresh." });
         }
+        const session = await retrieveCheckoutSession(body.sessionId);
+        if (session) await syncStripePaymentIds(prisma, body.reference, session);
       }
       const updated = await completeBookingPayment(prisma, body.reference, booking.paymentMethod || "STRIPE");
       if (!updated) return res.status(404).json({ message: "Booking not found" });
@@ -542,11 +568,49 @@ export function registerSiteBookingRoutes(
 
   app.patch("/api/admin/bookings/:id/cancel", adminAuth, requireAdmin, async (req, res, next) => {
     try {
+      const booking = await prisma.booking.findUnique({ where: { id: req.params.id } });
+      if (!booking) return res.status(404).json({ message: "Booking not found" });
+      if (booking.status === "CANCELLED" || booking.status === "REFUNDED") {
+        return res.status(409).json({ message: "Booking is already cancelled or refunded." });
+      }
+      if (booking.status === "PAID") {
+        return res.status(400).json({
+          message: "Paid bookings must be refunded before cancelling. Use Refund for Stripe/PayNow payments."
+        });
+      }
       const updated = await prisma.booking.update({
-        where: { id: req.params.id },
+        where: { id: booking.id },
         data: { status: "CANCELLED" }
       });
       res.json({ booking: serializeBooking(updated) });
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  app.post("/api/admin/bookings/:id/refund", adminAuth, requireAdmin, async (req, res, next) => {
+    try {
+      const booking = await prisma.booking.findUnique({ where: { id: req.params.id } });
+      if (!booking) return res.status(404).json({ message: "Booking not found" });
+
+      let updated;
+      if (booking.paymentMethod === "STRIPE") {
+        updated = await refundStripeBooking(prisma, booking);
+      } else if (booking.paymentMethod === "PAYNOW") {
+        updated = await markBookingRefundedManual(prisma, booking.id);
+      } else {
+        return res.status(400).json({
+          message: "Only Stripe or PayNow bookings can be refunded from here."
+        });
+      }
+
+      res.json({
+        booking: serializeBooking(updated),
+        message:
+          booking.paymentMethod === "PAYNOW"
+            ? "Marked as refunded. Send the PayNow refund to the customer manually."
+            : "Stripe refund processed."
+      });
     } catch (error) {
       next(error);
     }

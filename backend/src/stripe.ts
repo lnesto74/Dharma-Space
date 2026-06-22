@@ -84,6 +84,107 @@ export async function createStripeCheckoutSession(input: {
   return { url: session.url, sessionId: session.id };
 }
 
+function paymentIntentIdFromSession(session: Stripe.Checkout.Session): string | null {
+  const pi = session.payment_intent;
+  if (!pi) return null;
+  return typeof pi === "string" ? pi : pi.id;
+}
+
+export async function syncStripePaymentIds(
+  prisma: PrismaClient,
+  reference: string,
+  session: Stripe.Checkout.Session
+) {
+  const paymentIntentId = paymentIntentIdFromSession(session);
+  if (!session.id && !paymentIntentId) return;
+
+  await prisma.booking.updateMany({
+    where: { reference },
+    data: {
+      ...(session.id ? { stripeSessionId: session.id } : {}),
+      ...(paymentIntentId ? { stripePaymentIntentId: paymentIntentId } : {})
+    }
+  });
+}
+
+async function resolvePaymentIntentId(booking: {
+  reference: string;
+  stripeSessionId: string | null;
+  stripePaymentIntentId: string | null;
+}): Promise<string | null> {
+  if (booking.stripePaymentIntentId) return booking.stripePaymentIntentId;
+
+  const stripe = getStripe();
+  if (!stripe) return null;
+
+  if (booking.stripeSessionId) {
+    const session = await stripe.checkout.sessions.retrieve(booking.stripeSessionId);
+    const paymentIntentId = paymentIntentIdFromSession(session);
+    if (paymentIntentId) return paymentIntentId;
+  }
+
+  const sessions = await stripe.checkout.sessions.list({ limit: 100 });
+  const hit = sessions.data.find((session) => session.client_reference_id === booking.reference);
+  if (!hit) return null;
+  return paymentIntentIdFromSession(hit);
+}
+
+export async function refundStripeBooking(
+  prisma: PrismaClient,
+  booking: {
+    id: string;
+    reference: string;
+    status: string;
+    paymentMethod: string | null;
+    refundedAt: Date | null;
+    stripeSessionId: string | null;
+    stripePaymentIntentId: string | null;
+  }
+) {
+  if (booking.status !== "PAID") {
+    throw Object.assign(new Error("Only paid bookings can be refunded."), { status: 400 });
+  }
+  if (booking.refundedAt) {
+    throw Object.assign(new Error("This booking was already refunded."), { status: 409 });
+  }
+
+  const stripe = getStripe();
+  if (!stripe) {
+    throw Object.assign(new Error("Stripe is not configured."), { status: 503 });
+  }
+
+  const paymentIntentId = await resolvePaymentIntentId(booking);
+  if (!paymentIntentId) {
+    throw Object.assign(
+      new Error("Could not find the Stripe payment for this booking. Refund manually in Stripe Dashboard."),
+      { status: 404 }
+    );
+  }
+
+  await stripe.refunds.create({ payment_intent: paymentIntentId });
+
+  return prisma.booking.update({
+    where: { id: booking.id },
+    data: { status: "REFUNDED", refundedAt: new Date() }
+  });
+}
+
+export async function markBookingRefundedManual(prisma: PrismaClient, bookingId: string) {
+  const booking = await prisma.booking.findUnique({ where: { id: bookingId } });
+  if (!booking) throw Object.assign(new Error("Booking not found"), { status: 404 });
+  if (booking.status !== "PAID") {
+    throw Object.assign(new Error("Only paid bookings can be marked refunded."), { status: 400 });
+  }
+  if (booking.refundedAt) {
+    throw Object.assign(new Error("This booking was already refunded."), { status: 409 });
+  }
+
+  return prisma.booking.update({
+    where: { id: bookingId },
+    data: { status: "REFUNDED", refundedAt: new Date() }
+  });
+}
+
 export async function markBookingPaidByReference(prisma: PrismaClient, reference: string) {
   return completeBookingPayment(prisma, reference, "STRIPE");
 }
@@ -94,6 +195,12 @@ export async function verifyCheckoutSessionPaid(sessionId: string, expectedRefer
   const session = await stripe.checkout.sessions.retrieve(sessionId);
   if (session.client_reference_id !== expectedReference) return false;
   return session.payment_status === "paid";
+}
+
+export async function retrieveCheckoutSession(sessionId: string) {
+  const stripe = getStripe();
+  if (!stripe) return null;
+  return stripe.checkout.sessions.retrieve(sessionId);
 }
 
 export function registerStripeWebhook(app: Express, getPrisma: () => PrismaClient) {
@@ -125,6 +232,7 @@ export function registerStripeWebhook(app: Express, getPrisma: () => PrismaClien
           const session = event.data.object as Stripe.Checkout.Session;
           const reference = session.client_reference_id || session.metadata?.bookingReference;
           if (reference && session.payment_status === "paid") {
+            await syncStripePaymentIds(getPrisma(), reference, session);
             await markBookingPaidByReference(getPrisma(), reference);
           }
         }

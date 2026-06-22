@@ -328,7 +328,10 @@ model Booking {
   status            String      @default("AWAITING_PAYMENT")
   paymentMethod     String?
   stripeCheckoutUrl String?
+  stripeSessionId   String?
+  stripePaymentIntentId String?
   paidAt            DateTime?
+  refundedAt        DateTime?
   createdAt         DateTime    @default(now())
   updatedAt         DateTime    @updatedAt
   siteProgram       SiteProgram? @relation(fields: [siteProgramId], references: [id], onDelete: SetNull)

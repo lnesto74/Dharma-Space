@@ -808,6 +808,8 @@ type BookingRow = {
   paymentStatus: string;
   paymentMethod?: string | null;
   price: string;
+  refundable?: boolean;
+  refundedAt?: string | null;
   createdAt: string;
 };
 
@@ -825,13 +827,16 @@ type OfferingGroup = {
 export function AdminBookingsPage({ auth }: { auth: Auth }) {
   const [data, setData] = useState<{ totals: { bookings: number; paid: number; awaitingPayment: number }; offerings: OfferingGroup[] } | null>(null);
   const [error, setError] = useState("");
+  const [notice, setNotice] = useState("");
   const [loading, setLoading] = useState(true);
   const [expanded, setExpanded] = useState<string | null>(null);
   const [markingPaidId, setMarkingPaidId] = useState<string | null>(null);
+  const [actingId, setActingId] = useState<string | null>(null);
 
   const load = () => {
     setLoading(true);
     setError("");
+    setNotice("");
     adminApi<{ totals: { bookings: number; paid: number; awaitingPayment: number }; offerings: OfferingGroup[] }>(
       "/api/admin/bookings/overview",
       auth.token
@@ -855,6 +860,48 @@ export function AdminBookingsPage({ auth }: { auth: Auth }) {
     }
   };
 
+  const cancelBooking = async (booking: BookingRow) => {
+    if (!window.confirm(`Cancel booking ${booking.reference} for ${booking.customerName}?`)) return;
+    setActingId(booking.id);
+    setError("");
+    setNotice("");
+    try {
+      await adminApi(`/api/admin/bookings/${booking.id}/cancel`, auth.token, { method: "PATCH" });
+      load();
+    } catch (e: any) {
+      setError(e.message || "Could not cancel booking.");
+    } finally {
+      setActingId(null);
+    }
+  };
+
+  const refundBooking = async (booking: BookingRow) => {
+    const payNowNote =
+      booking.paymentMethod === "PAYNOW"
+        ? "\n\nPayNow: you will need to send the refund to the customer manually. This only updates the roster."
+        : "\n\nStripe will return the payment to the customer's card or PayNow.";
+    if (!window.confirm(`Refund booking ${booking.reference} for ${booking.customerName}?${payNowNote}`)) return;
+    setActingId(booking.id);
+    setError("");
+    setNotice("");
+    try {
+      const result = await adminApi<{ message?: string }>(`/api/admin/bookings/${booking.id}/refund`, auth.token, { method: "POST" });
+      if (result.message) setNotice(result.message);
+      load();
+    } catch (e: any) {
+      setError(e.message || "Could not refund booking.");
+    } finally {
+      setActingId(null);
+    }
+  };
+
+  const bookingStatusPill = (booking: BookingRow) => {
+    if (booking.status === "REFUNDED") return <StatusPill variant="purple" label="Refunded" />;
+    if (booking.status === "CANCELLED") return <StatusPill variant="gray" label="Cancelled" />;
+    if (booking.status === "PAID") return <StatusPill variant="green" label="Paid" />;
+    return <StatusPill variant="orange" label="Not paid" />;
+  };
+
   return (
     <AdminShell
       auth={auth}
@@ -869,6 +916,7 @@ export function AdminBookingsPage({ auth }: { auth: Auth }) {
       }
     >
       {error && <div className="admin-alert">{error}</div>}
+      {notice && <div className="admin-alert admin-alert-success">{notice}</div>}
       {loading ? (
         <p className="admin-muted">Loading bookings…</p>
       ) : !data?.offerings.length ? (
@@ -912,7 +960,7 @@ export function AdminBookingsPage({ auth }: { auth: Auth }) {
                           <th>Guests</th>
                           <th>Status</th>
                           <th>Reference</th>
-                          <th />
+                          <th>Actions</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -921,23 +969,41 @@ export function AdminBookingsPage({ auth }: { auth: Auth }) {
                             <td>{booking.customerName}</td>
                             <td>{booking.customerEmail}</td>
                             <td>{booking.guests}</td>
-                            <td>
-                              {booking.status === "PAID"
-                                ? <StatusPill variant="green" label="Paid" />
-                                : <StatusPill variant="orange" label="Not paid" />}
-                            </td>
+                            <td>{bookingStatusPill(booking)}</td>
                             <td>{booking.reference}</td>
                             <td>
-                              {booking.status !== "PAID" && (
-                                <button
-                                  type="button"
-                                  className="admin-btn admin-btn-primary"
-                                  disabled={markingPaidId === booking.id}
-                                  onClick={() => markPaid(booking.id)}
-                                >
-                                  {markingPaidId === booking.id ? "Saving…" : "Mark paid"}
-                                </button>
-                              )}
+                              <div className="admin-action-row">
+                                {booking.status === "AWAITING_PAYMENT" && (
+                                  <>
+                                    <button
+                                      type="button"
+                                      className="admin-btn admin-btn-primary"
+                                      disabled={markingPaidId === booking.id || actingId === booking.id}
+                                      onClick={() => markPaid(booking.id)}
+                                    >
+                                      {markingPaidId === booking.id ? "Saving…" : "Mark paid"}
+                                    </button>
+                                    <button
+                                      type="button"
+                                      className="admin-btn admin-btn-danger"
+                                      disabled={actingId === booking.id}
+                                      onClick={() => cancelBooking(booking)}
+                                    >
+                                      {actingId === booking.id ? "…" : "Cancel"}
+                                    </button>
+                                  </>
+                                )}
+                                {booking.refundable && (
+                                  <button
+                                    type="button"
+                                    className="admin-btn admin-btn-danger"
+                                    disabled={actingId === booking.id}
+                                    onClick={() => refundBooking(booking)}
+                                  >
+                                    {actingId === booking.id ? "Refunding…" : "Refund"}
+                                  </button>
+                                )}
+                              </div>
                             </td>
                           </tr>
                         ))}

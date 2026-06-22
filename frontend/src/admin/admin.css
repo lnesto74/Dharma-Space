@@ -336,6 +336,13 @@
   background: var(--admin-red-bg);
 }
 
+.admin-action-row {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
 .admin-select {
   padding: 4px 24px 4px 8px;
   font-size: 14px;
@@ -365,6 +372,11 @@
 .admin-alert-warn {
   background: var(--admin-orange-bg);
   color: var(--admin-orange);
+}
+
+.admin-alert-success {
+  background: #e8f5e9;
+  color: #2e7d32;
 }
 
 /* ── Status pills ── */
