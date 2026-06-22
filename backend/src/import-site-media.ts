@@ -1,11 +1,9 @@
-import { readdir, readFile } from "node:fs/promises";
+import { access, readdir, readFile } from "node:fs/promises";
 import path from "node:path";
-import { fileURLToPath } from "node:url";
 import type { PrismaClient } from "@prisma/client";
+import { DATA_ROOT, PROGRAM_MEDIA_DIR, TRAINER_MEDIA_DIR } from "./data-root.js";
 import { saveUploadedProgramFile } from "./program-media-cache.js";
 import { saveUploadedTrainerFile } from "./trainer-media-cache.js";
-
-const DATA_ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), "..", "data");
 
 export const GLOW_YOGA_DESC =
   "Yoga in a UV-lit studio with neon body paint — under the lamps, every move glows. A playful, high-energy night you won't forget.";
@@ -31,11 +29,39 @@ const PROGRAM_TITLES: Record<string, string> = {
   "glow-yoga": "Glow Yoga"
 };
 
-function needsLocalMedia(url: string | null | undefined): boolean {
+async function storedMediaFileExists(url: string): Promise<boolean> {
+  const trainerMatch = url.match(/\/api\/media\/trainers\/([^/]+)\/([^/]+)$/);
+  if (trainerMatch) {
+    const [, id, file] = trainerMatch;
+    try {
+      await access(path.join(TRAINER_MEDIA_DIR, id, file));
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  const programMatch = url.match(/\/api\/media\/programs\/([^/]+)\/([^/]+)$/);
+  if (programMatch) {
+    const [, id, file] = programMatch;
+    try {
+      await access(path.join(PROGRAM_MEDIA_DIR, id, file));
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  return false;
+}
+
+async function needsBundledMediaImport(url: string | null | undefined): Promise<boolean> {
   if (!url) return true;
-  if (url.includes("/api/media/trainers/") || url.includes("/api/media/programs/")) return false;
   if (url.includes("_components/v2/")) return true;
   if (url.includes("images.unsplash.com")) return true;
+  if (url.includes("/api/media/trainers/") || url.includes("/api/media/programs/")) {
+    return !(await storedMediaFileExists(url));
+  }
   return false;
 }
 
@@ -61,12 +87,13 @@ async function importDir(
     const buffer = await readFile(path.join(dir, file));
     if (kind === "trainer") {
       const trainer = await prisma.siteTrainer.findFirst({ where: { name: label } });
-      if (!trainer || !needsLocalMedia(trainer.imageUrl)) continue;
+      if (!trainer || !(await needsBundledMediaImport(trainer.imageUrl))) continue;
       const url = await saveUploadedTrainerFile(trainer.id, buffer, file);
       await prisma.siteTrainer.update({ where: { id: trainer.id }, data: { imageUrl: url } });
+      console.log(`[startup] Restored specialist portrait: ${label}`);
     } else {
       const program = await prisma.siteProgram.findFirst({ where: { title: label } });
-      if (!program || !needsLocalMedia(program.imageUrl)) continue;
+      if (!program || !(await needsBundledMediaImport(program.imageUrl))) continue;
       const url = await saveUploadedProgramFile(program.id, buffer, file);
       const data: { imageUrl: string; description?: string; title?: string; location?: string } = { imageUrl: url };
       if (label === "Glow Yoga") {
@@ -75,6 +102,7 @@ async function importDir(
         data.location = "Dharma Space Studio";
       }
       await prisma.siteProgram.update({ where: { id: program.id }, data });
+      console.log(`[startup] Restored program image: ${label}`);
     }
   }
 }

@@ -1,8 +1,9 @@
 import { createHash } from "node:crypto";
 import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
+import { PROGRAM_MEDIA_DIR } from "./data-root.js";
 
-export const PROGRAM_MEDIA_DIR = path.join(process.cwd(), "data", "program-media");
+export { PROGRAM_MEDIA_DIR };
 export const PROGRAM_MEDIA_URL_PREFIX = "/api/media/programs";
 
 const ALLOWED_UPLOAD_EXT = new Set(["jpg", "jpeg", "png", "webp", "gif"]);

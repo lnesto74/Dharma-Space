@@ -2,8 +2,9 @@ import { createHash } from "node:crypto";
 import { access, mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import type { Response } from "express";
+import { TRAINER_MEDIA_DIR } from "./data-root.js";
 
-export const TRAINER_MEDIA_DIR = path.join(process.cwd(), "data", "trainer-media");
+export { TRAINER_MEDIA_DIR };
 export const TRAINER_MEDIA_URL_PREFIX = "/api/media/trainers";
 
 const PROXY_HOST_SUFFIXES = [
