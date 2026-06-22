@@ -58,25 +58,13 @@ export async function ensureDatabaseSchema(): Promise<boolean> {
   const appUser = postgresUser(appUrl);
   const tablesExist = (await tableCount(appUrl)) > 0;
 
-  if (tablesExist && migrationUrl && appUser) {
-    console.log("[startup] Tables exist — ensuring app user privileges...");
-    try {
-      await grantAppUserPrivileges(migrationUrl, appUser);
-      return true;
-    } catch (error) {
-      console.warn("[startup] Could not grant app user privileges:", error);
-      return false;
-    }
-  }
-
-  if (tablesExist) {
-    console.log("[startup] Database OK — tables already exist.");
-    return true;
-  }
-
-  console.log("[startup] No tables yet — running prisma db push...");
+  console.log(
+    tablesExist
+      ? "[startup] Syncing database schema with prisma db push..."
+      : "[startup] No tables yet — running prisma db push..."
+  );
   if (migrationUrl) {
-    console.log("[startup] Using DATABASE_MIGRATION_URL for one-time schema setup.");
+    console.log("[startup] Using DATABASE_MIGRATION_URL for schema changes.");
   }
   try {
     execSync("npx prisma db push --skip-generate --accept-data-loss", {
@@ -87,11 +75,11 @@ export async function ensureDatabaseSchema(): Promise<boolean> {
     if (migrationUrl && appUser) {
       await grantAppUserPrivileges(migrationUrl, appUser);
     }
-    console.log("[startup] Database schema created.");
+    console.log("[startup] Database schema ready.");
     return true;
   } catch (error) {
-    console.warn("[startup] db push failed — API will start but login/data will not work.");
+    console.warn("[startup] db push failed — API will start but login/data may not work.");
     console.warn("[startup] Add DATABASE_MIGRATION_URL (doadmin URI) in App Platform env vars, then redeploy.");
-    return false;
+    return tablesExist;
   }
 }
