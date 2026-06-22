@@ -12,6 +12,7 @@ import {
   stripeConfigured,
   verifyCheckoutSessionPaid
 } from "./stripe.js";
+import { completeBookingPayment, sendBookingPayNowPendingEmails } from "./booking-emails.js";
 
 export type MemberToken = { sub: string; kind: "site_member" };
 
@@ -304,6 +305,12 @@ export async function createSiteBooking(
     }
   });
 
+  if (paymentMethod === "PAYNOW") {
+    await sendBookingPayNowPendingEmails(booking).catch((error) => {
+      console.error("[booking-mail] PayNow pending email failed:", error);
+    });
+  }
+
   return {
     booking: serializeBooking(booking),
     checkoutUrl,
@@ -449,10 +456,8 @@ export function registerSiteBookingRoutes(
           return res.status(402).json({ message: "Payment not completed yet. Please wait a moment and refresh." });
         }
       }
-      const updated = await prisma.booking.update({
-        where: { id: booking.id },
-        data: { status: "PAID", paidAt: new Date(), paymentMethod: booking.paymentMethod || "STRIPE" }
-      });
+      const updated = await completeBookingPayment(prisma, body.reference, booking.paymentMethod || "STRIPE");
+      if (!updated) return res.status(404).json({ message: "Booking not found" });
       res.json({ booking: serializeBooking(updated) });
     } catch (error) {
       next(error);
@@ -527,10 +532,8 @@ export function registerSiteBookingRoutes(
       if (booking.status === "PAID") {
         return res.json({ booking: serializeBooking(booking), alreadyPaid: true });
       }
-      const updated = await prisma.booking.update({
-        where: { id: booking.id },
-        data: { status: "PAID", paidAt: new Date() }
-      });
+      const updated = await completeBookingPayment(prisma, booking.reference, "PAYNOW");
+      if (!updated) return res.status(404).json({ message: "Booking not found" });
       res.json({ booking: serializeBooking(updated) });
     } catch (error) {
       next(error);

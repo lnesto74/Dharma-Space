@@ -2,6 +2,7 @@ import type { Express, Request, Response } from "express";
 import express from "express";
 import Stripe from "stripe";
 import type { PrismaClient } from "@prisma/client";
+import { completeBookingPayment } from "./booking-emails.js";
 
 let stripeClient: Stripe | null = null;
 
@@ -84,13 +85,7 @@ export async function createStripeCheckoutSession(input: {
 }
 
 export async function markBookingPaidByReference(prisma: PrismaClient, reference: string) {
-  const booking = await prisma.booking.findUnique({ where: { reference } });
-  if (!booking) return null;
-  if (booking.status === "PAID") return booking;
-  return prisma.booking.update({
-    where: { id: booking.id },
-    data: { status: "PAID", paidAt: new Date(), paymentMethod: "STRIPE" }
-  });
+  return completeBookingPayment(prisma, reference, "STRIPE");
 }
 
 export async function verifyCheckoutSessionPaid(sessionId: string, expectedReference: string) {
