@@ -12,7 +12,7 @@ import { Menu, X, ChevronRight, ChevronDown, MapPin, Mail, Phone, Instagram, Mes
 import { MemberAuthPanel } from "../components/MemberAuthPanel";
 import { MemberAccountModal } from "../components/MemberAccountModal";
 import { useMemberAuth } from "../auth/MemberAuthContext";
-import { createMemberBooking, confirmMemberBookingReturn, updateMemberProfile } from "../lib/member-api";
+import { createMemberBooking, confirmMemberBookingReturn, updateMemberProfile, fetchMemberBookings, memberHasActiveBooking } from "../lib/member-api";
 import { submitInquiry } from "../lib/inquiries";
 import { useSiteContent, type SiteProgram } from "../lib/site-content";
 import { programToReserveInfo, programActionLabel, type ReserveInfo } from "../lib/education";
@@ -89,7 +89,7 @@ const WORKSHOPS = [
   { title: "Arm Balance Intensive", date: "September 17, 2026", instructor: "Vera Pleshakova", price: "SGD 5", location: "Dharma Space Studio" },
   { title: "Yin & Sound Bath", date: "Coming Soon", instructor: "", price: "SGD 75", location: "Dharma Space Studio" },
   { title: "Breathwork Journey", date: "Coming Soon", instructor: "", price: "SGD 85", location: "Dharma Space Studio" },
-  { title: "Meditation Intensive", date: "Coming Soon", instructor: "", price: "SGD 150", location: "Dharma Space Studio" },
+  { title: "Yoga Alignments Workshop", date: "September 24, 2026", instructor: "Vera Pleshakova", price: "SGD 5", location: "Dharma Space Studio" },
 ];
 
 const EVENTS = [
@@ -1444,11 +1444,22 @@ function ReserveModal({ info, onClose }: { info: ReserveInfo; onClose: () => voi
   const [submitting, setSubmitting] = useState(false);
   const [payReference, setPayReference] = useState("");
   const [payAmount, setPayAmount] = useState("");
+  const [alreadyBooked, setAlreadyBooked] = useState(false);
   const code = info.code ?? info.title.replace(/\s+/g, "").slice(0, 8);
 
   useEffect(() => {
     if (member?.phone) setPhone(memberPhoneDigits(member.phone));
   }, [member]);
+
+  useEffect(() => {
+    if (!token || step !== "confirm" || !info.programId) {
+      setAlreadyBooked(false);
+      return;
+    }
+    fetchMemberBookings(token)
+      .then(({ bookings }) => setAlreadyBooked(memberHasActiveBooking(bookings, { siteProgramId: info.programId, offeringTitle: info.title })))
+      .catch(() => setAlreadyBooked(false));
+  }, [token, step, info.programId]);
 
   const handleWaitlist = async () => {
     if (!member) return;
@@ -1605,9 +1616,18 @@ function ReserveModal({ info, onClose }: { info: ReserveInfo; onClose: () => voi
                   <textarea rows={3} placeholder="Any questions or special requirements..." value={notes} onChange={e => setNotes(e.target.value)} className="w-full bg-[#EDE5D8] px-4 py-3 text-[14px] text-[#2A2825] placeholder-[#7A7468]/60 focus:outline-none focus:ring-1 focus:ring-[#C4785A] resize-none" style={{ fontFamily: "var(--font-body)" }} />
                 </div>
                 {submitError && <p className="text-center text-[12px] text-red-500" style={{ fontFamily: "var(--font-body)" }}>{submitError}</p>}
+                {alreadyBooked ? (
+                  <div className="flex items-center gap-3 bg-[#F2EBE0] p-4">
+                    <Check size={16} className="text-[#7A9A7A] flex-shrink-0" />
+                    <p className="text-[#2A2825] text-[13px]" style={{ fontFamily: "var(--font-body)" }}>
+                      You already have a booking for this session. Open <strong>My account → My bookings</strong> to view it.
+                    </p>
+                  </div>
+                ) : (
                 <button type="button" onClick={handleBook} disabled={submitting} className="w-full py-4 bg-[#C4785A] text-white text-[12px] tracking-[0.15em] uppercase hover:bg-[#B86848] transition-colors duration-300 flex items-center justify-center gap-2 disabled:opacity-60" style={{ fontFamily: "var(--font-body)" }}>
                   {submitting ? "Please wait…" : usePayNow ? "Continue to PayNow" : "Book & pay securely"} <ChevronRight size={14} />
                 </button>
+                )}
               </div>
             </div>
           </>
@@ -1720,11 +1740,22 @@ function BookingModal({ info, onClose }: { info: BookingInfo; onClose: () => voi
   const [waitlistSent, setWaitlistSent] = useState(false);
   const [submitError, setSubmitError] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const [alreadyBooked, setAlreadyBooked] = useState(false);
   const code = info.code ?? info.type.replace(/\s+/g, "").slice(0, 8);
 
   useEffect(() => {
     if (member?.phone) setPhone(memberPhoneDigits(member.phone));
   }, [member]);
+
+  useEffect(() => {
+    if (!token || step !== "confirm" || !info.classId) {
+      setAlreadyBooked(false);
+      return;
+    }
+    fetchMemberBookings(token)
+      .then(({ bookings }) => setAlreadyBooked(memberHasActiveBooking(bookings, { siteClassId: info.classId, offeringTitle: info.type })))
+      .catch(() => setAlreadyBooked(false));
+  }, [token, step, info.classId]);
 
   const handleWaitlist = async () => {
     if (!member) return;
@@ -1861,9 +1892,18 @@ function BookingModal({ info, onClose }: { info: BookingInfo; onClose: () => voi
                   <textarea rows={3} placeholder="Any injuries, questions, or special requirements..." value={notes} onChange={e => setNotes(e.target.value)} className="w-full bg-[#EDE5D8] px-4 py-3 text-[14px] text-[#2A2825] placeholder-[#7A7468]/60 focus:outline-none focus:ring-1 focus:ring-[#C4785A] resize-none" style={{ fontFamily: "var(--font-body)" }} />
                 </div>
                 {submitError && <p className="text-center text-[12px] text-red-500" style={{ fontFamily: "var(--font-body)" }}>{submitError}</p>}
+                {alreadyBooked ? (
+                  <div className="flex items-center gap-3 bg-[#F2EBE0] p-4">
+                    <Check size={16} className="text-[#7A9A7A] flex-shrink-0" />
+                    <p className="text-[#2A2825] text-[13px]" style={{ fontFamily: "var(--font-body)" }}>
+                      You already have a booking for this class. Open <strong>My account → My bookings</strong> to view it.
+                    </p>
+                  </div>
+                ) : (
                 <button type="button" onClick={handleBook} disabled={submitting} className="w-full py-4 bg-[#C4785A] text-white text-[12px] tracking-[0.15em] uppercase hover:bg-[#B86848] transition-colors duration-300 flex items-center justify-center gap-2 disabled:opacity-60" style={{ fontFamily: "var(--font-body)" }}>
                   {submitting ? "Please wait…" : "Book a Class — Pay Securely"} <ChevronRight size={14} />
                 </button>
+                )}
               </div>
             </div>
           </>

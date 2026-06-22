@@ -57,7 +57,27 @@ export function serializeBooking(booking: {
   updatedAt: Date;
 }) {
   return {
-    ...booking,
+    id: booking.id,
+    reference: booking.reference,
+    memberId: booking.memberId,
+    siteProgramId: booking.siteProgramId,
+    siteClassId: booking.siteClassId,
+    offeringType: booking.offeringType,
+    offeringTitle: booking.offeringTitle,
+    category: booking.category,
+    scheduledLabel: booking.scheduledLabel,
+    time: booking.time,
+    location: booking.location,
+    facilitator: booking.facilitator,
+    price: booking.price,
+    guests: booking.guests,
+    notes: booking.notes,
+    customerName: booking.customerName,
+    customerEmail: booking.customerEmail,
+    customerPhone: booking.customerPhone,
+    status: booking.status,
+    paymentMethod: booking.paymentMethod,
+    stripeCheckoutUrl: booking.stripeCheckoutUrl,
     paidAt: booking.paidAt?.toISOString() ?? null,
     createdAt: booking.createdAt.toISOString(),
     updatedAt: booking.updatedAt.toISOString(),
@@ -169,6 +189,31 @@ async function loadOffering(prisma: PrismaClient, input: { siteProgramId?: strin
   throw Object.assign(new Error("Choose a program or class to book."), { status: 400 });
 }
 
+const ACTIVE_BOOKING_STATUSES = ["AWAITING_PAYMENT", "PAID"] as const;
+
+export async function assertMemberHasNoActiveBooking(
+  prisma: PrismaClient,
+  memberId: string,
+  offering: { siteProgramId: string | null; siteClassId: string | null; offeringTitle: string }
+) {
+  if (!offering.siteProgramId && !offering.siteClassId) return;
+
+  const existing = await prisma.booking.findFirst({
+    where: {
+      memberId,
+      status: { in: [...ACTIVE_BOOKING_STATUSES] },
+      ...(offering.siteProgramId ? { siteProgramId: offering.siteProgramId } : { siteClassId: offering.siteClassId })
+    }
+  });
+
+  if (existing) {
+    throw Object.assign(
+      new Error(`You already have a booking for ${offering.offeringTitle}. See My account → My bookings.`),
+      { status: 409 }
+    );
+  }
+}
+
 export async function getBookableOfferings(prisma: PrismaClient) {
   const [programs, classes] = await Promise.all([
     prisma.siteProgram.findMany({ where: { published: true }, orderBy: { sortOrder: "asc" } }),
@@ -205,6 +250,8 @@ export async function createSiteBooking(
   if (offering.siteProgramId) {
     await assertProgramHasCapacity(prisma, offering.siteProgramId, guests);
   }
+
+  await assertMemberHasNoActiveBooking(prisma, member.id, offering);
 
   const paymentMethod = input.paymentMethod ?? (offering.usePayNow && !stripeConfigured() ? "PAYNOW" : "STRIPE");
   const reference = bookingReference();

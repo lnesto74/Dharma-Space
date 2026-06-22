@@ -4,6 +4,7 @@ import { useMemberAuth } from "../auth/MemberAuthContext";
 import {
   fetchBookableOfferings,
   fetchMemberBookings,
+  memberHasActiveBooking,
   type BookableOffering,
   type MemberBooking
 } from "../lib/member-api";
@@ -187,22 +188,26 @@ export function MemberAccountModal({ onClose, onBookProgram, onBookClass }: Memb
                     <div>
                       <p className="text-[10px] tracking-[0.25em] text-[#C4785A] uppercase mb-3" style={{ fontFamily: "var(--font-body)" }}>Programs & events</p>
                       <div className="space-y-3">
-                        {programs.map((program) => (
+                        {programs.map((program) => {
+                          const booked = memberHasActiveBooking(bookings, { siteProgramId: program.id, offeringTitle: program.title });
+                          return (
                           <button
                             key={program.id}
                             type="button"
-                            onClick={() => handleBookProgram(program)}
-                            className="w-full text-left border border-[#2A2825]/8 p-4 hover:border-[#C4785A]/40 transition-colors flex items-center justify-between gap-4"
+                            disabled={booked}
+                            onClick={() => !booked && handleBookProgram(program)}
+                            className={`w-full text-left border border-[#2A2825]/8 p-4 transition-colors flex items-center justify-between gap-4 ${booked ? "opacity-60 cursor-not-allowed" : "hover:border-[#C4785A]/40"}`}
                           >
                             <div>
                               <p className="text-[#2A2825]" style={{ fontFamily: "var(--font-display)" }}>{program.title}</p>
                               <p className="text-[12px] text-[#7A7468]" style={{ fontFamily: "var(--font-body)" }}>{program.dates} · {program.price}</p>
                             </div>
                             <span className="text-[11px] tracking-[0.12em] uppercase text-[#C4785A] inline-flex items-center gap-1" style={{ fontFamily: "var(--font-body)" }}>
-                              {programActionLabel(program)} <ChevronRight size={12} />
+                              {booked ? "Already booked" : <>{programActionLabel(program)} <ChevronRight size={12} /></>}
                             </span>
                           </button>
-                        ))}
+                          );
+                        })}
                       </div>
                     </div>
                   )}
@@ -210,22 +215,26 @@ export function MemberAccountModal({ onClose, onBookProgram, onBookClass }: Memb
                     <div>
                       <p className="text-[10px] tracking-[0.25em] text-[#C4785A] uppercase mb-3" style={{ fontFamily: "var(--font-body)" }}>Regular classes</p>
                       <div className="space-y-3">
-                        {classes.map((siteClass) => (
+                        {classes.map((siteClass) => {
+                          const booked = memberHasActiveBooking(bookings, { siteClassId: siteClass.id, offeringTitle: siteClass.classType || siteClass.title });
+                          return (
                           <button
                             key={siteClass.id}
                             type="button"
-                            onClick={() => handleBookClass(siteClass)}
-                            className="w-full text-left border border-[#2A2825]/8 p-4 hover:border-[#C4785A]/40 transition-colors flex items-center justify-between gap-4"
+                            disabled={booked}
+                            onClick={() => !booked && handleBookClass(siteClass)}
+                            className={`w-full text-left border border-[#2A2825]/8 p-4 transition-colors flex items-center justify-between gap-4 ${booked ? "opacity-60 cursor-not-allowed" : "hover:border-[#C4785A]/40"}`}
                           >
                             <div>
                               <p className="text-[#2A2825]" style={{ fontFamily: "var(--font-display)" }}>{siteClass.classType || siteClass.title}</p>
                               <p className="text-[12px] text-[#7A7468]" style={{ fontFamily: "var(--font-body)" }}>{siteClass.day} · {siteClass.time}</p>
                             </div>
                             <span className="text-[11px] tracking-[0.12em] uppercase text-[#C4785A] inline-flex items-center gap-1" style={{ fontFamily: "var(--font-body)" }}>
-                              Book <ChevronRight size={12} />
+                              {booked ? "Already booked" : <>Book <ChevronRight size={12} /></>}
                             </span>
                           </button>
-                        ))}
+                          );
+                        })}
                       </div>
                     </div>
                   )}

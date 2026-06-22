@@ -10,6 +10,8 @@ export type SiteMember = {
 export type MemberBooking = {
   id: string;
   reference: string;
+  siteProgramId?: string | null;
+  siteClassId?: string | null;
   offeringType: string;
   offeringTitle: string;
   category: string;
@@ -59,8 +61,13 @@ async function memberFetch<T>(path: string, token: string, init?: RequestInit): 
       ...(init?.headers || {})
     }
   });
-  const data = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error(data.message || "Request failed");
+  const data = await res.json().catch(() => ({} as Record<string, unknown>));
+  if (!res.ok) {
+    const msg = typeof data.message === "string" ? data.message : "";
+    if (msg) throw new Error(msg);
+    if (res.status === 409) throw new Error("You already have a booking for this session.");
+    throw new Error(`Request failed (${res.status})`);
+  }
   return data as T;
 }
 
@@ -104,6 +111,22 @@ export async function updateMemberProfile(token: string, input: { name?: string;
 
 export async function fetchMemberBookings(token: string) {
   return memberFetch<{ bookings: MemberBooking[] }>("/api/member/bookings", token);
+}
+
+export function memberHasActiveBooking(
+  bookings: MemberBooking[],
+  offering: { siteProgramId?: string | null; siteClassId?: string | null; offeringTitle?: string }
+) {
+  const active = new Set(["AWAITING_PAYMENT", "PAID"]);
+  return bookings.some((b) => {
+    if (!active.has(b.status)) return false;
+    if (offering.siteProgramId && b.siteProgramId === offering.siteProgramId) return true;
+    if (offering.siteClassId && b.siteClassId === offering.siteClassId) return true;
+    if (offering.offeringTitle && b.offeringTitle === offering.offeringTitle && !offering.siteProgramId && !offering.siteClassId) {
+      return true;
+    }
+    return false;
+  });
 }
 
 export async function fetchBookableOfferings() {

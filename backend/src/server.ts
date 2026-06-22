@@ -913,13 +913,21 @@ app.get("/api/admin/trainers", auth, requireRole("SUPER_ADMIN"), async (_req, re
   }
 });
 
-app.use((error: any, _req: Request, res: Response, _next: NextFunction) => {
-  if (error instanceof z.ZodError) return res.status(400).json({ message: "Validation error", issues: error.issues });
-  if (error.code === "P2002") return res.status(409).json({ message: "Record already exists" });
-  console.error(error);
-  const message = error instanceof Error ? error.message : "Server error";
-  res.status(error?.statusCode === 400 ? 400 : 500).json({ message });
-});
+function installErrorHandler() {
+  app.use((error: any, _req: Request, res: Response, _next: NextFunction) => {
+    if (error instanceof z.ZodError) return res.status(400).json({ message: "Validation error", issues: error.issues });
+    if (error.code === "P2002") return res.status(409).json({ message: "Record already exists" });
+    console.error(error);
+    const message = error instanceof Error ? error.message : "Server error";
+    const status =
+      typeof error?.status === "number"
+        ? error.status
+        : typeof error?.statusCode === "number"
+          ? error.statusCode
+          : 500;
+    res.status(status).json({ message });
+  });
+}
 
 async function startServer() {
   const schemaReady = await ensureDatabaseSchema().catch((error) => {
@@ -932,6 +940,7 @@ async function startServer() {
   prisma = new PrismaClient();
   registerSiteContentRoutes(app, prisma, auth, requireRole);
   registerSiteBookingRoutes(app, prisma, jwtSecret, auth, requireRole("SUPER_ADMIN"));
+  installErrorHandler();
   await ensureSiteAdmin().catch((error) => console.error("[startup] site admin:", error));
   await ensureSiteContent(prisma).catch((error) => console.error("[startup] site content:", error));
   await migrateProgramCategories(prisma).catch((error) => console.error("[startup] program migrate:", error));

@@ -86,7 +86,22 @@ export async function seedSiteContent(prisma: PrismaClient) {
     },
     { category: "WORKSHOP", title: "Yin & Sound Bath", description: "", dates: "Coming Soon", price: "SGD 75", location: "Dharma Space Studio", singlePerson: true, sortOrder: 11 },
     { category: "WORKSHOP", title: "Breathwork Journey", description: "", dates: "Coming Soon", price: "SGD 85", location: "Dharma Space Studio", singlePerson: true, sortOrder: 12 },
-    { category: "WORKSHOP", title: "Meditation Intensive", description: "", dates: "Coming Soon", price: "SGD 150", location: "Dharma Space Studio", singlePerson: true, sortOrder: 13 },
+    {
+      category: "WORKSHOP",
+      title: "Yoga Alignments Workshop",
+      description: "Refine your asana with clear alignment cues, hands-on adjustments, and mindful movement patterns.",
+      dates: "September 24, 2026",
+      scheduledDate: "2026-09-24",
+      time: "2:00 PM",
+      price: "SGD 5",
+      location: "Dharma Space Studio",
+      facilitator: "Vera Pleshakova",
+      comingSoon: false,
+      usePayNow: false,
+      depositAmount: "SGD 5",
+      singlePerson: true,
+      sortOrder: 13
+    },
     { category: "EVENT", title: "Cacao Ceremony", description: "A sacred circle of heart-opening cacao, breath, movement, and intention setting for the new season.", dates: "Coming Soon", location: "Dharma Space Studio", facilitator: "Sarah Chen", price: "SGD 88", sortOrder: 20 },
     { category: "EVENT", title: "Ecstatic Dance", description: "Free-form conscious dance journey — no steps, just pure movement and authentic expression.", dates: "Coming Soon", location: "Junction Studios, Singapore", facilitator: "Community DJ Collective", price: "SGD 35", sortOrder: 21 },
     { category: "EVENT", title: "Sound Healing Journey", description: "Deep vibrational healing with Tibetan and crystal bowls, gongs, and guided relaxation.", dates: "Coming Soon", location: "Dharma Space Studio", facilitator: "Yana An", price: "SGD 75", sortOrder: 22 },
@@ -159,6 +174,38 @@ async function upgradeArmBalanceTestWorkshop(prisma: PrismaClient) {
   });
 }
 
+/** Live-payment test workshop: SGD 5 via Stripe Checkout. */
+async function upgradeYogaAlignmentsTestWorkshop(prisma: PrismaClient) {
+  const workshop = await prisma.siteProgram.findFirst({
+    where: {
+      OR: [
+        { title: { contains: "Meditation Intensive" } },
+        { title: { contains: "Yoga Alignments" } }
+      ]
+    }
+  });
+  if (!workshop) return;
+
+  await prisma.siteProgram.update({
+    where: { id: workshop.id },
+    data: {
+      title: "Yoga Alignments Workshop",
+      description:
+        "Refine your asana with clear alignment cues, hands-on adjustments, and mindful movement patterns.",
+      comingSoon: false,
+      scheduledDate: "2026-09-24",
+      dates: "September 24, 2026",
+      time: "2:00 PM",
+      facilitator: "Vera Pleshakova",
+      price: "SGD 5",
+      usePayNow: false,
+      depositAmount: "SGD 5",
+      stripeLink: null,
+      location: workshop.location || "Dharma Space Studio"
+    }
+  });
+}
+
 export async function ensureSiteContent(prisma: PrismaClient) {
   await seedSiteContent(prisma);
   await syncTrainersFromLiveSite(prisma);
@@ -167,4 +214,5 @@ export async function ensureSiteContent(prisma: PrismaClient) {
   await migrateClassScheduleFields(prisma);
   await upgradeFlagshipProgram(prisma);
   await upgradeArmBalanceTestWorkshop(prisma);
+  await upgradeYogaAlignmentsTestWorkshop(prisma);
 }
