@@ -4,26 +4,12 @@ import { Building2, CalendarDays, ExternalLink, Mail, RefreshCw, Users } from "l
 import { adminApi } from "./adminApi";
 import { AdminShell } from "./SiteAdminPages";
 import type { UserType } from "../auth/useAuth";
-import { getCorporatePortalUrl } from "../lib/education";
 
-// The CWP platform UI lives on the corporate portal origin (corporate.localhost),
-// while this admin backend lives on the main origin. localStorage is not shared
-// across origins, so we hand the current session off via the URL hash; the portal
-// ingests it, stores it, and lands the Dharma Admin on the platform dashboard.
+// The admin backend and the CWP platform share the same origin (the platform is
+// served from the same domain under /hr, /app, /trainer, …), so the Dharma Admin
+// session in localStorage carries straight over — just navigate same-origin.
 function goToCwpPlatform() {
-  const token = localStorage.getItem("hsos_token");
-  const userRaw = localStorage.getItem("hsos_user");
-  const base = getCorporatePortalUrl();
-  if (!token || !userRaw) {
-    window.location.href = `${base}/hr/dashboard`;
-    return;
-  }
-  try {
-    const payload = btoa(JSON.stringify({ token, user: JSON.parse(userRaw) }));
-    window.location.href = `${base}/hr/dashboard#sso=${encodeURIComponent(payload)}`;
-  } catch {
-    window.location.href = `${base}/hr/dashboard`;
-  }
+  window.location.assign("/hr/dashboard");
 }
 
 type Auth = { token: string; user: UserType | null };

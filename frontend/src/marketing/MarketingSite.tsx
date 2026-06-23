@@ -16,7 +16,7 @@ import { useMemberAuth } from "../auth/MemberAuthContext";
 import { createMemberBooking, confirmMemberBookingReturn, updateMemberProfile, fetchMemberBookings, memberHasActiveBooking } from "../lib/member-api";
 import { submitInquiry } from "../lib/inquiries";
 import { useSiteContent, type SiteProgram } from "../lib/site-content";
-import { programToReserveInfo, programActionLabel, getCorporatePortalUrl, type ReserveInfo } from "../lib/education";
+import { programToReserveInfo, programActionLabel, type ReserveInfo } from "../lib/education";
 import { sortProgramsForDisplay, sortClassesForDisplay } from "../lib/program-schedule";
 import {
   clearPendingStripeBooking,
@@ -30,7 +30,9 @@ type Page = "about" | "corporate" | "education" | "events";
 type EventsSection = "upcoming-events" | "regular-classes";
 type EducationSection = "flagship-program" | "courses-certifications" | "workshops-intensives";
 
-const CORPORATE_PORTAL_URL = getCorporatePortalUrl();
+// The CWP portal is served same-origin under /portal (employees, HR, trainers,
+// and the Dharma Admin sign in here).
+const CORPORATE_PORTAL_URL = "/portal";
 
 const EVENTS_SUBMENU: { label: string; section: EventsSection }[] = [
   { label: "Upcoming Events", section: "upcoming-events" },
@@ -869,7 +871,7 @@ function CorporatePage({
               ))}
               <div className="flex flex-wrap gap-3 mt-8">
                 <a
-                  href={import.meta.env.PROD ? "https://corporate.dharma-space.com" : "http://corporate.localhost:7011"}
+                  href={CORPORATE_PORTAL_URL}
                   className="inline-flex items-center gap-2 px-6 py-3 border border-[#C4785A] text-[#C4785A] text-[11px] tracking-[0.15em] uppercase hover:bg-[#C4785A] hover:text-white transition-all duration-300"
                   style={{ fontFamily: "var(--font-body)" }}
                 >
