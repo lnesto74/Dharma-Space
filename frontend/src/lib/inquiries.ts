@@ -1,5 +1,6 @@
 export type InquiryType =
   | "contact"
+  | "cwp_demo"
   | "waitlist"
   | "booking_payment"
   | "class_waitlist"
@@ -9,6 +10,7 @@ export type InquiryType =
 
 export type InquirySegment =
   | "CORPORATE"
+  | "CWP"
   | "FLAGSHIP"
   | "COURSE"
   | "WORKSHOP"
@@ -40,6 +42,9 @@ export interface InquiryPayload {
     uen?: string;
     guests?: string;
     programCategory?: string;
+    companyName?: string;
+    employeeCount?: string;
+    interest?: string;
     segment?: InquirySegment;
     paymentStatus?: "WAITLIST" | "NOT_PAID" | "PAID";
   };

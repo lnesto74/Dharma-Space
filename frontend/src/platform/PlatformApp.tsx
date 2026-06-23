@@ -1,4 +1,13 @@
 import { FormEvent, ReactNode, useEffect, useMemo, useRef, useState } from "react";
+import { CwpEmployeeDashboard } from "./app/CwpEmployeeDashboard";
+import { MedalRank } from "./components/wellness/MedalRank";
+import { CwpAppLayout } from "./components/CwpAppLayout";
+import { CwpPlatformShell } from "./components/CwpPlatformShell";
+import { ProfileAvatar } from "./components/ProfileAvatar";
+import { navForRole } from "./nav-config";
+import { useSelectedCompany } from "./selected-company";
+import { getMarketingSiteUrl } from "../lib/education";
+import { platformLogout } from "./platform-session";
 import { Link, Navigate, Route, Routes, useLocation, useNavigate, useParams } from "react-router-dom";
 import { motion } from "framer-motion";
 import {
@@ -82,7 +91,7 @@ const demoAccounts = [
   ["HR Admin", "hr@demo.com"],
   ["Trainer", "trainer@demo.com"],
   ["Corporate Admin", "company@demo.com"],
-  ["Super Admin", "admin@demo.com"]
+  ["Dharma Admin", "admin@demo.com"]
 ];
 
 const categories = [
@@ -109,7 +118,7 @@ const wellnessArchetypes = [
     title: "Zen Sloth",
     status: "You signed up for inner peace… and immediately needed a nap.",
     traits: ["Occasionally appears in yoga class", "Opens wellness emails for later", "Knows breathwork exists"],
-    tone: "from-[#ead8cf] to-[#fff7db]"
+    tone: "cwp-tone-sloth"
   },
   {
     min: 21,
@@ -118,7 +127,7 @@ const wellnessArchetypes = [
     title: "Calm Panda",
     status: "Soft, friendly, and trying their best.",
     traits: ["Comes when stress becomes critical", "Has a favorite yoga teacher", "Pretends stretching solved all life problems"],
-    tone: "from-[#d6e8d0] to-[#f6f3f0]"
+    tone: "cwp-tone-panda"
   },
   {
     min: 41,
@@ -127,7 +136,7 @@ const wellnessArchetypes = [
     title: "Balanced Otter",
     status: "Your nervous system is officially loading stability.",
     traits: ["Regular class attendee", "Talks about magnesium and sleep quality", "Might recommend breathwork to coworkers"],
-    tone: "from-[#d2e4fb] to-[#d6e8d0]"
+    tone: "cwp-tone-otter"
   },
   {
     min: 61,
@@ -136,7 +145,7 @@ const wellnessArchetypes = [
     title: "Mindful Wolf",
     status: "Disciplined. Focused. Slightly intimidating in plank holds.",
     traits: ["Protects calendar time for wellness", "Understands mobility vs flexibility", "Drinks water voluntarily"],
-    tone: "from-[#1a2b3c] to-[#536350]"
+    tone: "cwp-tone-wolf"
   },
   {
     min: 76,
@@ -146,7 +155,7 @@ const wellnessArchetypes = [
     title: "Elevated Eagle",
     status: "Peak clarity. Peak posture. Peak calendar discipline.",
     traits: ["Never misses wellness week", "Has favorite meditation track", "Colleagues ask them for stress advice"],
-    tone: "from-[#ffdea5] to-[#d2e4fb]"
+    tone: "cwp-tone-eagle"
   },
   {
     min: 91,
@@ -155,7 +164,7 @@ const wellnessArchetypes = [
     title: "Corporate Dragon",
     status: "Legendary wellness creature. Possibly enlightened.",
     traits: ["Attends everything", "Breathes through deadlines", "Survives Monday meetings without emotional damage"],
-    tone: "from-[#041627] to-[#ff8b00]"
+    tone: "cwp-tone-dragon"
   }
 ];
 
@@ -221,7 +230,7 @@ function useAuth() {
     try {
       const parsed = JSON.parse(stored) as UserType;
       if (parsed.role === "SUPER_ADMIN") {
-        parsed.homePath = "/admin";
+        parsed.homePath = "/hr/dashboard";
       }
       return parsed;
     } catch {
@@ -231,7 +240,7 @@ function useAuth() {
 
   const login = (nextToken: string, nextUser: UserType) => {
     const userWithHome = nextUser.role === "SUPER_ADMIN"
-      ? { ...nextUser, homePath: "/admin" }
+      ? { ...nextUser, homePath: "/hr/dashboard" }
       : nextUser;
     localStorage.setItem("hsos_token", nextToken);
     localStorage.setItem("hsos_user", JSON.stringify(userWithHome));
@@ -246,7 +255,16 @@ function useAuth() {
     setUser(null);
   };
 
-  return { token, user, login, logout };
+  const updateUser = (patch: Partial<UserType>) => {
+    setUser((current) => {
+      if (!current) return current;
+      const next = { ...current, ...patch };
+      localStorage.setItem("hsos_user", JSON.stringify(next));
+      return next;
+    });
+  };
+
+  return { token, user, login, logout, updateUser };
 }
 
 async function api<T>(path: string, token?: string, options: RequestInit = {}): Promise<T> {
@@ -322,7 +340,7 @@ function Shell({ children, auth }: { children: ReactNode; auth: ReturnType<typeo
               <>
                 <Link className="rounded-full px-4 py-2 text-sm font-medium text-navy hover:bg-white/70" to={auth.user.homePath}>Dashboard</Link>
                 <Link className="rounded-full px-4 py-2 text-sm font-medium text-navy hover:bg-white/70" to="/courses">Marketplace</Link>
-                <button className="rounded-full bg-navy px-4 py-2 text-sm font-medium text-white" onClick={auth.logout}>
+                <button className="rounded-full bg-navy px-4 py-2 text-sm font-medium text-white" onClick={platformLogout}>
                   Logout
                 </button>
               </>
@@ -350,51 +368,12 @@ function Shell({ children, auth }: { children: ReactNode; auth: ReturnType<typeo
   );
 }
 
-function navForRole(role?: Role) {
-  const base = {
-    EMPLOYEE: [
-      ["Dashboard", "/app/dashboard", Home],
-      ["Upcoming Events", "/app/events", CalendarDays],
-      ["My Bookings", "/app/bookings", BookOpen],
-      ["My Statistics", "/app/statistics", Gauge],
-      ["Certificates", "/app/certificates", Award],
-      ["Profile", "/app/profile", User]
-    ],
-    HR_ADMIN: [
-      ["Dashboard", "/hr/dashboard", BarChart3],
-      ["Employees", "/hr/employees", Users],
-      ["Upcoming Events", "/hr/events", CalendarDays],
-      ["My Booking", "/hr/bookings", BookOpen],
-      ["Booking History", "/hr/booking-history", Shield],
-      ["Statistics", "/hr/statistics", Activity],
-      ["Profile", "/hr/profile", User]
-    ],
-    TRAINER: [
-      ["Dashboard", "/trainer/dashboard", Gauge],
-      ["My Events", "/trainer/events", CalendarDays],
-      ["Create Event", "/trainer/create-event", GraduationCap],
-      ["Attendees", "/trainer/attendees", Users],
-      ["Profile", "/trainer/profile", User]
-    ],
-    CORPORATE_ADMIN: [
-      ["Dashboard", "/company/dashboard", Building2],
-      ["Upcoming Events", "/company/events", CalendarDays],
-      ["My Booking", "/company/bookings", BookOpen],
-      ["Booking History", "/company/booking-history", Shield],
-      ["Statistics", "/company/statistics", Activity],
-      ["Profile", "/company/profile", User]
-    ],
-    SUPER_ADMIN: [
-      ["Overview", "/admin", Shield],
-      ["Inquiries", "/admin/inquiries", Mail],
-      ["Trainers", "/admin/site/trainers", GraduationCap],
-      ["Regular Class Schedule", "/admin/site/classes", CalendarDays],
-      ["Education & Events", "/admin/site/programs", BookOpen],
-      ["Users", "/admin/users", Users],
-      ["Settings", "/admin/settings", Settings]
-    ]
-  };
-  return (role ? base[role] : base.EMPLOYEE).map(([label, to, icon]) => ({ label: label as string, to: to as string, icon: icon as any }));
+function StitchPage({ children, railLabel, role = "EMPLOYEE" }: { children: ReactNode; railLabel?: string; role?: Role }) {
+  return (
+    <CwpPlatformShell role={role} userLabel={railLabel}>
+      {children}
+    </CwpPlatformShell>
+  );
 }
 
 function Protected({ auth, roles, children }: { auth: ReturnType<typeof useAuth>; roles?: Role[]; children: ReactNode }) {
@@ -406,14 +385,7 @@ function Protected({ auth, roles, children }: { auth: ReturnType<typeof useAuth>
 function AppLayout({ auth, children, title, subtitle }: { auth: ReturnType<typeof useAuth>; children: ReactNode; title: string; subtitle: string }) {
   return (
     <StitchPage railLabel={auth.user?.name || "Dharma Space"} role={auth.user?.role || "EMPLOYEE"}>
-      <section className="mx-auto max-w-[1280px]">
-        <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} className="mb-8 rounded-[2rem] bg-[#041627] p-7 text-white shadow-[0_40px_60px_-15px_rgba(4,22,39,0.18)]">
-          <p className="text-xs font-semibold uppercase tracking-[0.24em] text-white/60">Dharma Space</p>
-          <h1 className="mt-3 text-3xl font-light tracking-tight md:text-5xl">{title}</h1>
-          <p className="mt-3 max-w-2xl text-white/72">{subtitle}</p>
-        </motion.div>
-        {children}
-      </section>
+      <CwpAppLayout title={title} subtitle={subtitle}>{children}</CwpAppLayout>
     </StitchPage>
   );
 }
@@ -478,95 +450,16 @@ const attendanceHistory = [
   { event: "Leadership Wellness Talk", coach: "Jonas Reed", date: "May 12, 15:00", attended: "Harper, Priya, Rowan" }
 ];
 
+// Classes owned by the signed-in trainer (demo). "booked" = signed up, "attended" = actually showed up.
+const trainerClasses = [
+  { id: "tc-1", name: "Morning Coherence Breathwork", date: "May 20, 2026", time: "09:30", location: "Online", capacity: 30, booked: 24, attended: 21, attendees: ["Maya Employee", "Ava Morgan", "Theo Malik", "Priya Shah", "Noah Park", "Lina Ross"] },
+  { id: "tc-2", name: "Breathwork for High-Performance Teams", date: "May 23, 2026", time: "14:00", location: "Dharma Space", capacity: 24, booked: 20, attended: 18, attendees: ["Iris Stone", "Owen Shaw", "Elena Cruz", "Kai Bennett", "Maya Employee"] },
+  { id: "tc-3", name: "Evening Wind-Down Breath Lab", date: "May 26, 2026", time: "18:00", location: "Online", capacity: 28, booked: 17, attended: 14, attendees: ["Mina Hart", "Rowan Lee", "Sofia King", "Ava Morgan"] },
+  { id: "tc-4", name: "Stress Reset Micro-Session", date: "May 28, 2026", time: "12:30", location: "Meeting Room", capacity: 20, booked: 16, attended: 15, attendees: ["Eli Brooks", "Nora Lane", "Adam Wells", "Theo Malik", "Maya Employee"] }
+];
+
 function MSIcon({ name, className = "" }: { name: string; className?: string }) {
   return <span className={`material-symbols-outlined ${className}`}>{name}</span>;
-}
-
-function StitchLeftRail({ userLabel = "Executive User", role = "EMPLOYEE" }: { userLabel?: string; role?: Role }) {
-  const location = useLocation();
-  const items = navForRole(role).filter((item) => {
-    if (role === "EMPLOYEE") return true;
-    if (role === "HR_ADMIN") return ["Dashboard", "Employees", "Upcoming Events", "My Booking", "Booking History", "Statistics", "Profile"].includes(item.label);
-    return true;
-  });
-  return (
-    <aside className="hidden md:flex fixed left-0 top-0 z-40 h-screen w-64 flex-col gap-6 border-r border-white/15 bg-[#f5f3f3]/90 py-8 shadow-2xl backdrop-blur-xl">
-      <Link to="/" className="mb-8 block px-6">
-        <h1 className="text-[32px] font-light tracking-[-0.03em] text-[#041627]">Dharma</h1>
-        <p className="mt-1 text-xs font-semibold uppercase tracking-[0.24em] text-[#44474c]/60">The AI Era OS</p>
-      </Link>
-      <nav className="flex-1 space-y-2">
-        {items.map((item) => (
-          <Link key={item.to} to={item.to} className={`flex cursor-pointer items-center py-2 transition-colors ${location.pathname === item.to ? "border-l-4 border-[#1f1300] pl-4 font-medium text-[#041627]" : "pl-5 text-[#44474c]/60 hover:bg-[#e3e2e2]/30"}`}>
-            <MSIcon name={stitchIconMap[item.label] || "circle"} className="mr-3" />
-            <span className="text-[20px] font-medium leading-[1.4] tracking-[0.01em]">{item.label}</span>
-          </Link>
-        ))}
-      </nav>
-      <div className="mt-auto border-t border-white/10 px-6 pt-6">
-        <Link to="/" className="flex items-center gap-3">
-          <div className="grid h-10 w-10 place-items-center overflow-hidden rounded-full bg-[#1a2b3c] text-sm font-bold text-white">
-            <img src={LOGO_URL} alt="Dharma Space" className="h-full w-full object-contain bg-white" />
-          </div>
-          <div>
-            <p className="text-sm font-bold text-[#1b1c1c]">Dharma Space</p>
-            <p className="text-xs text-[#44474c]/60">{userLabel}</p>
-          </div>
-        </Link>
-        <Link to={role === "EMPLOYEE" ? "/app/profile" : role === "HR_ADMIN" ? "/hr/profile" : role === "TRAINER" ? "/trainer/profile" : role === "CORPORATE_ADMIN" ? "/company/profile" : "/admin/settings"} className="mt-6 flex cursor-pointer items-center rounded-2xl px-2 py-2 text-[#44474c]/60 hover:bg-[#e3e2e2]/30">
-          <MSIcon name="settings" className="mr-3" />
-          <span className="text-[20px] font-medium">Settings</span>
-        </Link>
-      </div>
-    </aside>
-  );
-}
-
-function StitchPage({ children, railLabel, role = "EMPLOYEE" }: { children: ReactNode; railLabel?: string; role?: Role }) {
-  const [mobileOpen, setMobileOpen] = useState(false);
-  const location = useLocation();
-  const items = navForRole(role).filter((item) => {
-    if (role === "EMPLOYEE") return true;
-    if (role === "HR_ADMIN") return ["Dashboard", "Employees", "Upcoming Events", "My Booking", "Booking History", "Statistics", "Profile"].includes(item.label);
-    return true;
-  });
-
-  useEffect(() => {
-    setMobileOpen(false);
-  }, [location.pathname]);
-
-  return (
-    <div className="stitch-shell min-h-screen text-[#1b1c1c]">
-      <StitchLeftRail userLabel={railLabel} role={role} />
-      <header className="sticky top-0 z-50 border-b border-white/10 bg-[#faf9f9]/85 px-5 py-4 shadow-[0_40px_60px_-15px_rgba(4,22,39,0.08)] backdrop-blur-md md:hidden">
-        <div className="flex items-center justify-between">
-          <Link to="/" className="flex items-center gap-3">
-            <div className="grid h-10 w-10 place-items-center overflow-hidden rounded-full bg-white shadow-sm">
-              <img src={LOGO_URL} alt="Dharma Space" className="h-full w-full object-contain" />
-            </div>
-            <div>
-              <p className="text-xs font-semibold uppercase tracking-[0.24em] text-[#44474c]/70">Dharma</p>
-              <p className="font-semibold text-[#041627]">Space</p>
-            </div>
-          </Link>
-          <button className="grid h-12 w-12 place-items-center rounded-full bg-white/70 shadow-sm" onClick={() => setMobileOpen((value) => !value)} aria-label="Open menu">
-            <MSIcon name={mobileOpen ? "close" : "menu"} className="text-[#041627]" />
-          </button>
-        </div>
-        {mobileOpen && (
-          <nav className="mt-4 grid gap-2 rounded-[2rem] bg-white/70 p-3 backdrop-blur-xl">
-            {items.map((item) => (
-              <Link key={item.to} to={item.to} className={`flex items-center gap-3 rounded-full px-4 py-3 text-sm font-semibold ${location.pathname === item.to ? "bg-[#041627] text-white" : "text-[#041627]"}`}>
-                <MSIcon name={stitchIconMap[item.label] || "circle"} />
-                {item.label}
-              </Link>
-            ))}
-          </nav>
-        )}
-      </header>
-      <main className="min-h-screen px-5 py-8 md:ml-64 md:px-16">{children}</main>
-    </div>
-  );
 }
 
 function MetricCard({ icon: Icon, label, value, detail }: { icon: any; label: string; value: ReactNode; detail: string }) {
@@ -587,7 +480,7 @@ function MetricCard({ icon: Icon, label, value, detail }: { icon: any; label: st
 function WinnersBoard({ clickable = false }: { clickable?: boolean }) {
   const [expanded, setExpanded] = useState(false);
   const visibleWinners = expanded ? winnersBoard : winnersBoard.slice(0, 4);
-  const medals = ["G", "S", "B"];
+  const medals = [1, 2, 3];
   return (
     <Card>
       <div className="mb-4 flex items-center justify-between gap-4">
@@ -600,8 +493,14 @@ function WinnersBoard({ clickable = false }: { clickable?: boolean }) {
         {visibleWinners.map((winner, index) => (
           <div key={winner.name} className="flex items-center justify-between rounded-4xl bg-white/70 p-4">
             <div className="flex items-center gap-3">
-              <div className={`grid h-10 w-10 place-items-center rounded-full text-sm font-bold ${index === 0 ? "bg-[#d4af37] text-white" : index === 1 ? "bg-[#c4c6cd] text-[#041627]" : index === 2 ? "bg-[#b87333] text-white" : "bg-[#041627] text-white"}`}>
-                {medals[index] || index + 1}
+              <div className="grid h-10 w-10 shrink-0 place-items-center">
+                {index < 3 ? (
+                  <MedalRank rank={medals[index]} size="sm" />
+                ) : (
+                  <span className="grid h-10 w-10 place-items-center rounded-full bg-[var(--cwp-olive)] text-sm font-bold text-white">
+                    {index + 1}
+                  </span>
+                )}
               </div>
               <div>
                 <p className="font-semibold text-navy">{winner.name}</p>
@@ -625,10 +524,10 @@ function EventList({ admin = false, joinedIds = [], onToggleJoin }: { admin?: bo
           const joined = joinedIds.includes(event.id);
           const spotsLeft = event.capacity - event.booked - (joined ? 1 : 0);
           return (
-          <div key={event.id} className={`rounded-4xl p-4 transition-colors ${joined ? "bg-[#d6e8d0]/80 ring-1 ring-[#536350]/30" : "bg-white/70"}`}>
+          <div key={event.id} className={`rounded-4xl p-4 transition-colors ${joined ? "bg-[color-mix(in_srgb,var(--cwp-mint)_50%,white)] ring-1 ring-[var(--cwp-seafoam)]/40" : "bg-white/70"}`}>
             <div className="flex flex-wrap items-center justify-between gap-4">
               <div>
-                <p className="font-semibold text-navy">{event.name} {joined && <span className="ml-2 rounded-full bg-[#041627] px-3 py-1 text-xs text-white">Booked</span>}</p>
+                <p className="font-semibold text-navy">{event.name} {joined && <span className="ml-2 rounded-full bg-[var(--cwp-olive)] px-3 py-1 text-xs text-white">Booked</span>}</p>
                 <p className="mt-1 text-sm text-stone">{event.coach} · {event.date} · {event.time}</p>
                 <p className="mt-1 text-sm text-stone">{event.location}: {event.detail}</p>
               </div>
@@ -927,23 +826,29 @@ function StatsGrid({ corporate = false }: { corporate?: boolean }) {
     ]
     : employeeStats;
   return (
-    <div className="rounded-[2rem] bg-[#ead8cf] p-5 shadow-[0_24px_70px_rgba(4,22,39,.06)]">
-      <div className="mb-5 flex items-center justify-between">
+    <section className="cwp-stats-section">
+      <div className="mb-5 flex items-center justify-between gap-4">
         <div>
-          <p className="text-xs font-semibold uppercase tracking-[0.22em] text-[#44474c]/60">{corporate ? "Company overview" : "Personal snapshot"}</p>
-          <h2 className="mt-1 text-2xl font-semibold text-[#041627]">{corporate ? "Statistics & ROI" : "My statistics"}</h2>
+          <p className="text-xs font-semibold uppercase tracking-[0.22em] text-[var(--cwp-stat-deep)]/70">
+            {corporate ? "Company overview" : "Personal snapshot"}
+          </p>
+          <h2 className="mb-0 text-2xl font-light text-[var(--cwp-stat-deep)]">
+            {corporate ? "Statistics & ROI" : "My statistics"}
+          </h2>
         </div>
-        <MSIcon name="monitoring" className="text-3xl text-[#041627]" />
+        <div className="grid h-11 w-11 place-items-center rounded-full bg-[var(--cwp-stat-cream)] text-[var(--cwp-stat-deep)]">
+          <BarChart3 size={20} strokeWidth={1.75} />
+        </div>
       </div>
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         {data.map((item, index) => (
-          <div key={item.label} className={`rounded-[1.5rem] p-4 ${index % 4 === 0 ? "bg-[#bfcfe8]" : index % 4 === 1 ? "bg-[#f5df83]" : index % 4 === 2 ? "bg-[#c8e0d8]" : "bg-[#f3e7dc]"}`}>
-            <p className="text-sm font-semibold leading-5 text-[#041627]">{item.label}</p>
-            <p className="mt-4 text-3xl font-light text-[#041627]">{item.value}</p>
+          <div key={item.label} className={`cwp-stat-metric cwp-stat-metric--${index % 12}`}>
+            <p className="text-sm font-medium leading-5 text-[var(--cwp-stat-deep)]">{item.label}</p>
+            <p className="mt-4 text-3xl font-light text-[var(--cwp-stat-deep)]">{item.value}</p>
           </div>
         ))}
       </div>
-    </div>
+    </section>
   );
 }
 
@@ -967,7 +872,7 @@ function AttendanceHistory() {
 function WellnessArchetypeCard({ attendance = 82 }: { attendance?: number }) {
   const archetype = wellnessArchetypes.find((level) => attendance >= level.min && attendance <= level.max) || wellnessArchetypes[0];
   return (
-    <div className={`overflow-hidden rounded-[2rem] bg-gradient-to-br ${archetype.tone} p-5 shadow-[0_24px_70px_rgba(4,22,39,.08)]`}>
+    <div className={`cwp-archetype-card overflow-hidden rounded-[2rem] p-5 ${archetype.tone}`}>
       <div className="grid gap-6 lg:grid-cols-[220px_1fr] lg:items-center">
         <div className="grid place-items-center rounded-[1.75rem] bg-white/70 p-4 shadow-inner">
           {"image" in archetype ? (
@@ -978,31 +883,31 @@ function WellnessArchetypeCard({ attendance = 82 }: { attendance?: number }) {
         </div>
         <div>
           <div>
-            <p className="text-xs font-semibold uppercase tracking-[0.22em] text-[#44474c]/70">Corporate Wellness Journey</p>
+            <p className="text-xs font-semibold uppercase tracking-[0.22em] text-stone">Corporate Wellness Journey</p>
             <div className="mt-3 flex flex-wrap items-end justify-between gap-4">
-              <h2 className="text-5xl font-light tracking-[-0.05em] text-[#041627]">{archetype.title}</h2>
+              <h2 className="text-5xl font-light tracking-[-0.05em] text-navy">{archetype.title}</h2>
               <div className="rounded-full bg-white/75 px-5 py-3 shadow-sm">
-                <span className="text-2xl font-semibold text-[#041627]">{attendance}%</span>
-                <span className="ml-2 text-xs font-semibold uppercase tracking-[0.16em] text-[#44474c]">attendance</span>
+                <span className="text-2xl font-semibold text-navy">{attendance}%</span>
+                <span className="ml-2 text-xs font-semibold uppercase tracking-[0.16em] text-stone">attendance</span>
               </div>
             </div>
-            <p className="mt-3 max-w-2xl text-lg leading-7 text-[#1b1c1c]/75">{archetype.status}</p>
+            <p className="mt-3 max-w-2xl text-lg leading-7 text-stone">{archetype.status}</p>
           </div>
           <div className="mt-6">
-            <div className="mb-2 flex justify-between text-xs font-semibold uppercase tracking-[0.18em] text-[#44474c]/70">
+            <div className="mb-2 flex justify-between text-xs font-semibold uppercase tracking-[0.18em] text-stone">
               <span>0%</span>
               <span>Journey progress</span>
               <span>100%</span>
             </div>
             <div className="h-4 overflow-hidden rounded-full bg-white/55">
-              <div className="h-full rounded-full bg-[#041627]" style={{ width: `${attendance}%` }} />
+              <div className="h-full rounded-full bg-[var(--cwp-olive)]" style={{ width: `${attendance}%` }} />
             </div>
           </div>
           <div className="mt-5 rounded-[1.5rem] bg-white/55 p-5">
-            <p className="mb-3 text-sm font-semibold uppercase tracking-[0.18em] text-[#44474c]/70">Traits</p>
+            <p className="mb-3 text-sm font-semibold uppercase tracking-[0.18em] text-stone">Traits</p>
             <div className="flex flex-wrap gap-2">
               {archetype.traits.map((trait) => (
-                <p key={trait} className="rounded-full bg-white/70 px-4 py-2 text-sm font-medium text-[#041627]">{trait}</p>
+                <p key={trait} className="rounded-full bg-white/70 px-4 py-2 text-sm font-medium text-navy">{trait}</p>
               ))}
             </div>
           </div>
@@ -1388,109 +1293,15 @@ function CourseDetail({ auth }: { auth: ReturnType<typeof useAuth> }) {
 }
 
 function EmployeeDashboard({ auth }: { auth: ReturnType<typeof useAuth> }) {
-  const { data, loading, error } = useApi<any>("/api/employee/dashboard", auth.token);
-  const [joinedEventIds, setJoinedEventIds] = useState<string[]>([]);
-  const [eventMessage, setEventMessage] = useState("");
-  if (loading) return <AppLayout auth={auth} title="Employee Dashboard" subtitle="Your calm operating rhythm for learning, recovery, and human skills progress."><Loading /></AppLayout>;
-  if (error) return <AppLayout auth={auth} title="Employee Dashboard" subtitle="Your calm operating rhythm."><ErrorState message={error} /></AppLayout>;
-  const kpis = data.kpis;
-  const joinedBookings = demoEvents
-    .filter((event) => joinedEventIds.includes(event.id))
-    .map((event) => ({
-      id: `joined-${event.id}`,
-      name: event.name,
-      date: event.date,
-      time: event.time,
-      coach: event.coach,
-      location: event.location === "Online" ? "Zoom" : event.location,
-      detail: event.detail
-    }));
-  const toggleJoin = (event: typeof demoEvents[number]) => {
-    const joined = joinedEventIds.includes(event.id);
-    setJoinedEventIds((ids) => joined ? ids.filter((id) => id !== event.id) : [event.id, ...ids]);
-    setEventMessage(joined ? `Booking cancelled for ${event.name}. Your spot has been released.` : `You joined ${event.name}. It was added to My Bookings.`);
-    window.setTimeout(() => setEventMessage(""), 3500);
-  };
   return (
-    <StitchPage railLabel={auth.user?.name || "Executive User"}>
-      <div className="mx-auto max-w-[1280px] rounded-[2.5rem] bg-[#ead8cf]/55 p-5 md:p-8">
-        <header className="mb-10 flex items-center justify-between">
-          <Link to="/" className="flex items-center gap-4">
-            <div className="grid h-10 w-10 place-items-center overflow-hidden rounded-full bg-[#d2e4fb] ring-2 ring-white">
-              <img src={LOGO_URL} alt="Dharma Space" className="h-full w-full object-contain bg-white" />
-            </div>
-            <span className="text-[28px] font-light tracking-[-0.03em] text-[#041627]">Dharma Space</span>
-          </Link>
-          <MSIcon name="analytics" className="text-[#041627]" />
-        </header>
-        <section className="mb-8 rounded-[2rem] bg-[#ead8cf] p-8">
-          <h1 className="mb-2 max-w-2xl text-[44px] font-light leading-[1.05] tracking-[-0.04em] text-[#041627]">Hello, {auth.user?.name.split(" ")[0] || "Maya"}. How do you feel about today?</h1>
-          <p className="max-w-2xl text-base leading-7 text-[#44474c]">Track mood, book sessions, and keep your wellness momentum visible.</p>
-        </section>
-        <div className="mb-8">
-          <WellnessArchetypeCard attendance={82} />
-        </div>
-        <div className="grid grid-cols-1 gap-6 xl:grid-cols-[.55fr_1.45fr]">
-          <div className="flex items-center justify-between rounded-[2rem] bg-[#041627] p-8 text-white shadow-xl">
-              <div>
-                <p className="mb-1 text-xs font-semibold uppercase tracking-[0.22em] opacity-70">Streak</p>
-                <h4 className="text-[48px] font-light leading-none">{kpis.streakDays || 14}</h4>
-                <p className="mt-1 text-base">Days of Mastery</p>
-              </div>
-              <MSIcon name="auto_stories" className="text-5xl opacity-40" />
-          </div>
-          <div className="glass-panel flex flex-col items-center gap-8 rounded-[2rem] bg-[#f5f3f3]/40 p-8 md:flex-row">
-            <div className="relative aspect-video w-full overflow-hidden rounded-[2rem] md:w-1/3">
-              <img alt="Breathing session" className="h-full w-full object-cover" src="https://images.unsplash.com/photo-1506126613408-eca07ce68773?auto=format&fit=crop&w=1200&q=80" />
-              <div className="absolute inset-0 grid place-items-center bg-[#041627]/20">
-                <button className="grid h-12 w-12 place-items-center rounded-full bg-white text-[#041627] shadow-lg"><MSIcon name="play_arrow" /></button>
-              </div>
-            </div>
-            <div className="flex-grow">
-              <div className="mb-2 flex items-center gap-3"><MSIcon name="spa" className="text-[#536350]" /><span className="text-xs font-semibold uppercase tracking-[0.24em] text-[#536350]">Today's Routine</span></div>
-              <h3 className="mb-2 text-[32px] font-normal tracking-[-0.01em] text-[#041627]">Somatic Recalibration</h3>
-              <p className="max-w-xl text-base leading-[1.6] text-[#44474c]">A 5-minute guided breathing session designed to lower cortisol and heighten executive focus.</p>
-            </div>
-            <div className="flex flex-col items-center gap-2 md:items-end">
-              <div className="flex items-center gap-2 text-[#ba1a1a]"><span className="relative flex h-2 w-2"><span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-[#ba1a1a] opacity-75" /><span className="relative inline-flex h-2 w-2 rounded-full bg-[#ba1a1a]" /></span><span className="text-xs font-semibold uppercase tracking-[0.18em]">Live in 15m</span></div>
-              <button className="rounded-full bg-[#041627] px-8 py-3 text-xs font-semibold uppercase tracking-[0.18em] text-white">Join now</button>
-            </div>
-          </div>
-        </div>
-        <section className="mt-16">
-          {eventMessage && <div className="mb-6 rounded-full bg-[#041627] px-6 py-4 text-sm font-semibold text-white shadow-xl">{eventMessage}</div>}
-          <div className="mb-6">
-            <WinnersBoard />
-          </div>
-          <div className="mb-6 grid gap-6 xl:grid-cols-2">
-            <EventList joinedIds={joinedEventIds} onToggleJoin={toggleJoin} />
-            <BookingList extraBookings={joinedBookings} onCancel={(eventId) => {
-              const event = demoEvents.find((item) => item.id === eventId);
-              if (event) toggleJoin(event);
-            }} />
-          </div>
-          <div className="mb-6 flex items-end justify-between">
-            <h2 className="text-[32px] font-normal text-[#041627]">Recommended for You</h2>
-            <Link className="border-b border-[#44474c] pb-1 text-xs font-semibold uppercase tracking-[0.18em] text-[#44474c]" to="/courses">Explore all sessions</Link>
-          </div>
-          <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
-            {data.recommended.slice(0, 2).map((course: Course) => (
-              <Link key={course.id} to={`/course/${course.id}`} className="group">
-                <div className="relative mb-4 aspect-video overflow-hidden rounded-[2rem]">
-                  <img src={course.image} alt={course.title} className="h-full w-full object-cover transition-transform duration-700 group-hover:scale-105" />
-                  <span className="absolute left-4 top-4 rounded-full bg-white/90 px-3 py-1 text-xs font-semibold uppercase tracking-[0.14em] text-[#041627]">{course.level}</span>
-                </div>
-                <h4 className="mb-1 text-[20px] font-medium text-[#041627]">{course.title}</h4>
-                <p className="text-base leading-[1.6] text-[#44474c]">{course.description}</p>
-              </Link>
-            ))}
-          </div>
-          <div className="mt-6">
-            <StatsGrid />
-          </div>
-        </section>
-      </div>
-    </StitchPage>
+    <CwpEmployeeDashboard
+      auth={{
+        token: auth.token,
+        user: auth.user
+          ? { id: auth.user.id, name: auth.user.name, role: auth.user.role }
+          : null
+      }}
+    />
   );
 }
 
@@ -1553,7 +1364,12 @@ function WellbeingCheckin({ auth }: { auth: ReturnType<typeof useAuth> }) {
 }
 
 function HRDashboard({ auth }: { auth: ReturnType<typeof useAuth> }) {
-  const { data, loading, error } = useApi<any>("/api/hr/dashboard", auth.token);
+  const isAdmin = auth.user?.role === "SUPER_ADMIN";
+  const { company } = useSelectedCompany();
+  const scopedCompany = isAdmin ? company : null;
+  const dashboardPath = scopedCompany ? `/api/hr/dashboard?companyId=${encodeURIComponent(scopedCompany.id)}` : "/api/hr/dashboard";
+  const adminSubtitle = scopedCompany ? `${scopedCompany.name} · scoped view` : "All companies · platform-wide";
+  const { data, loading, error } = useApi<any>(dashboardPath, auth.token);
   if (loading) return <AppLayout auth={auth} title="HR Analytics" subtitle="Aggregate workforce intelligence."><Loading /></AppLayout>;
   if (error) return <AppLayout auth={auth} title="HR Analytics" subtitle="Aggregate workforce intelligence."><ErrorState message={error} /></AppLayout>;
   const departments = data.departmentEngagement?.length ? data.departmentEngagement : [
@@ -1563,40 +1379,45 @@ function HRDashboard({ auth }: { auth: ReturnType<typeof useAuth> }) {
     { name: "Sales & GTM", completion: 62, active: 98 }
   ];
   const heatmapRows = [
-    ["Engineering", ["bg-[#041627]/90", "bg-[#041627]/80", "bg-[#041627]/95", "bg-[#041627]/70", "bg-[#536350]/30", "bg-[#536350]/20", "bg-[#536350]/40", "bg-[#536350]/10", "bg-[#536350]/5", "bg-[#536350]/10"]],
-    ["Sales & GTM", ["bg-[#536350]/40", "bg-[#536350]/50", "bg-[#ba1a1a]/30", "bg-[#ba1a1a]/50", "bg-[#ba1a1a]/60", "bg-[#ba1a1a]/50", "bg-[#ba1a1a]/40", "bg-[#ba1a1a]/20", "bg-[#536350]/30", "bg-[#536350]/20"]],
-    ["Operations", ["bg-[#041627]/95", "bg-[#041627]/90", "bg-[#041627]/90", "bg-[#041627]/90", "bg-[#041627]/90", "bg-[#041627]/80", "bg-[#041627]/90", "bg-[#041627]/90", "bg-[#041627]/95", "bg-[#041627]/90"]],
-    ["Product/UX", ["bg-[#041627]/80", "bg-[#041627]/90", "bg-[#536350]/40", "bg-[#536350]/30", "bg-[#536350]/20", "bg-[#041627]/80", "bg-[#041627]/90", "bg-[#536350]/50", "bg-[#536350]/20", "bg-[#041627]/70"]]
+    ["Engineering", ["cwp-heat-olive-90", "cwp-heat-olive-80", "cwp-heat-olive-95", "cwp-heat-olive-70", "cwp-heat-seafoam-30", "cwp-heat-seafoam-20", "cwp-heat-seafoam-40", "cwp-heat-seafoam-10", "cwp-heat-seafoam-5", "cwp-heat-seafoam-10"]],
+    ["Sales & GTM", ["cwp-heat-seafoam-40", "cwp-heat-seafoam-50", "cwp-heat-risk-30", "cwp-heat-risk-50", "cwp-heat-risk-60", "cwp-heat-risk-50", "cwp-heat-risk-40", "cwp-heat-risk-20", "cwp-heat-seafoam-30", "cwp-heat-seafoam-20"]],
+    ["Operations", ["cwp-heat-olive-95", "cwp-heat-olive-90", "cwp-heat-olive-90", "cwp-heat-olive-90", "cwp-heat-olive-90", "cwp-heat-olive-80", "cwp-heat-olive-90", "cwp-heat-olive-90", "cwp-heat-olive-95", "cwp-heat-olive-90"]],
+    ["Product/UX", ["cwp-heat-olive-80", "cwp-heat-olive-90", "cwp-heat-seafoam-40", "cwp-heat-seafoam-30", "cwp-heat-seafoam-20", "cwp-heat-olive-80", "cwp-heat-olive-90", "cwp-heat-seafoam-50", "cwp-heat-seafoam-20", "cwp-heat-olive-70"]]
   ];
   return (
-    <StitchPage railLabel="Executive HR" role="HR_ADMIN">
-      <header className="mx-auto mb-12 flex w-full max-w-[1280px] items-center justify-between">
-        <div>
-          <h2 className="text-[28px] font-normal tracking-[-0.01em] text-[#041627] md:text-[32px]">Organization Resilience & Flow</h2>
-          <div className="mt-1 flex items-center gap-2 text-[#44474c]/70">
-            <MSIcon name="insights" className="text-sm" />
-            <span className="text-xs font-semibold uppercase tracking-[0.18em]">Mind-gamification analytics · live demo</span>
+    <AppLayout auth={auth} title="Organization Resilience & Flow" subtitle={isAdmin ? adminSubtitle : "Mind-gamification analytics · live demo"}>
+      <div className="space-y-8">
+        {isAdmin && (
+          <div className="flex items-center gap-3 rounded-2xl border border-[var(--cwp-border)] bg-[var(--cwp-surface)] px-4 py-3 text-sm">
+            <Building2 size={16} className="text-[var(--cwp-olive)]" />
+            <span className="text-[var(--cwp-text-muted)]">
+              {scopedCompany ? (
+                <>Showing data for <span className="font-semibold text-[var(--cwp-charcoal)]">{scopedCompany.name}</span>. Switch companies from the left menu.</>
+              ) : (
+                <>Aggregated across <span className="font-semibold text-[var(--cwp-charcoal)]">all companies</span>. Pick one in the left menu to scope this view.</>
+              )}
+            </span>
           </div>
+        )}
+        <div className="flex justify-end">
+          <button type="button" className="cwp-btn-secondary hidden items-center gap-2 md:flex">
+            <MSIcon name="file_download" /> Export Executive Summary
+          </button>
         </div>
-        <button className="hidden items-center gap-2 rounded-full border border-[#c4c6cd]/30 bg-[#faf9f9] px-6 py-3 text-sm font-bold text-[#041627] shadow-sm transition-all hover:bg-[#efeded] md:flex">
-          <MSIcon name="file_download" /> Export Executive Summary
-        </button>
-      </header>
-      <div className="mx-auto max-w-[1280px] space-y-8">
         <div className="grid grid-cols-1 gap-6 md:grid-cols-4">
           {[
             ["bolt", "Organizational Energy", "91.4", "Optimal"],
             ["groups", "Mindful Participation", `${data.kpis.wellbeingAdoption || 78}%`, "Target: 85%"],
             ["verified", "Flow State Mastery", data.kpis.activeLearners || 1412, "Active practitioners"],
             ["trending_up", "Wellbeing ROI", "$1.8M", "Reduced absenteeism"]
-          ].map(([icon, label, value, detail]) => (
-            <div key={label} className="glass-panel relative overflow-hidden rounded-[2rem] p-8">
-              <MSIcon name={String(icon)} className="absolute right-4 top-4 text-6xl text-[#041627]/10" />
-              <p className="mb-4 text-xs font-semibold uppercase tracking-[0.24em] text-[#44474c]/60">{label}</p>
+          ].map(([icon, label, value, detail], index) => (
+            <div key={label} className={`cwp-stat-metric cwp-stat-metric--${index % 12} relative overflow-hidden`}>
+              <MSIcon name={String(icon)} className="absolute right-4 top-4 text-6xl text-[var(--cwp-olive)]/10" />
+              <p className="mb-4 text-xs font-semibold uppercase tracking-[0.24em] text-stone">{label}</p>
               <div className="flex items-baseline gap-2">
-                <span className="text-[48px] font-light leading-[1.1] tracking-[-0.02em] text-[#041627]">{value}</span>
+                <span className="text-[48px] font-light leading-[1.1] tracking-[-0.02em] text-navy">{value}</span>
               </div>
-              <p className="mt-3 text-sm font-semibold text-[#536350]">{detail}</p>
+              <p className="mt-3 text-sm font-semibold text-[var(--cwp-seafoam)]">{detail}</p>
             </div>
           ))}
         </div>
@@ -1604,82 +1425,82 @@ function HRDashboard({ auth }: { auth: ReturnType<typeof useAuth> }) {
           <div className="glass-panel rounded-[2rem] p-8 lg:col-span-2">
             <div className="mb-8 flex flex-wrap items-center justify-between gap-4">
               <div>
-                <h3 className="text-[20px] font-medium text-[#041627]">Biometric Burnout Risk Heatmap</h3>
-                <p className="mt-1 text-xs text-[#44474c]/60">Cross-departmental stress indicators vs. restorative practices</p>
+                <h3 className="text-[20px] font-medium text-navy">Biometric Burnout Risk Heatmap</h3>
+                <p className="mt-1 text-xs text-stone">Cross-departmental stress indicators vs. restorative practices</p>
               </div>
-              <div className="flex gap-4 text-xs font-bold uppercase tracking-tight text-[#44474c]/60">
-                <span className="flex items-center gap-1"><i className="h-3 w-3 rounded-full bg-[#041627]" />Coherent</span>
-                <span className="flex items-center gap-1"><i className="h-3 w-3 rounded-full bg-[#536350]/40" />Neutral</span>
-                <span className="flex items-center gap-1"><i className="h-3 w-3 rounded-full bg-[#ba1a1a]/40" />Risk</span>
+              <div className="flex gap-4 text-xs font-bold uppercase tracking-tight text-stone">
+                <span className="flex items-center gap-1"><i className="h-3 w-3 rounded-full bg-[var(--cwp-olive)]" />Coherent</span>
+                <span className="flex items-center gap-1"><i className="h-3 w-3 rounded-full bg-[var(--cwp-seafoam)]/40" />Neutral</span>
+                <span className="flex items-center gap-1"><i className="h-3 w-3 rounded-full bg-[var(--cwp-terracotta)]/40" />Risk</span>
               </div>
             </div>
             <div className="space-y-4">
               {heatmapRows.map(([department, cells]) => (
                 <div key={String(department)} className="grid grid-cols-12 items-center gap-4">
-                  <span className="col-span-3 text-xs font-bold uppercase tracking-tight text-[#44474c]/80 md:col-span-2">{department}</span>
+                  <span className="col-span-3 text-xs font-bold uppercase tracking-tight text-stone md:col-span-2">{department}</span>
                   <div className="col-span-9 grid h-10 grid-cols-10 gap-1 md:col-span-10">
-                    {(cells as string[]).map((cell, index) => <div key={index} className={`${cell} cursor-pointer rounded hover:ring-2 hover:ring-[#041627]`} />)}
+                    {(cells as string[]).map((cell, index) => <div key={index} className={`${cell} cursor-pointer rounded hover:ring-2 hover:ring-[var(--cwp-olive)]`} />)}
                   </div>
                 </div>
               ))}
             </div>
-            <div className="mt-8 border-t border-[#44474c]/10 pt-8">
-              <div className="flex items-start gap-4 rounded-[2rem] border border-white/5 bg-[#1a2b3c] p-6 text-[#8192a7]">
-                <MSIcon name="auto_awesome" className="animate-pulse text-[#ffdea5]" />
+            <div className="mt-8 border-t border-sand pt-8">
+              <div className="cwp-insight-panel flex items-start gap-4 rounded-[2rem] p-6">
+                <MSIcon name="auto_awesome" className="animate-pulse text-[var(--cwp-yellow)]" />
                 <div>
                   <p className="mb-1 font-bold text-white">Dharma Intelligence Recommendation</p>
-                  <p className="text-sm leading-relaxed opacity-80">{data.aiRecommendation || "Sales is entering a red-zone fatigue pattern. Schedule Micro-Flow prompts and a Friday digital detox reset."}</p>
+                  <p className="text-sm leading-relaxed opacity-90">{data.aiRecommendation || "Sales is entering a red-zone fatigue pattern. Schedule Micro-Flow prompts and a Friday digital detox reset."}</p>
                 </div>
               </div>
             </div>
           </div>
           <div className="glass-panel flex flex-col overflow-hidden rounded-[2rem] p-8">
-            <h3 className="text-[20px] font-medium text-[#041627]">Participation Momentum</h3>
-            <p className="mt-1 text-xs text-[#44474c]/60">Real-time engagement velocity</p>
+            <h3 className="text-[20px] font-medium text-navy">Participation Momentum</h3>
+            <p className="mt-1 text-xs text-stone">Real-time engagement velocity</p>
             <div className="space-y-8 py-8">
               {[["Morning Coherence", 85, "ACTIVE NOW"], ["Creative Flow Drills", 42, "42% PEAK"], ["Somatic Reset", 68, "SURGING"]].map(([label, value, status]) => (
                 <div key={String(label)}>
                   <div className="mb-2 flex justify-between text-xs font-bold uppercase tracking-widest">
-                    <span className="text-[#041627]">{label}</span><span className="text-[#536350]">{status}</span>
+                    <span className="text-navy">{label}</span><span className="text-[var(--cwp-seafoam)]">{status}</span>
                   </div>
-                  <div className="relative h-4 rounded-full bg-[#536350]/10">
-                    <div className="h-full rounded-full bg-[#536350]" style={{ width: `${value}%` }} />
-                    {Number(value) > 60 && <div className="absolute top-1/2 grid h-8 w-8 -translate-x-1/2 -translate-y-1/2 place-items-center rounded-full bg-[#536350]/20" style={{ left: `${value}%` }}><div className="momentum-dot h-3 w-3 rounded-full bg-[#536350]" /></div>}
+                  <div className="relative h-4 rounded-full bg-[var(--cwp-seafoam)]/10">
+                    <div className="h-full rounded-full bg-[var(--cwp-seafoam)]" style={{ width: `${value}%` }} />
+                    {Number(value) > 60 && <div className="absolute top-1/2 grid h-8 w-8 -translate-x-1/2 -translate-y-1/2 place-items-center rounded-full bg-[var(--cwp-seafoam)]/20" style={{ left: `${value}%` }}><div className="momentum-dot h-3 w-3 rounded-full bg-[var(--cwp-seafoam)]" /></div>}
                   </div>
                 </div>
               ))}
             </div>
-            <div className="mt-auto rounded-[2rem] border border-[#c4c6cd]/20 bg-[#efeded] p-4 text-xs font-medium text-[#44474c]">
-              Participation is <span className="font-bold text-[#041627]">12% higher</span> than the same period last week.
+            <div className="mt-auto rounded-[2rem] border border-sand bg-[var(--cwp-mint)]/30 p-4 text-xs font-medium text-stone">
+              Participation is <span className="font-bold text-navy">12% higher</span> than the same period last week.
             </div>
           </div>
         </div>
         <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
           <div className="glass-panel rounded-[2rem] p-8">
-            <h3 className="mb-2 text-[20px] font-medium text-[#041627]">Ecosystem Vitality</h3>
-            <p className="mb-8 text-xs text-[#44474c]/60">Longitudinal growth of organizational intelligence</p>
+            <h3 className="mb-2 text-[20px] font-medium text-navy">Ecosystem Vitality</h3>
+            <p className="mb-8 text-xs text-stone">Longitudinal growth of organizational intelligence</p>
             <div className="chart-grid relative h-64">
               <svg className="absolute inset-0 h-full w-full" preserveAspectRatio="none" viewBox="0 0 100 100">
-                <path d="M0 80 Q 20 60, 40 70 T 80 30 T 100 10" fill="none" stroke="#041627" strokeWidth="2.5" vectorEffect="non-scaling-stroke" />
-                <path d="M0 90 Q 20 85, 40 88 T 80 60 T 100 45" fill="none" stroke="#536350" strokeDasharray="6 3" strokeWidth="2" vectorEffect="non-scaling-stroke" />
+                <path d="M0 80 Q 20 60, 40 70 T 80 30 T 100 10" fill="none" stroke="var(--cwp-olive)" strokeWidth="2.5" vectorEffect="non-scaling-stroke" />
+                <path d="M0 90 Q 20 85, 40 88 T 80 60 T 100 45" fill="none" stroke="var(--cwp-seafoam)" strokeDasharray="6 3" strokeWidth="2" vectorEffect="non-scaling-stroke" />
               </svg>
             </div>
           </div>
           <div className="glass-panel rounded-[2rem] p-8">
             <div className="mb-8 flex items-center justify-between">
-              <h3 className="text-[20px] font-medium text-[#041627]">Department Mindset Leaderboard</h3>
-              <MSIcon name="emoji_events" className="text-[#536350]" />
+              <h3 className="text-[20px] font-medium text-navy">Department Mindset Leaderboard</h3>
+              <MSIcon name="emoji_events" className="text-[var(--cwp-seafoam)]" />
             </div>
             <div className="overflow-x-auto">
               <table className="w-full text-left">
-                <thead><tr className="border-b border-[#e3e2e2] text-[10px] font-bold uppercase tracking-widest text-[#44474c]/40"><th className="pb-4">Department</th><th className="pb-4">Flow Adoption</th><th className="pb-4">Vitality</th><th className="pb-4 text-right">Tier</th></tr></thead>
-                <tbody className="divide-y divide-[#e3e2e2]/50">
+                <thead><tr className="border-b border-sand text-[10px] font-bold uppercase tracking-widest text-stone"><th className="pb-4">Department</th><th className="pb-4">Flow Adoption</th><th className="pb-4">Vitality</th><th className="pb-4 text-right">Tier</th></tr></thead>
+                <tbody className="divide-y divide-sand/50">
                   {departments.slice(0, 4).map((department: any, index: number) => (
-                    <tr key={department.name} className="hover:bg-[#041627]/5">
-                      <td className="py-4 text-sm font-semibold text-[#041627]">{department.name}</td>
-                      <td className="py-4 text-sm">{department.completion}%</td>
-                      <td className="py-4 text-sm">{(8.9 - index * 0.7).toFixed(1)}</td>
-                      <td className="py-4 text-right text-xs font-bold"><span className="rounded-full border border-[#536350]/20 bg-[#536350]/10 px-3 py-1 text-[#536350]">{index < 2 ? "MASTERY" : index === 2 ? "STEADY" : "ATTENTION"}</span></td>
+                    <tr key={department.name} className="hover:bg-[var(--cwp-olive)]/5">
+                      <td className="py-4 text-sm font-semibold text-navy">{department.name}</td>
+                      <td className="py-4 text-sm text-stone">{department.completion}%</td>
+                      <td className="py-4 text-sm text-stone">{(8.9 - index * 0.7).toFixed(1)}</td>
+                      <td className="py-4 text-right text-xs font-bold"><span className="rounded-full border border-[var(--cwp-seafoam)]/20 bg-[var(--cwp-seafoam)]/10 px-3 py-1 text-[var(--cwp-olive)]">{index < 2 ? "MASTERY" : index === 2 ? "STEADY" : "ATTENTION"}</span></td>
                     </tr>
                   ))}
                 </tbody>
@@ -1688,7 +1509,7 @@ function HRDashboard({ auth }: { auth: ReturnType<typeof useAuth> }) {
           </div>
         </div>
       </div>
-    </StitchPage>
+    </AppLayout>
   );
 }
 
@@ -1744,35 +1565,38 @@ function HRWorkspacePage({ auth, section }: { auth: ReturnType<typeof useAuth>; 
       { Invoice: "INV-2026-001", Plan: "Enterprise", Amount: "$24,000", Status: "Paid" },
       { Invoice: "INV-2026-002", Plan: "Enterprise", Amount: "$24,000", Status: "Open" },
       { Invoice: "Seats", Plan: "500 seat allocation", Amount: "31 used", Status: "Healthy" }
+    ],
+    company: [
+      { Item: "Plan", Detail: "Enterprise", Status: "Active", Renews: "Jan 2027" },
+      { Item: "Seats", Detail: "500 licensed", Status: "31 in use", Renews: "—" },
+      { Item: "Subscription", Detail: "$24,000 / yr", Status: "Auto-renew on", Renews: "Jan 2027" },
+      { Item: "Latest invoice", Detail: "INV-2026-002", Status: "Open", Renews: "Due Jul 2026" },
+      { Item: "Billing contact", Detail: "finance@asteria.group", Status: "Verified", Renews: "—" }
     ]
   };
   const tableRows = rows[section] || rows.analytics;
   const columns = Object.keys(tableRows[0] || {});
   return (
-    <StitchPage railLabel={auth.user?.name || "Executive HR"} role="HR_ADMIN">
-      <div className="mx-auto max-w-[1280px] space-y-8">
-        <header className="flex flex-wrap items-center justify-between gap-4">
-          <div>
-            <h2 className="text-[28px] font-normal tracking-[-0.01em] text-[#041627] md:text-[32px]">{title}</h2>
-            <p className="mt-1 text-xs font-semibold uppercase tracking-[0.18em] text-[#44474c]/70">Enterprise HR workspace · seeded demo data</p>
-          </div>
-          <Link to="/hr/dashboard" className="rounded-full border border-[#c4c6cd]/30 bg-[#faf9f9] px-5 py-3 text-sm font-bold text-[#041627] shadow-sm">Back to Intelligence</Link>
-        </header>
+    <AppLayout auth={auth} title={title} subtitle="Enterprise HR workspace · seeded demo data">
+      <div className="space-y-8">
+        <div className="flex justify-end">
+          <Link to="/hr/dashboard" className="cwp-btn-secondary">Back to Intelligence</Link>
+        </div>
         <div className="grid gap-6 md:grid-cols-3">
-          <div className="glass-panel rounded-[2rem] p-6"><p className="text-xs uppercase tracking-[0.22em] text-[#44474c]/60">Coverage</p><p className="mt-2 text-4xl font-light text-[#041627]">100%</p><p className="mt-2 text-sm text-[#536350]">Seed data connected</p></div>
-          <div className="glass-panel rounded-[2rem] p-6"><p className="text-xs uppercase tracking-[0.22em] text-[#44474c]/60">Privacy</p><p className="mt-2 text-4xl font-light text-[#041627]">Safe</p><p className="mt-2 text-sm text-[#536350]">Aggregated where needed</p></div>
-          <div className="glass-panel rounded-[2rem] p-6"><p className="text-xs uppercase tracking-[0.22em] text-[#44474c]/60">Action</p><p className="mt-2 text-4xl font-light text-[#041627]">Ready</p><p className="mt-2 text-sm text-[#536350]">No placeholder menu</p></div>
+          <div className="cwp-stat-metric cwp-stat-metric--4"><p className="text-xs uppercase tracking-[0.22em] text-stone">Coverage</p><p className="mt-2 text-4xl font-light text-navy">100%</p><p className="mt-2 text-sm text-[var(--cwp-seafoam)]">Seed data connected</p></div>
+          <div className="cwp-stat-metric cwp-stat-metric--7"><p className="text-xs uppercase tracking-[0.22em] text-stone">Privacy</p><p className="mt-2 text-4xl font-light text-navy">Safe</p><p className="mt-2 text-sm text-[var(--cwp-seafoam)]">Aggregated where needed</p></div>
+          <div className="cwp-stat-metric cwp-stat-metric--10"><p className="text-xs uppercase tracking-[0.22em] text-stone">Action</p><p className="mt-2 text-4xl font-light text-navy">Ready</p><p className="mt-2 text-sm text-[var(--cwp-seafoam)]">No placeholder menu</p></div>
         </div>
         <div className="glass-panel overflow-hidden rounded-[2rem] p-6">
           <div className="overflow-x-auto">
             <table className="w-full min-w-[680px] text-left text-sm">
-              <thead className="border-b border-[#e3e2e2] text-[10px] uppercase tracking-[0.18em] text-[#44474c]/50">
+              <thead className="border-b border-sand text-[10px] uppercase tracking-[0.18em] text-stone">
                 <tr>{columns.map((column) => <th key={column} className="pb-4">{column}</th>)}</tr>
               </thead>
-              <tbody className="divide-y divide-[#e3e2e2]/50">
+              <tbody className="divide-y divide-sand/50">
                 {tableRows.map((row, index) => (
-                  <tr key={index} className="hover:bg-[#041627]/5">
-                    {columns.map((column) => <td key={column} className="py-4 text-[#041627]">{row[column]}</td>)}
+                  <tr key={index} className="hover:bg-[var(--cwp-olive)]/5">
+                    {columns.map((column) => <td key={column} className="py-4 text-navy">{row[column]}</td>)}
                   </tr>
                 ))}
               </tbody>
@@ -1780,7 +1604,7 @@ function HRWorkspacePage({ auth, section }: { auth: ReturnType<typeof useAuth>; 
           </div>
         </div>
       </div>
-    </StitchPage>
+    </AppLayout>
   );
 }
 
@@ -1793,9 +1617,9 @@ function Chart({ data, type, dataKey }: { data: any[]; type: "bar" | "area"; dat
     <div className="h-80">
       <ResponsiveContainer width="100%" height="100%">
         {type === "bar" ? (
-          <BarChart data={data}><CartesianGrid strokeDasharray="3 3" stroke="#e8e2d9" /><XAxis dataKey="name" /><YAxis /><Tooltip /><Bar dataKey={dataKey} fill="#1a2b3c" radius={[14, 14, 0, 0]} /></BarChart>
+          <BarChart data={data}><CartesianGrid strokeDasharray="3 3" stroke="var(--cwp-border)" /><XAxis dataKey="name" /><YAxis /><Tooltip /><Bar dataKey={dataKey} fill="var(--cwp-olive)" radius={[14, 14, 0, 0]} /></BarChart>
         ) : (
-          <AreaChart data={data}><CartesianGrid strokeDasharray="3 3" stroke="#e8e2d9" /><XAxis dataKey="week" /><YAxis /><Tooltip /><Area dataKey={dataKey} stroke="#98a994" fill="#98a99455" /></AreaChart>
+          <AreaChart data={data}><CartesianGrid strokeDasharray="3 3" stroke="var(--cwp-border)" /><XAxis dataKey="week" /><YAxis /><Tooltip /><Area dataKey={dataKey} stroke="var(--cwp-seafoam)" fill="color-mix(in srgb, var(--cwp-seafoam) 35%, transparent)" /></AreaChart>
         )}
       </ResponsiveContainer>
     </div>
@@ -1806,7 +1630,7 @@ function RiskChart({ data }: { data: any[] }) {
   return (
     <div className="h-80">
       <ResponsiveContainer width="100%" height="100%">
-        <PieChart><Pie data={data} dataKey="value" nameKey="label" innerRadius={70} outerRadius={115}>{data.map((_entry, index) => <Cell key={index} fill={["#98a994", "#c5a059", "#1a2b3c"][index]} />)}</Pie><Tooltip /></PieChart>
+        <PieChart><Pie data={data} dataKey="value" nameKey="label" innerRadius={70} outerRadius={115}>{data.map((_entry, index) => <Cell key={index} fill={["var(--cwp-seafoam)", "var(--cwp-yellow)", "var(--cwp-olive)"][index]} />)}</Pie><Tooltip /></PieChart>
       </ResponsiveContainer>
     </div>
   );
@@ -2197,7 +2021,14 @@ function EmployeeProfilePage({ auth }: { auth: ReturnType<typeof useAuth> }) {
       <div className="grid gap-5 lg:grid-cols-[.8fr_1.2fr]">
         <Card>
           <div className="grid place-items-center text-center">
-            <div className="grid h-24 w-24 place-items-center rounded-full navy-gradient text-3xl font-semibold text-white">{auth.user?.avatar || auth.user?.name.slice(0, 2)}</div>
+            <ProfileAvatar
+              name={auth.user?.name || "User"}
+              avatar={auth.user?.avatar}
+              size="lg"
+              editable
+              token={auth.token}
+              onAvatarChange={(avatarUrl) => auth.updateUser({ avatar: avatarUrl })}
+            />
             <h2 className="mt-4 text-3xl font-light text-navy">{auth.user?.name}</h2>
             <p className="mt-1 text-stone">{auth.user?.email}</p>
             <span className="mt-4 rounded-full bg-sage/20 px-4 py-2 text-sm font-medium text-navy">Employee · Practitioner Path</span>
@@ -2259,80 +2090,169 @@ function EmployeeStatisticsPage({ auth }: { auth: ReturnType<typeof useAuth> }) 
   return <AppLayout auth={auth} title="My Statistics" subtitle="Your personal wellness activity points and attendance progress."><StatsGrid /></AppLayout>;
 }
 
-function CorporateDashboardPage({ auth }: { auth: ReturnType<typeof useAuth> }) {
-  return (
-    <AppLayout auth={auth} title="Corporate Dashboard" subtitle="Company winners, events, bookings, ROI, and attendance history.">
-      <div className="mb-6 grid gap-6 xl:grid-cols-[.9fr_1.1fr]">
-        <WellnessArchetypeCard attendance={78} />
-        <DepartmentCompetitionCard />
-      </div>
-      <div className="grid gap-6 xl:grid-cols-2">
-        <WinnersBoard clickable />
-        <EventList admin />
-        <BookingList title="My bookings" />
-        <StatsGrid corporate />
-      </div>
-      <div className="mt-6"><AttendanceHistory /></div>
-    </AppLayout>
-  );
-}
-
-function CorporateWorkspacePage({ auth, section }: { auth: ReturnType<typeof useAuth>; section: string }) {
-  const title = pathTitle(section);
-  if (section === "events") return <AppLayout auth={auth} title="Upcoming Events" subtitle="Company events and signed-up employees."><EventList admin /></AppLayout>;
-  if (section === "bookings") return <AppLayout auth={auth} title="My Booking" subtitle="Corporate bookings and locations."><BookingList /></AppLayout>;
-  if (section === "booking-history") return <AppLayout auth={auth} title="Booking History" subtitle="Attendance by event, coach, date/time and attendees."><AttendanceHistory /></AppLayout>;
-  if (section === "statistics") return <AppLayout auth={auth} title="Statistics" subtitle="Wellness improvement, ROI and engagement diagrams."><div className="grid gap-6"><DepartmentCompetitionCard /><StatsGrid corporate /></div></AppLayout>;
-  return <AppLayout auth={auth} title={title} subtitle="Corporate admin profile and settings."><StatsGrid corporate /></AppLayout>;
+function trainerAttendanceSummary() {
+  const totalBooked = trainerClasses.reduce((sum, c) => sum + c.booked, 0);
+  const totalAttended = trainerClasses.reduce((sum, c) => sum + c.attended, 0);
+  const avgRate = totalBooked ? Math.round((totalAttended / totalBooked) * 100) : 0;
+  const uniqueEmployees = new Set(trainerClasses.flatMap((c) => c.attendees)).size;
+  return { totalBooked, totalAttended, avgRate, uniqueEmployees };
 }
 
 function TrainerEventDashboard({ auth }: { auth: ReturnType<typeof useAuth> }) {
+  const { totalAttended, avgRate, uniqueEmployees } = trainerAttendanceSummary();
+  const next = trainerClasses[0];
   return (
-    <AppLayout auth={auth} title="Coach Dashboard" subtitle="Manage your upcoming events, capacity and attendee lists.">
-      <div className="grid gap-6 xl:grid-cols-[1.2fr_.8fr]">
-        <EventList admin />
-        <CreateEventCard />
+    <AppLayout auth={auth} title="Coach Dashboard" subtitle="Your classes at a glance — schedule, capacity and how your employees are attending.">
+      <div className="grid gap-5 md:grid-cols-4">
+        <MetricCard icon={CalendarDays} label="My classes" value={trainerClasses.length} detail="Scheduled" />
+        <MetricCard icon={Users} label="Employees reached" value={uniqueEmployees} detail="Unique attendees" />
+        <MetricCard icon={CheckCircle2} label="Total attendances" value={totalAttended} detail="Across all classes" />
+        <MetricCard icon={Activity} label="Avg attendance" value={`${avgRate}%`} detail="Show-up rate" />
       </div>
-      <div className="mt-6"><AttendeesCard /></div>
+      <Card className="mt-6">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <ChartTitle title="Next class" />
+          <Link to="/trainer/events" className="text-sm font-semibold text-navy hover:underline">View all classes</Link>
+        </div>
+        {next && (
+          <div className="rounded-4xl bg-white/70 p-4">
+            <p className="font-semibold text-navy">{next.name}</p>
+            <p className="mt-1 text-sm text-stone">{next.date} · {next.time} · {next.location}</p>
+            <p className="mt-1 text-sm text-stone">{next.booked}/{next.capacity} signed up</p>
+          </div>
+        )}
+      </Card>
+      <div className="mt-6"><TrainerAttendanceStats compact /></div>
     </AppLayout>
   );
 }
 
 function TrainerWorkspacePage({ auth, section }: { auth: ReturnType<typeof useAuth>; section: string }) {
-  if (section === "events") return <AppLayout auth={auth} title="My Events" subtitle="Your assigned sessions with capacity and signups."><EventList admin /></AppLayout>;
-  if (section === "create-event") return <AppLayout auth={auth} title="Create Event" subtitle="Create a new event with title, date, location and pax."><CreateEventCard /></AppLayout>;
-  if (section === "attendees") return <AppLayout auth={auth} title="Attendees" subtitle="See attendee lists by event."><AttendeesCard /></AppLayout>;
-  return <AppLayout auth={auth} title="Profile" subtitle="Coach profile and event statistics."><StatsGrid /></AppLayout>;
+  if (section === "events") return <AppLayout auth={auth} title="My Classes" subtitle="Your scheduled sessions with date, location and capacity."><TrainerClassList /></AppLayout>;
+  if (section === "create-event") return <AppLayout auth={auth} title="Create Class" subtitle="Schedule a new session with title, date, location and capacity."><CreateEventCard /></AppLayout>;
+  if (section === "attendance") return <AppLayout auth={auth} title="Attendance" subtitle="Attendance statistics for the employees in your classes."><TrainerAttendanceStats /></AppLayout>;
+  return <AppLayout auth={auth} title="Profile" subtitle="Your coach profile and teaching summary."><TrainerProfileCard auth={auth} /></AppLayout>;
 }
 
 function CreateEventCard() {
   return (
     <Card>
-      <ChartTitle title="Create an event" />
+      <ChartTitle title="Create a class" />
       <div className="grid gap-3">
-        {["Event title", "Date and time", "Location or Zoom link", "Amount of pax"].map((placeholder) => (
+        {["Class title", "Date and time", "Location or Zoom link", "Capacity (pax)"].map((placeholder) => (
           <input key={placeholder} placeholder={placeholder} className="rounded-full border border-sand bg-white/70 px-5 py-3 outline-none focus:border-navy" />
         ))}
-        <button className="rounded-full bg-navy px-5 py-3 font-semibold text-white">Create event placeholder</button>
+        <button className="rounded-full bg-navy px-5 py-3 font-semibold text-white">Create class placeholder</button>
       </div>
     </Card>
   );
 }
 
-function AttendeesCard() {
+function TrainerClassList() {
   return (
     <Card>
-      <ChartTitle title="Attendee lists" />
+      <ChartTitle title="My classes" />
       <div className="grid gap-3">
-        {demoEvents.map((event) => (
-          <div key={event.id} className="rounded-4xl bg-white/70 p-4">
-            <p className="font-semibold text-navy">{event.name}</p>
-            <p className="mt-1 text-sm text-stone">{event.booked} signed up · {event.capacity - event.booked} spots left</p>
-            <p className="mt-1 text-sm text-stone">Attendees: Maya, Ava, Theo, Priya, Noah, Lina</p>
+        {trainerClasses.map((cls) => (
+          <div key={cls.id} className="rounded-4xl bg-white/70 p-4">
+            <div className="flex flex-wrap items-center justify-between gap-4">
+              <div>
+                <p className="font-semibold text-navy">{cls.name}</p>
+                <p className="mt-1 text-sm text-stone">{cls.date} · {cls.time} · {cls.location}</p>
+              </div>
+              <div className="text-right">
+                <p className="text-sm font-semibold text-navy">{cls.booked}/{cls.capacity} signed up</p>
+                <p className="mt-1 text-xs text-stone">{cls.capacity - cls.booked} spots left</p>
+              </div>
+            </div>
           </div>
         ))}
       </div>
     </Card>
+  );
+}
+
+function TrainerAttendanceStats({ compact = false }: { compact?: boolean }) {
+  const { totalAttended, avgRate, uniqueEmployees } = trainerAttendanceSummary();
+  return (
+    <section className="grid gap-6">
+      {!compact && (
+        <div className="grid gap-5 md:grid-cols-3">
+          <MetricCard icon={Users} label="Employees reached" value={uniqueEmployees} detail="Unique attendees" />
+          <MetricCard icon={CheckCircle2} label="Total attendances" value={totalAttended} detail="Across your classes" />
+          <MetricCard icon={Activity} label="Avg attendance" value={`${avgRate}%`} detail="Show-up rate" />
+        </div>
+      )}
+      <Card>
+        <ChartTitle title="Attendance by class" />
+        <div className="grid gap-3">
+          {trainerClasses.map((cls) => {
+            const rate = cls.booked ? Math.round((cls.attended / cls.booked) * 100) : 0;
+            return (
+              <div key={cls.id} className="rounded-4xl bg-white/70 p-4">
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div>
+                    <p className="font-semibold text-navy">{cls.name}</p>
+                    <p className="mt-1 text-sm text-stone">{cls.date} · {cls.time}</p>
+                  </div>
+                  <div className="text-right">
+                    <p className="text-sm font-semibold text-navy">{cls.attended}/{cls.booked} attended</p>
+                    <p className="mt-1 text-xs text-stone">{rate}% show-up rate</p>
+                  </div>
+                </div>
+                <div className="mt-3 h-2.5 overflow-hidden rounded-full bg-sand/60">
+                  <div className="h-full rounded-full bg-[var(--cwp-olive)]" style={{ width: `${rate}%` }} />
+                </div>
+                {!compact && (
+                  <p className="mt-3 text-sm text-stone">Attendees: {cls.attendees.join(", ")}</p>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      </Card>
+    </section>
+  );
+}
+
+function TrainerProfileCard({ auth }: { auth: ReturnType<typeof useAuth> }) {
+  const { totalAttended, avgRate, uniqueEmployees } = trainerAttendanceSummary();
+  return (
+    <div className="grid gap-5 lg:grid-cols-[.8fr_1.2fr]">
+      <Card>
+        <div className="grid place-items-center text-center">
+          <ProfileAvatar
+            name={auth.user?.name || "Coach"}
+            avatar={auth.user?.avatar}
+            size="lg"
+            editable
+            token={auth.token}
+            onAvatarChange={(avatarUrl) => auth.updateUser({ avatar: avatarUrl })}
+          />
+          <h2 className="mt-4 text-3xl font-light text-navy">{auth.user?.name}</h2>
+          <p className="mt-1 text-stone">{auth.user?.email}</p>
+          <span className="mt-4 rounded-full bg-sage/20 px-4 py-2 text-sm font-medium text-navy">Trainer · Coach</span>
+        </div>
+        <div className="mt-6 grid grid-cols-2 gap-3">
+          <StatPill label="Classes" value={trainerClasses.length} />
+          <StatPill label="Avg attendance" value={`${avgRate}%`} />
+          <StatPill label="Employees reached" value={uniqueEmployees} />
+          <StatPill label="Total attendances" value={totalAttended} />
+        </div>
+      </Card>
+      <Card>
+        <ChartTitle title="Teaching summary" />
+        <p className="text-sm text-stone">Your classes and how employees are attending them. Detailed attendance per class is on the <Link to="/trainer/attendance" className="font-semibold text-navy hover:underline">Attendance</Link> page.</p>
+        <div className="mt-4 grid gap-3">
+          {trainerClasses.map((cls) => (
+            <div key={cls.id} className="flex items-center justify-between rounded-4xl bg-white/70 p-4">
+              <p className="font-medium text-navy">{cls.name}</p>
+              <p className="text-sm text-stone">{cls.attended}/{cls.booked}</p>
+            </div>
+          ))}
+        </div>
+      </Card>
+    </div>
   );
 }
 
@@ -2342,7 +2262,7 @@ function SuperAdminWorkspacePage({ auth, section }: { auth: ReturnType<typeof us
     <AppLayout auth={auth} title={title} subtitle="Platform-wide setup for corporates, departments, events, coaches, CWP plans and users.">
       <div className="grid gap-6 xl:grid-cols-2">
         <SuperAdminActions />
-        {section === "events" ? <EventList admin /> : section === "coaches" ? <AttendeesCard /> : <CorporateListCard />}
+        {section === "events" ? <EventList admin /> : <CorporateListCard />}
       </div>
     </AppLayout>
   );
@@ -2409,7 +2329,6 @@ export default function PlatformApp() {
   const employee = ["EMPLOYEE"] as Role[];
   const hr = ["HR_ADMIN", "CORPORATE_ADMIN", "SUPER_ADMIN"] as Role[];
   const trainer = ["TRAINER", "SUPER_ADMIN"] as Role[];
-  const company = ["CORPORATE_ADMIN", "SUPER_ADMIN"] as Role[];
 
   return (
     <Shell auth={auth}>
@@ -2433,9 +2352,13 @@ export default function PlatformApp() {
         <Route path="/hr/dashboard" element={<Protected auth={auth} roles={hr}><HRDashboard auth={auth} /></Protected>} />
         {["employees", "events", "bookings", "booking-history", "statistics", "profile"].map((path) => <Route key={path} path={`/hr/${path}`} element={<Protected auth={auth} roles={hr}><HRWorkspacePage auth={auth} section={path} /></Protected>} />)}
         <Route path="/trainer/dashboard" element={<Protected auth={auth} roles={trainer}><TrainerEventDashboard auth={auth} /></Protected>} />
-        {["events", "create-event", "attendees", "profile"].map((path) => <Route key={path} path={`/trainer/${path}`} element={<Protected auth={auth} roles={trainer}><TrainerWorkspacePage auth={auth} section={path} /></Protected>} />)}
-        <Route path="/company/dashboard" element={<Protected auth={auth} roles={company}><CorporateDashboardPage auth={auth} /></Protected>} />
-        {["events", "bookings", "booking-history", "statistics", "profile"].map((path) => <Route key={path} path={`/company/${path}`} element={<Protected auth={auth} roles={company}><CorporateWorkspacePage auth={auth} section={path} /></Protected>} />)}
+        {["events", "create-event", "attendance", "profile"].map((path) => <Route key={path} path={`/trainer/${path}`} element={<Protected auth={auth} roles={trainer}><TrainerWorkspacePage auth={auth} section={path} /></Protected>} />)}
+        <Route path="/trainer/attendees" element={<Navigate to="/trainer/attendance" replace />} />
+        <Route path="/hr/company" element={<Protected auth={auth} roles={hr}><HRWorkspacePage auth={auth} section="company" /></Protected>} />
+        {/* Corporate Admin is merged into the HR workspace — redirect legacy /company/* routes. */}
+        <Route path="/company/dashboard" element={<Navigate to="/hr/dashboard" replace />} />
+        <Route path="/company/bookings" element={<Navigate to="/hr/company" replace />} />
+        {["events", "booking-history", "statistics", "profile"].map((path) => <Route key={path} path={`/company/${path}`} element={<Navigate to={`/hr/${path}`} replace />} />)}
         <Route path="*" element={<Navigate to={auth.user ? (auth.user.homePath || "/app/dashboard") : "/"} replace />} />
       </Routes>
     </Shell>

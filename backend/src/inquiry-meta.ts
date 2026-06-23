@@ -3,6 +3,7 @@ import { normalizeProgramCategory } from "./education.js";
 
 export const INQUIRY_SEGMENTS = [
   "CORPORATE",
+  "CWP",
   "FLAGSHIP",
   "COURSE",
   "WORKSHOP",
@@ -31,6 +32,9 @@ export type InquiryPayload = {
   paymentStatus?: PaymentStatus;
   siteClassId?: string;
   programCategory?: string;
+  companyName?: string;
+  employeeCount?: string;
+  interest?: string;
   inquiryId?: string;
   paidAt?: string;
 };
@@ -46,6 +50,7 @@ export function programCategoryToSegment(category: string): InquirySegment {
 export function segmentLabel(segment: InquirySegment): string {
   const labels: Record<InquirySegment, string> = {
     CORPORATE: "Corporate",
+    CWP: "CWP Platform",
     FLAGSHIP: "Flagship Training",
     COURSE: "Courses",
     WORKSHOP: "Workshops",
@@ -82,6 +87,7 @@ export async function resolveInquirySegment(
 ): Promise<InquirySegment> {
   if (input.context?.segment) return input.context.segment;
   if (input.type === "contact") return "CORPORATE";
+  if (input.type === "cwp_demo") return "CWP";
 
   if (input.siteClassId) {
     const cls = await prisma.siteClass.findUnique({ where: { id: input.siteClassId } });

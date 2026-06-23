@@ -1,0 +1,433 @@
+:root {
+  /* Dharma Space CWP — 12-color wellness palette */
+  --cwp-terracotta: #dc724a;
+  --cwp-peach: #e8bb98;
+  --cwp-sand: #ecd3ad;
+  --cwp-yellow: #f9d88b;
+  --cwp-pale-sage: #d6e0c3;
+  --cwp-sage: #91b18a;
+  --cwp-olive: #6e9171;
+  --cwp-seafoam: #8fbc96;
+  --cwp-mint: #bdd6c4;
+  --cwp-slate: #87b0b5;
+  --cwp-periwinkle: #99b4eb;
+  --cwp-rose: #f6c3ca;
+
+  /* Semantic tokens */
+  --cwp-bg: color-mix(in srgb, var(--cwp-sand) 38%, white);
+  --cwp-surface: color-mix(in srgb, var(--cwp-pale-sage) 42%, white);
+  --cwp-army: var(--cwp-olive);
+  --cwp-army-light: var(--cwp-seafoam);
+  --cwp-army-muted: color-mix(in srgb, var(--cwp-mint) 55%, white);
+  --cwp-gold: var(--cwp-yellow);
+  --cwp-silver: var(--cwp-slate);
+  --cwp-bronze: var(--cwp-terracotta);
+  --cwp-charcoal: #4a5f4d;
+  --cwp-text-muted: color-mix(in srgb, var(--cwp-olive) 72%, var(--cwp-slate));
+  --cwp-border: color-mix(in srgb, var(--cwp-sage) 28%, var(--cwp-sand));
+  --cwp-success: var(--cwp-seafoam);
+  --cwp-warning: var(--cwp-yellow);
+  --cwp-error: var(--cwp-terracotta);
+  --cwp-radius: 16px;
+  --cwp-shadow: 0 2px 14px rgba(74, 95, 77, 0.1);
+  --cwp-font-display: "Cormorant Garamond", Georgia, serif;
+  --cwp-font-body: "DM Sans", system-ui, sans-serif;
+  --cwp-font-mono: "JetBrains Mono", ui-monospace, monospace;
+  --cwp-sidebar-width: 17rem;
+
+  /* Statistics & chart accents (full palette) */
+  --cwp-stat-0: var(--cwp-terracotta);
+  --cwp-stat-1: var(--cwp-peach);
+  --cwp-stat-2: var(--cwp-sand);
+  --cwp-stat-3: var(--cwp-yellow);
+  --cwp-stat-4: var(--cwp-pale-sage);
+  --cwp-stat-5: var(--cwp-sage);
+  --cwp-stat-6: var(--cwp-olive);
+  --cwp-stat-7: var(--cwp-seafoam);
+  --cwp-stat-8: var(--cwp-mint);
+  --cwp-stat-9: var(--cwp-slate);
+  --cwp-stat-10: var(--cwp-periwinkle);
+  --cwp-stat-11: var(--cwp-rose);
+
+  /* Statistics section base */
+  --cwp-stat-deep: var(--cwp-olive);
+  --cwp-stat-cream: color-mix(in srgb, var(--cwp-sand) 45%, white);
+}
+
+.cwp-page {
+  min-height: 100vh;
+  background: var(--cwp-bg);
+  color: var(--cwp-charcoal);
+  font-family: var(--cwp-font-body);
+}
+
+.cwp-card {
+  background: var(--cwp-surface);
+  border: 1px solid var(--cwp-border);
+  border-radius: var(--cwp-radius);
+  box-shadow: var(--cwp-shadow);
+  padding: 24px;
+}
+
+.cwp-hero {
+  background: transparent;
+  color: var(--cwp-charcoal);
+  box-shadow: none;
+}
+
+.cwp-hero-subtitle {
+  color: var(--cwp-text-muted);
+}
+
+.cwp-section-title {
+  font-family: var(--cwp-font-body);
+  font-size: 1.5rem;
+  font-weight: 300;
+  margin-bottom: 1rem;
+  color: var(--cwp-olive);
+}
+
+.cwp-btn-primary {
+  background: var(--cwp-terracotta);
+  color: white;
+  border: none;
+  border-radius: 999px;
+  padding: 0.55rem 1.25rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.cwp-btn-primary:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--cwp-terracotta) 82%, var(--cwp-olive));
+}
+
+.cwp-btn-primary:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.cwp-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  border-radius: 999px;
+  padding: 0.25rem 0.65rem;
+  font-size: 0.7rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.cwp-pill-online {
+  background: color-mix(in srgb, var(--cwp-mint) 65%, white);
+  color: var(--cwp-olive);
+}
+
+.cwp-pill-room {
+  background: color-mix(in srgb, var(--cwp-slate) 28%, white);
+  color: color-mix(in srgb, var(--cwp-slate) 75%, var(--cwp-charcoal));
+}
+
+.cwp-pill-dharma {
+  background: color-mix(in srgb, var(--cwp-peach) 45%, white);
+  color: var(--cwp-olive);
+}
+
+.cwp-progress {
+  height: 6px;
+  border-radius: 999px;
+  background: var(--cwp-border);
+  overflow: hidden;
+}
+
+.cwp-progress-fill {
+  height: 100%;
+  background: var(--cwp-seafoam);
+  border-radius: 999px;
+  transition: width 0.3s ease;
+}
+
+.cwp-score {
+  font-family: var(--cwp-font-mono);
+  font-weight: 500;
+}
+
+.cwp-leaderboard-row-current {
+  background: color-mix(in srgb, var(--cwp-mint) 50%, white);
+}
+
+.cwp-leaderboard-rank-1 {
+  background: linear-gradient(90deg, color-mix(in srgb, var(--cwp-yellow) 40%, white), transparent);
+}
+
+.cwp-leaderboard-rank-2 {
+  background: linear-gradient(90deg, color-mix(in srgb, var(--cwp-slate) 30%, white), transparent);
+}
+
+.cwp-leaderboard-rank-3 {
+  background: linear-gradient(90deg, color-mix(in srgb, var(--cwp-peach) 45%, white), transparent);
+}
+
+.cwp-badge-image {
+  filter: drop-shadow(0 4px 12px rgba(74, 95, 77, 0.14));
+}
+
+.cwp-badge-locked {
+  filter: grayscale(0.35);
+  opacity: 0.55;
+}
+
+@keyframes badge-pop {
+  0% {
+    transform: scale(0.85);
+    opacity: 0.5;
+  }
+  60% {
+    transform: scale(1.08);
+  }
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+.cwp-badge-new {
+  animation: badge-pop 0.5s ease;
+}
+
+.cwp-toast {
+  position: fixed;
+  bottom: 1.5rem;
+  right: 1.5rem;
+  z-index: 100;
+  background: var(--cwp-olive);
+  color: white;
+  padding: 0.75rem 1.25rem;
+  border-radius: 999px;
+  font-size: 0.875rem;
+  box-shadow: var(--cwp-shadow);
+}
+
+.cwp-sidebar {
+  position: fixed;
+  left: 0;
+  top: 0;
+  z-index: 30;
+  display: flex;
+  width: var(--cwp-sidebar-width);
+  height: 100vh;
+  flex-direction: column;
+  border-right: 1px solid var(--cwp-border);
+  background: color-mix(in srgb, var(--cwp-surface) 92%, white);
+  padding: 1.5rem 1rem;
+}
+
+.cwp-sidebar .cwp-nav-active {
+  background: color-mix(in srgb, var(--cwp-mint) 55%, white);
+  color: var(--cwp-olive);
+}
+
+.cwp-logout:hover {
+  background: color-mix(in srgb, var(--cwp-rose) 45%, white);
+}
+
+/* Remap legacy platform UI classes inside the CWP shell */
+.cwp-page .text-navy {
+  color: var(--cwp-charcoal);
+}
+
+.cwp-page .bg-navy {
+  background-color: var(--cwp-olive);
+}
+
+.cwp-page .text-stone {
+  color: var(--cwp-text-muted);
+}
+
+.cwp-page .bg-ivory {
+  background-color: var(--cwp-bg);
+}
+
+.cwp-page .border-sand {
+  border-color: var(--cwp-border);
+}
+
+.cwp-page .bg-sage\/20 {
+  background-color: color-mix(in srgb, var(--cwp-mint) 45%, white);
+}
+
+.cwp-page .glass {
+  background: color-mix(in srgb, var(--cwp-surface) 90%, white);
+  border: 1px solid var(--cwp-border);
+}
+
+.cwp-page .rounded-5xl.glass {
+  border-radius: var(--cwp-radius);
+  box-shadow: var(--cwp-shadow);
+}
+
+.cwp-stats-section {
+  border-radius: 2rem;
+  background: linear-gradient(
+    145deg,
+    color-mix(in srgb, var(--cwp-peach) 35%, var(--cwp-stat-cream)),
+    color-mix(in srgb, var(--cwp-mint) 28%, var(--cwp-stat-cream))
+  );
+  padding: 1.25rem;
+  box-shadow: 0 24px 70px rgba(110, 145, 113, 0.12);
+}
+
+.cwp-stats-section .cwp-section-title,
+.cwp-stats-section h2 {
+  color: var(--cwp-stat-deep);
+  margin-bottom: 0;
+}
+
+.cwp-stat-metric {
+  border-radius: 1.5rem;
+  padding: 1rem 1.1rem;
+  min-height: 7.5rem;
+}
+
+.cwp-stat-metric--0 { background: color-mix(in srgb, var(--cwp-stat-0) 22%, var(--cwp-stat-cream)); }
+.cwp-stat-metric--1 { background: color-mix(in srgb, var(--cwp-stat-1) 30%, var(--cwp-stat-cream)); }
+.cwp-stat-metric--2 { background: color-mix(in srgb, var(--cwp-stat-2) 38%, var(--cwp-stat-cream)); }
+.cwp-stat-metric--3 { background: color-mix(in srgb, var(--cwp-stat-3) 32%, var(--cwp-stat-cream)); }
+.cwp-stat-metric--4 { background: color-mix(in srgb, var(--cwp-stat-4) 38%, var(--cwp-stat-cream)); }
+.cwp-stat-metric--5 { background: color-mix(in srgb, var(--cwp-stat-5) 28%, var(--cwp-stat-cream)); }
+.cwp-stat-metric--6 { background: color-mix(in srgb, var(--cwp-stat-6) 22%, var(--cwp-stat-cream)); }
+.cwp-stat-metric--7 { background: color-mix(in srgb, var(--cwp-stat-7) 28%, var(--cwp-stat-cream)); }
+.cwp-stat-metric--8 { background: color-mix(in srgb, var(--cwp-stat-8) 35%, var(--cwp-stat-cream)); }
+.cwp-stat-metric--9 { background: color-mix(in srgb, var(--cwp-stat-9) 26%, var(--cwp-stat-cream)); }
+.cwp-stat-metric--10 { background: color-mix(in srgb, var(--cwp-stat-10) 24%, var(--cwp-stat-cream)); }
+.cwp-stat-metric--11 { background: color-mix(in srgb, var(--cwp-stat-11) 30%, var(--cwp-stat-cream)); }
+
+.cwp-stat-icon {
+  background: color-mix(in srgb, var(--cwp-stat-cream) 65%, white);
+  color: var(--cwp-stat-deep);
+}
+
+.cwp-stats-progress {
+  background: color-mix(in srgb, var(--cwp-olive) 8%, var(--cwp-stat-cream));
+}
+
+.cwp-stats-progress-fill--0 { background: var(--cwp-stat-0); }
+.cwp-stats-progress-fill--1 { background: var(--cwp-stat-1); }
+.cwp-stats-progress-fill--2 { background: var(--cwp-stat-2); }
+.cwp-stats-progress-fill--3 { background: var(--cwp-stat-3); }
+.cwp-stats-progress-fill--4 { background: var(--cwp-stat-4); }
+.cwp-stats-progress-fill--5 { background: var(--cwp-stat-5); }
+.cwp-stats-progress-fill--6 { background: var(--cwp-stat-6); }
+.cwp-stats-progress-fill--7 { background: var(--cwp-stat-7); }
+.cwp-stats-progress-fill--8 { background: var(--cwp-stat-8); }
+.cwp-stats-progress-fill--9 { background: var(--cwp-stat-9); }
+.cwp-stats-progress-fill--10 { background: var(--cwp-stat-10); }
+.cwp-stats-progress-fill--11 { background: var(--cwp-stat-11); }
+
+/* Shared panels & role-page theming */
+.cwp-page .glass-panel {
+  background: color-mix(in srgb, var(--cwp-surface) 92%, white);
+  border: 1px solid var(--cwp-border);
+  box-shadow: var(--cwp-shadow);
+  backdrop-filter: blur(12px);
+}
+
+.cwp-btn-secondary {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  border-radius: 999px;
+  border: 1px solid var(--cwp-border);
+  background: color-mix(in srgb, var(--cwp-surface) 88%, white);
+  padding: 0.65rem 1.25rem;
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--cwp-charcoal);
+  transition: background 0.2s;
+}
+
+.cwp-btn-secondary:hover {
+  background: color-mix(in srgb, var(--cwp-mint) 40%, white);
+}
+
+.cwp-insight-panel {
+  background: linear-gradient(135deg, var(--cwp-olive), color-mix(in srgb, var(--cwp-slate) 30%, var(--cwp-olive)));
+  color: color-mix(in srgb, var(--cwp-sand) 85%, white);
+}
+
+.cwp-archetype-card {
+  box-shadow: 0 24px 70px rgba(110, 145, 113, 0.12);
+}
+
+.cwp-tone-sloth {
+  background: linear-gradient(135deg, color-mix(in srgb, var(--cwp-peach) 55%, white), var(--cwp-sand));
+}
+
+.cwp-tone-panda {
+  background: linear-gradient(135deg, var(--cwp-mint), var(--cwp-pale-sage));
+}
+
+.cwp-tone-otter {
+  background: linear-gradient(135deg, color-mix(in srgb, var(--cwp-periwinkle) 35%, white), var(--cwp-mint));
+}
+
+.cwp-tone-wolf {
+  background: linear-gradient(135deg, color-mix(in srgb, var(--cwp-olive) 25%, white), var(--cwp-seafoam));
+}
+
+.cwp-tone-eagle {
+  background: linear-gradient(135deg, color-mix(in srgb, var(--cwp-yellow) 45%, white), color-mix(in srgb, var(--cwp-periwinkle) 30%, white));
+}
+
+.cwp-tone-dragon {
+  background: linear-gradient(135deg, color-mix(in srgb, var(--cwp-olive) 35%, white), color-mix(in srgb, var(--cwp-terracotta) 30%, white));
+}
+
+.cwp-heat-olive-95 { background: color-mix(in srgb, var(--cwp-olive) 95%, transparent); }
+.cwp-heat-olive-90 { background: color-mix(in srgb, var(--cwp-olive) 90%, transparent); }
+.cwp-heat-olive-80 { background: color-mix(in srgb, var(--cwp-olive) 80%, transparent); }
+.cwp-heat-olive-70 { background: color-mix(in srgb, var(--cwp-olive) 70%, transparent); }
+.cwp-heat-seafoam-50 { background: color-mix(in srgb, var(--cwp-seafoam) 50%, transparent); }
+.cwp-heat-seafoam-40 { background: color-mix(in srgb, var(--cwp-seafoam) 40%, transparent); }
+.cwp-heat-seafoam-30 { background: color-mix(in srgb, var(--cwp-seafoam) 30%, transparent); }
+.cwp-heat-seafoam-20 { background: color-mix(in srgb, var(--cwp-seafoam) 20%, transparent); }
+.cwp-heat-seafoam-10 { background: color-mix(in srgb, var(--cwp-seafoam) 10%, transparent); }
+.cwp-heat-seafoam-5 { background: color-mix(in srgb, var(--cwp-seafoam) 5%, transparent); }
+.cwp-heat-risk-60 { background: color-mix(in srgb, var(--cwp-terracotta) 60%, transparent); }
+.cwp-heat-risk-50 { background: color-mix(in srgb, var(--cwp-terracotta) 50%, transparent); }
+.cwp-heat-risk-40 { background: color-mix(in srgb, var(--cwp-terracotta) 40%, transparent); }
+.cwp-heat-risk-30 { background: color-mix(in srgb, var(--cwp-terracotta) 30%, transparent); }
+.cwp-heat-risk-20 { background: color-mix(in srgb, var(--cwp-terracotta) 20%, transparent); }
+
+.cwp-dept-rally {
+  background: linear-gradient(
+    160deg,
+    color-mix(in srgb, var(--cwp-periwinkle) 18%, var(--cwp-sand)),
+    color-mix(in srgb, var(--cwp-mint) 35%, white)
+  );
+  box-shadow: 0 24px 70px rgba(110, 145, 113, 0.1);
+}
+
+.cwp-dept-rally-track {
+  background: color-mix(in srgb, var(--cwp-olive) 8%, white);
+}
+
+.cwp-dept-rally-lane:nth-child(even) {
+  background: color-mix(in srgb, white 55%, transparent);
+}
+
+.cwp-page [class*="text-[#041627]"] { color: var(--cwp-charcoal) !important; }
+.cwp-page [class*="text-[#44474c]"] { color: var(--cwp-text-muted) !important; }
+.cwp-page [class*="text-[#536350]"] { color: var(--cwp-olive) !important; }
+.cwp-page [class*="bg-[#041627]"] { background-color: var(--cwp-olive) !important; }
+.cwp-page [class*="bg-[#536350]"] { background-color: var(--cwp-seafoam) !important; }
+.cwp-page [class*="bg-[#d6e8d0]"] { background-color: color-mix(in srgb, var(--cwp-mint) 55%, white) !important; }
+.cwp-page [class*="bg-[#faf9f9]"],
+.cwp-page [class*="bg-[#efeded]"] { background-color: color-mix(in srgb, var(--cwp-sand) 35%, white) !important; }
+.cwp-page [class*="border-[#c4c6cd]"],
+.cwp-page [class*="border-[#e3e2e2]"] { border-color: var(--cwp-border) !important; }
+.cwp-page [class*="ring-[#041627]"] { --tw-ring-color: var(--cwp-olive) !important; }

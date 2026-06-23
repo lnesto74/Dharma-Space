@@ -45,6 +45,14 @@ export function isCorporateHost(hostname = window.location.hostname) {
   return hostname.startsWith("corporate.") || hostname === "corporate.dharma-space.com";
 }
 
+export function getCorporatePortalUrl() {
+  return import.meta.env.PROD ? "https://corporate.dharma-space.com" : "http://corporate.localhost:7011";
+}
+
+export function getMarketingSiteUrl() {
+  return import.meta.env.PROD ? "https://dharma-space.com" : "http://localhost:7011";
+}
+
 export function isMarketingHost(hostname = window.location.hostname) {
   return !isCorporateHost(hostname);
 }

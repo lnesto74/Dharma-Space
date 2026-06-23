@@ -2,6 +2,7 @@ import { FormEvent, ReactNode, useEffect, useState } from "react";
 import { Link, NavLink } from "react-router-dom";
 import {
   BookOpen,
+  Building2,
   CalendarDays,
   ExternalLink,
   GraduationCap,
@@ -78,6 +79,9 @@ function inquiryDetailFields(item: any): InquiryField[] {
   add("PayNow UEN", p.uen);
   add("Guests", p.guests);
   add("Audience", item.audienceType ? String(item.audienceType).replace(/^./, (c: string) => c.toUpperCase()) : null);
+  add("Company", p.companyName);
+  add("Team size", p.employeeCount);
+  add("Interest", p.interest);
   add("Program ID", item.siteProgramId);
   add("Notes", p.notes);
   if (item.message && item.message !== p.notes) add("Message", item.message);
@@ -100,6 +104,7 @@ function segmentPill(label: string) {
 function typeTag(type: string) {
   const map: Record<string, "purple" | "blue" | "green" | "orange" | "gray"> = {
     CONTACT: "blue",
+    CWP_DEMO: "green",
     WAITLIST: "purple",
     CLASS_WAITLIST: "purple",
     CLASS_SCHEDULE_NOTIFY: "purple",
@@ -134,6 +139,7 @@ export function AdminShell({
 
   const nav = [
     ["Overview", "/admin", Shield],
+    ["CWP Platform", "/admin/cwp", Building2],
     ["Bookings", "/admin/bookings", Ticket],
     ["Inquiries", "/admin/inquiries", Mail],
     ["Trainers", "/admin/site/trainers", GraduationCap],
@@ -210,6 +216,7 @@ export function AdminOverviewPage({ auth }: { auth: Auth }) {
 
   const stats = [
     { label: "New inquiries", value: data?.newInquiries ?? "—", to: "/admin/inquiries" },
+    { label: "CWP Platform", value: "Manage", to: "/admin/cwp" },
     { label: "Bookings", value: "View roster", to: "/admin/bookings" },
     { label: "Trainers", value: data?.trainers ?? "—", to: "/admin/site/trainers" },
     { label: "Regular classes", value: data?.classes ?? "—", to: "/admin/site/classes" },
@@ -217,6 +224,7 @@ export function AdminOverviewPage({ auth }: { auth: Auth }) {
   ];
 
   const links = [
+    ["CWP Platform", "Companies, wellness events, schedule requests", "/admin/cwp"],
     ["Bookings", "Paid / unpaid rosters by class, workshop, or event", "/admin/bookings"],
     ["Inquiries", "Contact form, waitlists, PayNow bookings", "/admin/inquiries"],
     ["Trainers", "Specialist profiles on About page", "/admin/site/trainers"],
@@ -637,6 +645,7 @@ export function AdminInquiriesPage({ auth }: { auth: Auth }) {
   const filters = [
     ["ALL", "All"],
     ["CORPORATE", "Corporate"],
+    ["CWP", "CWP Platform"],
     ["FLAGSHIP", "Flagship Training"],
     ["COURSE", "Courses"],
     ["WORKSHOP", "Workshops"],

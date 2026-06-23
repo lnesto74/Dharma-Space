@@ -29,6 +29,14 @@ const courses = [
 ];
 
 async function main() {
+  await prisma.message.deleteMany();
+  await prisma.conversationParticipant.deleteMany();
+  await prisma.conversation.deleteMany();
+  await prisma.wellnessAttendance.deleteMany();
+  await prisma.wellnessBooking.deleteMany();
+  await prisma.wellnessEvent.deleteMany();
+  await prisma.scheduleRequest.deleteMany();
+  await prisma.wellnessEventCategory.deleteMany();
   await prisma.attendance.deleteMany();
   await prisma.session.deleteMany();
   await prisma.certificate.deleteMany();
@@ -245,6 +253,115 @@ async function main() {
     await prisma.invoice.create({ data: { companyId: company.id, amount: company.plan === "Enterprise" ? 24000 : 12000, status: "PAID", dueDate: new Date(Date.now() + 30 * 86400000) } });
     await prisma.invoice.create({ data: { companyId: company.id, amount: company.plan === "Enterprise" ? 24000 : 12000, status: "OPEN", dueDate: new Date(Date.now() + 60 * 86400000) } });
   }
+
+  const categoryDefs = [
+    { name: "Wellness Talk & Workshop", scoreValue: 30, icon: "🎤" },
+    { name: "Wellness Lecture", scoreValue: 30, icon: "📚" },
+    { name: "Ayurveda Talk", scoreValue: 30, icon: "🌿" },
+    { name: "Leadership Talk", scoreValue: 35, icon: "🎯" },
+    { name: "Yoga Class", scoreValue: 50, icon: "🧘" },
+    { name: "Breathwork", scoreValue: 45, icon: "🌬️" },
+    { name: "Meditation Class", scoreValue: 40, icon: "🕯️" },
+    { name: "Pilates", scoreValue: 50, icon: "🤸" },
+    { name: "Sound Healing Session", scoreValue: 40, icon: "🎵" },
+    { name: "Team Building Activity", scoreValue: 60, icon: "🤝" }
+  ];
+  for (const cat of categoryDefs) {
+    await prisma.wellnessEventCategory.upsert({
+      where: { name: cat.name },
+      create: cat,
+      update: cat
+    });
+  }
+
+  const cwpBadgeDefs: Array<[string, string, string]> = [
+    ["Breathwork Survivor", "Survived your first breathwork session.", "🌬️"],
+    ["Chair Yoga Warrior", "Three yoga classes and counting.", "🧘"],
+    ["Hydration Deity", "Logged wellness steps five days.", "💧"],
+    ["Silent Savasana Champion", "Five meditation classes completed.", "🕯️"],
+    ["Spreadsheet Monk", "Leadership talk plus wellness workshop.", "📊"],
+    ["Slack Notification Yogi", "Three bookings in one week.", "📱"],
+    ["Caffeine Recovery Specialist", "Attended a morning session before 9am.", "☕"],
+    ["CEO of Deep Breathing", "76%+ attendance rate.", "🫁"],
+    ["Sound Healer Initiate", "First sound healing session.", "🎵"],
+    ["Team Player", "Two team building activities.", "🤝"],
+    ["Early Bird", "Booked a session 7+ days ahead.", "🐦"],
+    ["Corporate Dragon Tamer", "Reached Corporate Dragon wellness level.", "🐉"]
+  ];
+  for (const [name, description, icon] of cwpBadgeDefs) {
+    await prisma.badge.upsert({
+      where: { name },
+      create: { name, description, category: "CWP", icon },
+      update: { description, category: "CWP", icon }
+    });
+  }
+
+  const yogaCategory = await prisma.wellnessEventCategory.findFirst({ where: { name: "Yoga Class" } });
+  const breathCategory = await prisma.wellnessEventCategory.findFirst({ where: { name: "Breathwork" } });
+  const trainer = demoUsers[2];
+  const hrUser = demoUsers[1];
+  if (yogaCategory && breathCategory && trainer && hrUser) {
+    const inThreeDays = new Date(Date.now() + 3 * 86400000);
+    inThreeDays.setHours(10, 0, 0, 0);
+    const inOneWeek = new Date(Date.now() + 7 * 86400000);
+    inOneWeek.setHours(18, 30, 0, 0);
+    await prisma.wellnessEvent.createMany({
+      data: [
+        {
+          companyId: companies[0].id,
+          categoryId: yogaCategory.id,
+          trainerId: trainer.id,
+          title: "Morning Desk Yoga Reset",
+          dateTime: inThreeDays,
+          durationMinutes: 45,
+          locationType: "online",
+          locationDetail: "https://zoom.us/j/demo-yoga",
+          maxSpots: 30,
+          createdById: hrUser.id
+        },
+        {
+          companyId: companies[0].id,
+          categoryId: breathCategory.id,
+          trainerId: trainer.id,
+          title: "Executive Breathwork Circle",
+          dateTime: inOneWeek,
+          durationMinutes: 60,
+          locationType: "dharma_space",
+          locationDetail: "Dharma Space Studio A",
+          maxSpots: 20,
+          createdById: hrUser.id
+        }
+      ]
+    });
+  }
+
+  // Demo messenger thread between Maya (employee) and Harper (HR).
+  const [mayaEmployee, harperHr] = [demoUsers[0], demoUsers[1]];
+  const demoConversation = await prisma.conversation.create({
+    data: {
+      companyId: companies[0].id,
+      participants: { create: [{ userId: mayaEmployee.id }, { userId: harperHr.id }] }
+    }
+  });
+  const baseTime = Date.now() - 1000 * 60 * 60 * 26;
+  const demoThread: Array<[string, string]> = [
+    [harperHr.id, "Hi Maya! Just checking in — how are you finding the breathwork sessions?"],
+    [mayaEmployee.id, "Hey Harper! Loving them, the morning coherence one really helps me focus."],
+    [harperHr.id, "That's wonderful to hear. We're adding a Desk Yoga Reset next week if you'd like to join."],
+    [mayaEmployee.id, "Yes please, count me in!"]
+  ];
+  for (let i = 0; i < demoThread.length; i += 1) {
+    const [senderId, body] = demoThread[i];
+    await prisma.message.create({
+      data: { conversationId: demoConversation.id, senderId, body, createdAt: new Date(baseTime + i * 1000 * 60 * 7) }
+    });
+  }
+  // Harper has read everything; Maya has one unread (the last message from Harper is read,
+  // but leave Maya's lastReadAt earlier so the badge demonstrates unread state).
+  await prisma.conversationParticipant.update({
+    where: { conversationId_userId: { conversationId: demoConversation.id, userId: harperHr.id } },
+    data: { lastReadAt: new Date(baseTime + demoThread.length * 1000 * 60 * 7) }
+  });
 
   console.log("Seeded Dharma Space demo data.");
 }

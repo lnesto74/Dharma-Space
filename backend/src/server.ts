@@ -28,9 +28,13 @@ import {
   TRAINER_MEDIA_DIR
 } from "./trainer-media-cache.js";
 import { PROGRAM_MEDIA_DIR } from "./program-media-cache.js";
-import { TEAM_BUILDING_MEDIA_DIR } from "./data-root.js";
+import { TEAM_BUILDING_MEDIA_DIR, AVATAR_MEDIA_DIR } from "./data-root.js";
 import { ensureDatabaseSchema } from "./ensure-schema.js";
 import { registerStripeWebhook, stripeStatusPayload } from "./stripe.js";
+import { registerWellnessRoutes } from "./wellness-routes.js";
+import { registerMessagingRoutes } from "./messaging-routes.js";
+import { saveUploadedAvatarFile } from "./avatar-media.js";
+import { registerAdminCwpRoutes } from "./admin-cwp-routes.js";
 
 let prisma!: PrismaClient;
 const app = express();
@@ -73,6 +77,7 @@ app.use((req, _res, next) => {
 app.use("/api/media/trainers", express.static(TRAINER_MEDIA_DIR, { maxAge: "7d" }));
 app.use("/api/media/programs", express.static(PROGRAM_MEDIA_DIR, { maxAge: "7d" }));
 app.use("/api/media/team-building", express.static(TEAM_BUILDING_MEDIA_DIR, { maxAge: "7d" }));
+app.use("/api/media/avatars", express.static(AVATAR_MEDIA_DIR, { maxAge: "7d" }));
 
 app.get("/api/media/proxy", async (req, res, next) => {
   try {
@@ -92,7 +97,7 @@ const roleHome: Record<string, string> = {
   EMPLOYEE: "/app/dashboard",
   HR_ADMIN: "/hr/dashboard",
   TRAINER: "/trainer/dashboard",
-  CORPORATE_ADMIN: "/company/dashboard",
+  CORPORATE_ADMIN: "/hr/dashboard",
   SUPER_ADMIN: "/admin"
 };
 
@@ -182,7 +187,7 @@ app.post("/api/inquiries", async (req, res, next) => {
 
 app.get("/api/inquiries", auth, requireRole("SUPER_ADMIN"), async (req, res, next) => {
   try {
-    const { type, status, source, limit = "100" } = req.query;
+    const { type, status, source, segment, limit = "100" } = req.query;
     let submissions = await prisma.formSubmission.findMany({
       where: {
         ...(type ? { type: String(type).toUpperCase() } : {}),
@@ -192,17 +197,29 @@ app.get("/api/inquiries", auth, requireRole("SUPER_ADMIN"), async (req, res, nex
       take: Math.min(Number(limit) || 100, 500)
     });
 
-    const sourceFilter = source === "corporate" || source === "education" ? String(source) : null;
-    if (sourceFilter) {
-      submissions = submissions.filter(
-        (s) => sourceFromInbox(s.inbox, s.type) === sourceFilter
-      );
+    const sourceFilter = source === "corporate" || source === "education" || source === "cwp" ? String(source) : null;
+    const segmentFilter = typeof segment === "string" && segment !== "ALL" ? segment.toUpperCase() : null;
+
+    let enriched = await Promise.all(submissions.map((s) => serializeSubmission(prisma, s)));
+
+    if (sourceFilter === "cwp") {
+      enriched = enriched.filter((s) => s.segment === "CWP" || s.type === "CWP_DEMO");
+    } else if (sourceFilter) {
+      enriched = enriched.filter((s) => s.source === sourceFilter);
     }
 
-    const enriched = await Promise.all(submissions.map((s) => serializeSubmission(prisma, s)));
+    if (segmentFilter) {
+      enriched = enriched.filter((s) => s.segment === segmentFilter);
+    }
+
     res.json({
       submissions: enriched,
-      mailConfigured: mailConfigured()
+      mailConfigured: mailConfigured(),
+      counts: {
+        total: enriched.length,
+        cwp: enriched.filter((s) => s.segment === "CWP").length,
+        new: enriched.filter((s) => s.status === "NEW").length
+      }
     });
   } catch (error) {
     next(error);
@@ -406,6 +423,26 @@ app.post("/api/auth/google", async (req, res, next) => {
 });
 
 app.get("/api/auth/me", auth, (req: AuthedRequest, res) => res.json({ user: sanitizeUser(req.user!) }));
+
+const avatarUploadSchema = z.object({
+  data: z.string().min(1),
+  filename: z.string().min(1)
+});
+
+app.post("/api/auth/avatar", auth, async (req: AuthedRequest, res, next) => {
+  try {
+    const { data, filename } = avatarUploadSchema.parse(req.body);
+    const buffer = Buffer.from(data, "base64");
+    const url = await saveUploadedAvatarFile(req.user!.id, buffer, filename);
+    const user = await prisma.user.update({
+      where: { id: req.user!.id },
+      data: { avatar: url }
+    });
+    res.json({ user: sanitizeUser(user), url });
+  } catch (error) {
+    next(error);
+  }
+});
 
 app.get("/api/courses", async (req, res, next) => {
   try {
@@ -637,14 +674,36 @@ app.get("/api/employee/dashboard", auth, async (req: AuthedRequest, res, next) =
 
 app.get("/api/hr/dashboard", auth, requireRole("HR_ADMIN", "CORPORATE_ADMIN", "SUPER_ADMIN"), async (req: AuthedRequest, res, next) => {
   try {
-    const ids = req.user!.role === "SUPER_ADMIN" ? undefined : { in: await companyUserIds(req.user!) };
+    // Dharma Admin (SUPER_ADMIN) sees all companies by default, but can scope to
+    // a single company via ?companyId= chosen from the platform company switcher.
+    const adminCompanyId =
+      req.user!.role === "SUPER_ADMIN" && typeof req.query.companyId === "string" && req.query.companyId
+        ? req.query.companyId
+        : null;
+    let ids: { in: string[] } | undefined;
+    if (req.user!.role === "SUPER_ADMIN") {
+      if (adminCompanyId) {
+        const scoped = await prisma.user.findMany({ where: { companyId: adminCompanyId, role: "EMPLOYEE" }, select: { id: true } });
+        ids = { in: scoped.map((u) => u.id) };
+      } else {
+        ids = undefined;
+      }
+    } else {
+      ids = { in: await companyUserIds(req.user!) };
+    }
+    const challengeWhere =
+      req.user!.role === "SUPER_ADMIN"
+        ? adminCompanyId
+          ? { companyId: adminCompanyId }
+          : {}
+        : { companyId: req.user!.companyId || "" };
     const [employees, enrollments, attendance, aggregate, certificates, challenges] = await Promise.all([
       prisma.user.count({ where: { id: ids, role: "EMPLOYEE" } }),
       prisma.enrollment.findMany({ where: { userId: ids }, include: { user: { include: { department: true } } } }),
       prisma.attendance.findMany({ where: { userId: ids } }),
       prisma.wellbeingCheckin.findMany({ where: { userId: ids }, include: { user: { include: { department: true } } } }),
       prisma.certificate.count({ where: { userId: ids } }),
-      prisma.challenge.findMany({ where: req.user!.role === "SUPER_ADMIN" ? {} : { companyId: req.user!.companyId || "" }, include: { participations: true, rewardBadge: true } })
+      prisma.challenge.findMany({ where: challengeWhere, include: { participations: true, rewardBadge: true } })
     ]);
     const activeLearners = new Set(enrollments.map((e) => e.userId)).size;
     const completion = enrollments.length ? Math.round(enrollments.reduce((s, e) => s + e.progress, 0) / enrollments.length) : 0;
@@ -835,7 +894,7 @@ app.post("/api/certificates/issue", auth, requireRole("TRAINER", "SUPER_ADMIN"),
   }
 });
 
-app.get("/api/company/dashboard", auth, requireRole("CORPORATE_ADMIN", "SUPER_ADMIN"), async (req: AuthedRequest, res, next) => {
+app.get("/api/company/dashboard", auth, requireRole("HR_ADMIN", "CORPORATE_ADMIN", "SUPER_ADMIN"), async (req: AuthedRequest, res, next) => {
   try {
     const company = await prisma.company.findUnique({
       where: { id: req.user!.companyId || "" },
@@ -978,6 +1037,9 @@ async function startServer() {
   prisma = new PrismaClient();
   registerSiteContentRoutes(app, prisma, auth, requireRole);
   registerSiteBookingRoutes(app, prisma, jwtSecret, auth, requireRole("SUPER_ADMIN"));
+  registerWellnessRoutes(app, prisma, auth, requireRole, companyUserIds);
+  registerAdminCwpRoutes(app, prisma, auth, requireRole, sanitizeUser);
+  registerMessagingRoutes(app, prisma, auth);
   installErrorHandler();
   await ensureSiteAdmin().catch((error) => console.error("[startup] site admin:", error));
   await ensureSiteContent(prisma).catch((error) => console.error("[startup] site content:", error));

@@ -1,0 +1,16 @@
+---
+description: Keep docs/CORPORATE-WELLNESS-PLATFORM.md in sync when changing auth, corporate platform, or marketing site architecture
+globs: backend/src/**/*.ts,backend/prisma/**,frontend/src/**/*.{tsx,ts},docs/CORPORATE-WELLNESS-PLATFORM.md
+alwaysApply: false
+---
+
+# Corporate platform documentation
+
+When you change auth, corporate wellness platform (CWP), member bookings, marketing site navigation, team-building CMS, Prisma models, or related API routes:
+
+1. Read `docs/CORPORATE-WELLNESS-PLATFORM.md` before making large changes.
+2. After completing the task, update that file in the same PR/session:
+   - Bump **Last updated** date and **Latest commit** if publishing.
+   - Add a row to **Changelog**.
+   - Edit affected sections (endpoints, models, routes, security gaps, file index).
+3. Do not leave the doc out of date — it is the single source of truth for backend + frontend corporate/marketing architecture.

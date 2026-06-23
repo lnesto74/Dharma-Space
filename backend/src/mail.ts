@@ -83,7 +83,7 @@ export function sourceFromInbox(inbox: string, type?: string): MailCategory {
 
   if (normalized === corporateInbox || normalized.includes("corporate@")) return "corporate";
   if (normalized === educationInbox || normalized.includes("education@")) return "education";
-  if (type?.toUpperCase() === "CONTACT") return "corporate";
+  if (type?.toUpperCase() === "CONTACT" || type?.toUpperCase() === "CWP_DEMO") return "corporate";
   return "education";
 }
 

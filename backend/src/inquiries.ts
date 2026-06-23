@@ -23,10 +23,13 @@ const contextSchema = z
     guests: z.string().optional(),
     notes: z.string().optional(),
     uen: z.string().optional(),
-    segment: z.enum(["CORPORATE", "FLAGSHIP", "COURSE", "WORKSHOP", "EVENT", "REGULAR_CLASS"]).optional(),
+    segment: z.enum(["CORPORATE", "CWP", "FLAGSHIP", "COURSE", "WORKSHOP", "EVENT", "REGULAR_CLASS"]).optional(),
     paymentStatus: z.enum(["WAITLIST", "NOT_PAID", "PAID"]).optional(),
     siteClassId: z.string().optional(),
     programCategory: z.string().optional(),
+    companyName: z.string().optional(),
+    employeeCount: z.string().optional(),
+    interest: z.string().optional(),
     inquiryId: z.string().optional()
   })
   .optional();
@@ -34,6 +37,7 @@ const contextSchema = z
 export const inquirySchema = z.object({
   type: z.enum([
     "contact",
+    "cwp_demo",
     "waitlist",
     "booking_payment",
     "class_waitlist",
@@ -66,7 +70,21 @@ function parsePayload(raw: string): InquiryPayload {
 
 export async function serializeSubmission(
   prisma: PrismaClient,
-  submission: { id: string; type: string; inbox: string; payload: string; siteProgramId?: string | null }
+  submission: {
+    id: string;
+    type: string;
+    inbox: string;
+    payload: string;
+    status: string;
+    name: string;
+    email: string;
+    phone?: string | null;
+    subject?: string | null;
+    message?: string | null;
+    createdAt: Date;
+    siteProgramId?: string | null;
+    audienceType?: string | null;
+  }
 ) {
   const payload = parsePayload(submission.payload);
   const meta = await enrichSubmissionRecord(prisma, submission);
@@ -75,7 +93,12 @@ export async function serializeSubmission(
     ...submission,
     payload,
     source,
-    sourceLabel: source === "corporate" ? "Corporate" : "Education",
+    sourceLabel:
+      meta.segment === "CWP"
+        ? "CWP Platform"
+        : source === "corporate"
+          ? "Corporate"
+          : "Education",
     segment: meta.segment,
     segmentLabel: meta.segmentLabel,
     paymentStatus: meta.paymentStatus,
@@ -84,7 +107,8 @@ export async function serializeSubmission(
 }
 
 function categoryFor(type: InquiryInput["type"]): "corporate" | "education" {
-  return type === "contact" ? "corporate" : "education";
+  if (type === "contact" || type === "cwp_demo") return "corporate";
+  return "education";
 }
 
 function paymentStatusForType(type: InquiryInput["type"], context?: InquiryPayload): PaymentStatus {
@@ -125,6 +149,9 @@ function bookingDetailsBlock(ctx: InquiryPayload, input?: InquiryInput) {
     ctx.guests ? `Guests: ${ctx.guests}` : null,
     ctx.reference ? `Reference: ${ctx.reference}` : null,
     ctx.bookingType ? `Booking type: ${ctx.bookingType}` : null,
+    ctx.companyName ? `Company: ${ctx.companyName}` : null,
+    ctx.employeeCount ? `Team size: ${ctx.employeeCount}` : null,
+    ctx.interest ? `Interest: ${ctx.interest}` : null,
     input?.phone ? `Phone: ${input.phone}` : null,
     ctx.notes ? `Notes: ${ctx.notes}` : null,
     input?.message && input.message !== ctx.notes ? `Message: ${input.message}` : null
@@ -138,6 +165,8 @@ function adminSubject(input: InquiryInput) {
   switch (input.type) {
     case "contact":
       return `New corporate enquiry: ${input.subject || "Contact form"}`;
+    case "cwp_demo":
+      return `CWP platform demo request: ${input.context?.companyName || input.name}`;
     case "waitlist":
       return `Reserve spot: ${title || "Program"}`;
     case "class_waitlist":
@@ -176,6 +205,8 @@ function customerSubject(input: InquiryInput) {
   switch (input.type) {
     case "contact":
       return "We received your message — Dharma Space";
+    case "cwp_demo":
+      return "Your CWP platform demo request — Dharma Space";
     case "waitlist":
     case "class_waitlist":
       return `Your spot is reserved — ${title || "Dharma Space"}`;
@@ -199,6 +230,10 @@ function customerBody(input: InquiryInput) {
 
   if (input.type === "contact") {
     return `${greeting}\n\nWe received your enquiry and will reply within one business day.\n\nYour message:\n"${input.message || ""}"\n\nWhatsApp: ${whatsapp}\n\nWarm regards,\nDharma Space Team`;
+  }
+
+  if (input.type === "cwp_demo") {
+    return `${greeting}\n\nThank you for your interest in the Dharma Space Corporate Wellness Platform (CWP). Our team will reach out within one business day to schedule a walkthrough.\n\n${detailsBlock}WhatsApp: ${whatsapp}\n\nWarm regards,\nDharma Space Team`;
   }
 
   if (input.type === "waitlist" || input.type === "class_waitlist") {
@@ -267,7 +302,10 @@ export async function processInquiry(prisma: PrismaClient, input: InquiryInput) 
     paymentStatus,
     notes: input.notes,
     guests: input.guests || input.context?.guests,
-    siteClassId: input.siteClassId || input.context?.siteClassId
+    siteClassId: input.siteClassId || input.context?.siteClassId,
+    companyName: input.context?.companyName,
+    employeeCount: input.context?.employeeCount,
+    interest: input.context?.interest || (input.type === "cwp_demo" ? "demo" : undefined)
   };
 
   if (input.type === "booking_confirmed" && input.context?.reference) {

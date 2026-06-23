@@ -16,7 +16,7 @@ import { useMemberAuth } from "../auth/MemberAuthContext";
 import { createMemberBooking, confirmMemberBookingReturn, updateMemberProfile, fetchMemberBookings, memberHasActiveBooking } from "../lib/member-api";
 import { submitInquiry } from "../lib/inquiries";
 import { useSiteContent, type SiteProgram } from "../lib/site-content";
-import { programToReserveInfo, programActionLabel, type ReserveInfo } from "../lib/education";
+import { programToReserveInfo, programActionLabel, getCorporatePortalUrl, type ReserveInfo } from "../lib/education";
 import { sortProgramsForDisplay, sortClassesForDisplay } from "../lib/program-schedule";
 import {
   clearPendingStripeBooking,
@@ -29,7 +29,8 @@ import {
 type Page = "about" | "corporate" | "education" | "events";
 type EventsSection = "upcoming-events" | "regular-classes";
 type EducationSection = "flagship-program" | "courses-certifications" | "workshops-intensives";
-type CorporateSection = "digital-platform";
+
+const CORPORATE_PORTAL_URL = getCorporatePortalUrl();
 
 const EVENTS_SUBMENU: { label: string; section: EventsSection }[] = [
   { label: "Upcoming Events", section: "upcoming-events" },
@@ -40,10 +41,6 @@ const EDUCATION_SUBMENU: { label: string; section: EducationSection }[] = [
   { label: "Flagship Program", section: "flagship-program" },
   { label: "Courses & Certifications", section: "courses-certifications" },
   { label: "Workshops & Intensives", section: "workshops-intensives" },
-];
-
-const CORPORATE_SUBMENU: { label: string; section: CorporateSection }[] = [
-  { label: "CWP Platform", section: "digital-platform" },
 ];
 
 const IMAGES = {
@@ -141,7 +138,6 @@ function Nav({
   setPage,
   onContact,
   onAccount,
-  onCorporateSection,
   onEventsSection,
   onEducationSection
 }: {
@@ -149,7 +145,6 @@ function Nav({
   setPage: (p: Page) => void;
   onContact: () => void;
   onAccount: () => void;
-  onCorporateSection: (section: CorporateSection) => void;
   onEventsSection: (section: EventsSection) => void;
   onEducationSection: (section: EducationSection) => void;
 }) {
@@ -208,12 +203,10 @@ function Nav({
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
 
-  const goCorporateSection = (section: CorporateSection) => {
-    onCorporateSection(section);
-    setMobileCorporateOpen(false);
-    setMobileEventsOpen(false);
-    setMobileEducationOpen(false);
+  const goCorporatePortal = () => {
     setMenuOpen(false);
+    setMobileCorporateOpen(false);
+    window.location.href = CORPORATE_PORTAL_URL;
   };
 
   const goEventsSection = (section: EventsSection) => {
@@ -271,17 +264,14 @@ function Nav({
             </button>
             <div className="nav-submenu-dropdown absolute left-1/2 top-full z-[100] w-[240px] -translate-x-1/2 pt-2">
               <div className="border border-[#2A2825]/10 bg-[#FAF8F3] py-2 shadow-xl">
-                {CORPORATE_SUBMENU.map(({ label, section }) => (
-                  <button
-                    key={section}
-                    type="button"
-                    onClick={() => goCorporateSection(section)}
-                    className="block w-full px-5 py-2.5 text-left text-[12px] tracking-[0.08em] uppercase text-[#2A2825]/75 transition-colors hover:bg-[#F2EBE0] hover:text-[#C4785A]"
-                    style={{ fontFamily: "var(--font-body)" }}
-                  >
-                    {label}
-                  </button>
-                ))}
+                <a
+                  href={CORPORATE_PORTAL_URL}
+                  onClick={(e) => { e.preventDefault(); goCorporatePortal(); }}
+                  className="block w-full px-5 py-2.5 text-left text-[12px] tracking-[0.08em] uppercase text-[#2A2825]/75 transition-colors hover:bg-[#F2EBE0] hover:text-[#C4785A]"
+                  style={{ fontFamily: "var(--font-body)" }}
+                >
+                  CWP Platform
+                </a>
               </div>
             </div>
           </div>
@@ -415,17 +405,14 @@ function Nav({
             </button>
             {mobileCorporateOpen && (
               <div className="mt-3 flex flex-col gap-3 border-l border-[#C4785A]/30 pl-4">
-                {CORPORATE_SUBMENU.map(({ label, section }) => (
-                  <button
-                    key={section}
-                    type="button"
-                    onClick={() => goCorporateSection(section)}
-                    className="text-left text-[13px] tracking-[0.08em] uppercase text-[#2A2825]/65 hover:text-[#C4785A]"
-                    style={{ fontFamily: "var(--font-body)" }}
-                  >
-                    {label}
-                  </button>
-                ))}
+                <a
+                  href={CORPORATE_PORTAL_URL}
+                  onClick={(e) => { e.preventDefault(); goCorporatePortal(); }}
+                  className="text-left text-[13px] tracking-[0.08em] uppercase text-[#2A2825]/65 hover:text-[#C4785A]"
+                  style={{ fontFamily: "var(--font-body)" }}
+                >
+                  CWP Platform
+                </a>
               </div>
             )}
           </div>
@@ -776,24 +763,13 @@ function AboutPage({ setPage, specialists }: { setPage: (p: Page) => void; speci
 
 function CorporatePage({
   onContact,
-  teamActivities,
-  scrollTarget,
-  onScrollTargetHandled
+  onCwpDemo,
+  teamActivities
 }: {
   onContact: () => void;
+  onCwpDemo: () => void;
   teamActivities: Array<{ title: string; desc: string; img: string }>;
-  scrollTarget?: CorporateSection | null;
-  onScrollTargetHandled?: () => void;
 }) {
-  useEffect(() => {
-    if (!scrollTarget) return;
-    const scroll = () => {
-      document.getElementById(scrollTarget)?.scrollIntoView({ behavior: "smooth", block: "start" });
-      onScrollTargetHandled?.();
-    };
-    requestAnimationFrame(() => requestAnimationFrame(scroll));
-  }, [scrollTarget, onScrollTargetHandled]);
-
   return (
     <div>
       {/* Hero */}
@@ -891,13 +867,23 @@ function CorporatePage({
                   <span className="text-white/70 text-[14px]" style={{ fontFamily: "var(--font-body)" }}>{f}</span>
                 </div>
               ))}
-              <a
-                href={import.meta.env.PROD ? "https://corporate.dharma-space.com" : "http://corporate.localhost:7011"}
-                className="inline-flex items-center gap-2 mt-8 px-6 py-3 border border-[#C4785A] text-[#C4785A] text-[11px] tracking-[0.15em] uppercase hover:bg-[#C4785A] hover:text-white transition-all duration-300"
-                style={{ fontFamily: "var(--font-body)" }}
-              >
-                Client Login <ChevronRight size={14} />
-              </a>
+              <div className="flex flex-wrap gap-3 mt-8">
+                <a
+                  href={import.meta.env.PROD ? "https://corporate.dharma-space.com" : "http://corporate.localhost:7011"}
+                  className="inline-flex items-center gap-2 px-6 py-3 border border-[#C4785A] text-[#C4785A] text-[11px] tracking-[0.15em] uppercase hover:bg-[#C4785A] hover:text-white transition-all duration-300"
+                  style={{ fontFamily: "var(--font-body)" }}
+                >
+                  Client Login <ChevronRight size={14} />
+                </a>
+                <button
+                  type="button"
+                  onClick={onCwpDemo}
+                  className="inline-flex items-center gap-2 px-6 py-3 bg-[#C4785A] text-white text-[11px] tracking-[0.15em] uppercase hover:bg-[#B86848] transition-all duration-300"
+                  style={{ fontFamily: "var(--font-body)" }}
+                >
+                  Request Demo <ChevronRight size={14} />
+                </button>
+              </div>
             </div>
             {/* Platform Screenshots */}
             <div className="relative flex flex-col gap-3">
@@ -2490,6 +2476,99 @@ function ContactModal({ onClose }: { onClose: () => void }) {
   );
 }
 
+function CwpDemoModal({ onClose }: { onClose: () => void }) {
+  const [form, setForm] = useState({ name: "", email: "", companyName: "", employeeCount: "", message: "" });
+  const [sent, setSent] = useState(false);
+  const [sending, setSending] = useState(false);
+  const [sendError, setSendError] = useState(false);
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setSending(true);
+    setSendError(false);
+    try {
+      await submitInquiry({
+        type: "cwp_demo",
+        name: form.name,
+        email: form.email,
+        subject: `CWP demo — ${form.companyName || form.name}`,
+        message: form.message,
+        context: {
+          companyName: form.companyName,
+          employeeCount: form.employeeCount,
+          interest: "demo",
+          segment: "CWP"
+        }
+      });
+      setSent(true);
+    } catch {
+      setSendError(true);
+    } finally {
+      setSending(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-[100] flex items-end sm:items-center justify-center bg-[#1A1815]/70 backdrop-blur-sm p-0 sm:p-6" onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
+      <div className="bg-[#FAF8F3] w-full sm:max-w-lg max-h-[95vh] overflow-y-auto">
+        <div className="flex items-center justify-between p-8 border-b border-[#2A2825]/8">
+          <div>
+            <h2 className="text-2xl font-normal text-[#2A2825]" style={{ fontFamily: "var(--font-display)" }}>Request a CWP Demo</h2>
+            <p className="text-[#7A7468] text-[13px] mt-1" style={{ fontFamily: "var(--font-body)" }}>See the Corporate Wellness Platform in action.</p>
+          </div>
+          <button type="button" onClick={onClose} className="text-[#2A2825]/40 hover:text-[#2A2825] transition-colors p-1"><X size={20} /></button>
+        </div>
+        <div className="p-8">
+          {!sent ? (
+            <form onSubmit={handleSubmit} className="space-y-5">
+              {[
+                { label: "Full Name", key: "name", type: "text", placeholder: "Your name" },
+                { label: "Work Email", key: "email", type: "email", placeholder: "you@company.com" },
+                { label: "Company", key: "companyName", type: "text", placeholder: "Organisation name" },
+                { label: "Team size", key: "employeeCount", type: "text", placeholder: "e.g. 50–200 employees" }
+              ].map(({ label, key, type, placeholder }) => (
+                <div key={key}>
+                  <label className="block text-[11px] tracking-[0.2em] uppercase text-[#2A2825]/60 mb-2" style={{ fontFamily: "var(--font-body)" }}>{label}</label>
+                  <input
+                    type={type}
+                    required={key === "name" || key === "email"}
+                    placeholder={placeholder}
+                    value={form[key as keyof typeof form]}
+                    onChange={(e) => setForm((f) => ({ ...f, [key]: e.target.value }))}
+                    className="w-full bg-[#EDE5D8] px-4 py-3 text-[14px] text-[#2A2825] placeholder-[#7A7468]/60 focus:outline-none focus:ring-1 focus:ring-[#C4785A]"
+                    style={{ fontFamily: "var(--font-body)" }}
+                  />
+                </div>
+              ))}
+              <div>
+                <label className="block text-[11px] tracking-[0.2em] uppercase text-[#2A2825]/60 mb-2" style={{ fontFamily: "var(--font-body)" }}>What would you like to see?</label>
+                <textarea
+                  rows={3}
+                  placeholder="HR analytics, employee booking, leaderboards…"
+                  value={form.message}
+                  onChange={(e) => setForm((f) => ({ ...f, message: e.target.value }))}
+                  className="w-full bg-[#EDE5D8] px-4 py-3 text-[14px] text-[#2A2825] placeholder-[#7A7468]/60 focus:outline-none focus:ring-1 focus:ring-[#C4785A] resize-none"
+                  style={{ fontFamily: "var(--font-body)" }}
+                />
+              </div>
+              {sendError && <p className="text-center text-[12px] text-red-500">Could not send — please try WhatsApp or email.</p>}
+              <button type="submit" disabled={sending} className="w-full py-4 bg-[#C4785A] text-white text-[12px] tracking-[0.15em] uppercase hover:bg-[#B86848] transition-colors disabled:opacity-60" style={{ fontFamily: "var(--font-body)" }}>
+                {sending ? "Sending…" : "Request demo"}
+              </button>
+            </form>
+          ) : (
+            <div className="text-center py-8">
+              <Check size={32} className="mx-auto text-[#7A9A7A] mb-4" />
+              <p className="text-[#2A2825] text-lg" style={{ fontFamily: "var(--font-display)" }}>Demo request received</p>
+              <p className="text-[#7A7468] text-[14px] mt-2" style={{ fontFamily: "var(--font-body)" }}>We&apos;ll email you within one business day to schedule a walkthrough.</p>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ── Footer ─────────────────────────────────────────────────────────────────────
 
 function Footer({ setPage, onContact }: { setPage: (p: Page) => void; onContact: () => void }) {
@@ -2617,13 +2696,13 @@ function AdminLoginModal({ onClose, onSuccess }: { onClose: () => void; onSucces
 export default function MarketingSite({ initialPage = "about" }: { initialPage?: Page }) {
   const [page, setPage] = useState<Page>(initialPage);
   const [contactOpen, setContactOpen] = useState(false);
+  const [cwpDemoOpen, setCwpDemoOpen] = useState(false);
   const [accountOpen, setAccountOpen] = useState(false);
   const [reserve, setReserve] = useState<ReserveInfo | null>(null);
   const [booking, setBooking] = useState<BookingInfo | null>(null);
   const [stripeBooking, setStripeBooking] = useState<PendingStripeBooking | null>(null);
   const [eventsScrollTarget, setEventsScrollTarget] = useState<EventsSection | null>(null);
   const [educationScrollTarget, setEducationScrollTarget] = useState<EducationSection | null>(null);
-  const [corporateScrollTarget, setCorporateScrollTarget] = useState<CorporateSection | null>(null);
   const site = useSiteContent();
 
   useEffect(() => {
@@ -2642,11 +2721,7 @@ export default function MarketingSite({ initialPage = "about" }: { initialPage?:
   }, []);
 
   const openContact = () => setContactOpen(true);
-
-  const handleCorporateSection = (section: CorporateSection) => {
-    setPage("corporate");
-    setCorporateScrollTarget(section);
-  };
+  const openCwpDemo = () => setCwpDemoOpen(true);
 
   const handleEventsSection = (section: EventsSection) => {
     setPage("events");
@@ -2761,20 +2836,12 @@ export default function MarketingSite({ initialPage = "about" }: { initialPage?:
         setPage={setPage}
         onContact={openContact}
         onAccount={() => setAccountOpen(true)}
-        onCorporateSection={handleCorporateSection}
         onEventsSection={handleEventsSection}
         onEducationSection={handleEducationSection}
       />
       <main>
         {page === "about" && <AboutPage setPage={setPage} specialists={specialists} />}
-        {page === "corporate" && (
-          <CorporatePage
-            onContact={openContact}
-            teamActivities={teamActivities}
-            scrollTarget={corporateScrollTarget}
-            onScrollTargetHandled={() => setCorporateScrollTarget(null)}
-          />
-        )}
+        {page === "corporate" && <CorporatePage onContact={openContact} onCwpDemo={openCwpDemo} teamActivities={teamActivities} />}
         {page === "education" && (
           <EducationPage
             onContact={openContact}
@@ -2799,6 +2866,7 @@ export default function MarketingSite({ initialPage = "about" }: { initialPage?:
       </main>
       <Footer setPage={setPage} onContact={openContact} />
       {contactOpen && <ContactModal onClose={() => setContactOpen(false)} />}
+      {cwpDemoOpen && <CwpDemoModal onClose={() => setCwpDemoOpen(false)} />}
       {accountOpen && (
         <MemberAccountModal
           onClose={() => setAccountOpen(false)}

@@ -8,38 +8,49 @@ datasource db {
 }
 
 model User {
-  id                  String                   @id @default(cuid())
-  name                String
-  email               String                   @unique
-  passwordHash        String
-  role                String
-  companyId           String?
-  departmentId        String?
-  avatar              String?
-  createdAt           DateTime                 @default(now())
-  company             Company?                 @relation(fields: [companyId], references: [id])
-  department          Department?              @relation(fields: [departmentId], references: [id])
-  courses             Course[]                 @relation("InstructorCourses")
-  sessions            Session[]                @relation("TrainerSessions")
-  enrollments         Enrollment[]
-  attendance          Attendance[]
-  wellbeingCheckins   WellbeingCheckin[]
-  badges              UserBadge[]
-  certificates        Certificate[]
-  challengeEntries    ChallengeParticipation[]
+  id                    String                   @id @default(cuid())
+  name                  String
+  email                 String                   @unique
+  passwordHash          String
+  role                  String
+  companyId             String?
+  departmentId          String?
+  avatar                String?
+  totalWellnessScore    Int                      @default(0)
+  totalSteps            Int                      @default(0)
+  createdAt             DateTime                 @default(now())
+  company               Company?                 @relation(fields: [companyId], references: [id])
+  department            Department?              @relation(fields: [departmentId], references: [id])
+  courses               Course[]                 @relation("InstructorCourses")
+  sessions              Session[]                @relation("TrainerSessions")
+  enrollments           Enrollment[]
+  attendance            Attendance[]
+  wellbeingCheckins     WellbeingCheckin[]
+  badges                UserBadge[]
+  certificates          Certificate[]
+  challengeEntries      ChallengeParticipation[]
+  trainerWellnessEvents WellnessEvent[]          @relation("TrainerEvents")
+  createdWellnessEvents WellnessEvent[]          @relation("CreatedEvents")
+  wellnessBookings      WellnessBooking[]
+  wellnessAttendances   WellnessAttendance[]
+  scheduleRequests      ScheduleRequest[]
+  conversationMemberships ConversationParticipant[]
+  sentMessages          Message[]               @relation("SentMessages")
 }
 
 model Company {
-  id          String       @id @default(cuid())
-  name        String
-  industry    String
-  plan        String
-  seats       Int
-  createdAt   DateTime     @default(now())
-  departments Department[]
-  users       User[]
-  challenges  Challenge[]
-  invoices    Invoice[]
+  id               String            @id @default(cuid())
+  name             String
+  industry         String
+  plan             String
+  seats            Int
+  createdAt        DateTime          @default(now())
+  departments      Department[]
+  users            User[]
+  challenges       Challenge[]
+  invoices         Invoice[]
+  wellnessEvents   WellnessEvent[]
+  scheduleRequests ScheduleRequest[]
 }
 
 model Department {
@@ -352,4 +363,115 @@ model Booking {
   @@index([memberId])
   @@index([customerEmail])
   @@index([status])
+}
+
+// ─── CWP Wellness Events ─────────────────────────────────────────────────────
+
+model WellnessEventCategory {
+  id         String          @id @default(cuid())
+  name       String          @unique
+  scoreValue Int
+  icon       String?
+  events     WellnessEvent[]
+}
+
+model WellnessEvent {
+  id              String                @id @default(cuid())
+  companyId       String
+  company         Company               @relation(fields: [companyId], references: [id])
+  categoryId      String
+  category        WellnessEventCategory @relation(fields: [categoryId], references: [id])
+  trainerId       String?
+  trainer         User?                 @relation("TrainerEvents", fields: [trainerId], references: [id])
+  title           String
+  dateTime        DateTime
+  durationMinutes Int                   @default(60)
+  locationType    String
+  locationDetail  String?
+  maxSpots        Int                   @default(30)
+  status          String                @default("scheduled")
+  createdById     String
+  createdBy       User                  @relation("CreatedEvents", fields: [createdById], references: [id])
+  createdAt       DateTime              @default(now())
+  bookings        WellnessBooking[]
+  attendances     WellnessAttendance[]
+
+  @@index([companyId])
+  @@index([dateTime])
+}
+
+model WellnessBooking {
+  id        String        @id @default(cuid())
+  eventId   String
+  event     WellnessEvent @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  userId    String
+  user      User          @relation(fields: [userId], references: [id])
+  bookedAt  DateTime      @default(now())
+  cancelled Boolean       @default(false)
+
+  @@unique([eventId, userId])
+}
+
+model WellnessAttendance {
+  id           String        @id @default(cuid())
+  eventId      String
+  event        WellnessEvent @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  userId       String
+  user         User          @relation(fields: [userId], references: [id])
+  attendedAt   DateTime      @default(now())
+  scoreAwarded Int           @default(0)
+
+  @@unique([eventId, userId])
+}
+
+model ScheduleRequest {
+  id            String   @id @default(cuid())
+  companyId     String
+  company       Company  @relation(fields: [companyId], references: [id])
+  submittedById String
+  submittedBy   User     @relation(fields: [submittedById], references: [id])
+  scheduleData  Json
+  status        String   @default("pending")
+  adminNotes    String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@index([companyId])
+  @@index([status])
+}
+
+model Conversation {
+  id           String                    @id @default(cuid())
+  companyId    String?
+  createdAt    DateTime                  @default(now())
+  updatedAt    DateTime                  @updatedAt
+  participants ConversationParticipant[]
+  messages     Message[]
+
+  @@index([companyId])
+}
+
+model ConversationParticipant {
+  id             String       @id @default(cuid())
+  conversationId String
+  userId         String
+  lastReadAt     DateTime?
+  conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  user           User         @relation(fields: [userId], references: [id])
+
+  @@unique([conversationId, userId])
+  @@index([userId])
+}
+
+model Message {
+  id             String       @id @default(cuid())
+  conversationId String
+  senderId       String
+  body           String
+  createdAt      DateTime     @default(now())
+  conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  sender         User         @relation("SentMessages", fields: [senderId], references: [id])
+
+  @@index([conversationId])
+  @@index([createdAt])
 }
