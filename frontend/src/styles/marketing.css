@@ -11,21 +11,7 @@
   color: #2a2825;
 }
 
-@media (min-width: 768px) {
-  .marketing-site .nav-submenu-dropdown {
-    display: none;
-  }
-
-  .marketing-site .nav-submenu-menu:hover .nav-submenu-dropdown,
-  .marketing-site .nav-submenu-menu:focus-within .nav-submenu-dropdown {
-    display: block;
-  }
-
-  .marketing-site .nav-submenu-menu:hover .nav-submenu-chevron,
-  .marketing-site .nav-submenu-menu:focus-within .nav-submenu-chevron {
-    transform: rotate(180deg);
-  }
-}
+/* Submenu open/close is fully controlled in React (hover + click + outside-click). */
 
 /* Specialists horizontal scroll */
 .specialists-scroll-stage {

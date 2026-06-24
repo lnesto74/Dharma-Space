@@ -157,6 +157,7 @@ function Nav({
   const [mobileCorporateOpen, setMobileCorporateOpen] = useState(false);
   const [mobileEventsOpen, setMobileEventsOpen] = useState(false);
   const [mobileEducationOpen, setMobileEducationOpen] = useState(false);
+  const [openMenu, setOpenMenu] = useState<null | "corporate" | "education" | "events">(null);
   const [adminOpen, setAdminOpen] = useState(false);
   const [isAdmin, setIsAdmin] = useState(false);
 
@@ -165,6 +166,23 @@ function Nav({
     window.addEventListener("scroll", handler);
     return () => window.removeEventListener("scroll", handler);
   }, []);
+
+  useEffect(() => {
+    if (!openMenu) return;
+    const onPointerDown = (e: PointerEvent) => {
+      const target = e.target as HTMLElement | null;
+      if (!target?.closest(".nav-submenu-menu")) setOpenMenu(null);
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setOpenMenu(null);
+    };
+    document.addEventListener("pointerdown", onPointerDown);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("pointerdown", onPointerDown);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [openMenu]);
 
   useEffect(() => {
     const stored = localStorage.getItem("hsos_user");
@@ -202,12 +220,14 @@ function Nav({
     setMobileCorporateOpen(false);
     setMobileEventsOpen(false);
     setMobileEducationOpen(false);
+    setOpenMenu(null);
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
 
   const goCorporatePortal = () => {
     setMenuOpen(false);
     setMobileCorporateOpen(false);
+    setOpenMenu(null);
     window.location.href = CORPORATE_PORTAL_URL;
   };
 
@@ -217,6 +237,7 @@ function Nav({
     setMobileEventsOpen(false);
     setMobileEducationOpen(false);
     setMenuOpen(false);
+    setOpenMenu(null);
   };
 
   const goEducationSection = (section: EducationSection) => {
@@ -225,6 +246,7 @@ function Nav({
     setMobileEducationOpen(false);
     setMobileEventsOpen(false);
     setMenuOpen(false);
+    setOpenMenu(null);
   };
 
   return (
@@ -251,7 +273,11 @@ function Nav({
               {label}
             </button>
           ))}
-          <div className="nav-submenu-menu group relative">
+          <div
+            className="nav-submenu-menu relative"
+            onMouseEnter={() => setOpenMenu("corporate")}
+            onMouseLeave={() => setOpenMenu(null)}
+          >
             <button
               type="button"
               onClick={() => nav("corporate")}
@@ -260,24 +286,31 @@ function Nav({
               }`}
               style={{ fontFamily: "var(--font-body)" }}
               aria-haspopup="true"
+              aria-expanded={openMenu === "corporate"}
             >
               Corporate
-              <ChevronDown size={14} className="nav-submenu-chevron shrink-0 transition-transform duration-200" />
+              <ChevronDown size={14} className={`shrink-0 transition-transform duration-200 ${openMenu === "corporate" ? "rotate-180" : ""}`} />
             </button>
-            <div className="nav-submenu-dropdown absolute left-1/2 top-full z-[100] w-[240px] -translate-x-1/2 pt-2">
-              <div className="border border-[#2A2825]/10 bg-[#FAF8F3] py-2 shadow-xl">
-                <a
-                  href={CORPORATE_PORTAL_URL}
-                  onClick={(e) => { e.preventDefault(); goCorporatePortal(); }}
-                  className="block w-full px-5 py-2.5 text-left text-[12px] tracking-[0.08em] uppercase text-[#2A2825]/75 transition-colors hover:bg-[#F2EBE0] hover:text-[#C4785A]"
-                  style={{ fontFamily: "var(--font-body)" }}
-                >
-                  CWP Platform
-                </a>
+            {openMenu === "corporate" && (
+              <div className="absolute left-1/2 top-full z-[100] w-[240px] -translate-x-1/2 pt-2">
+                <div className="border border-[#2A2825]/10 bg-[#FAF8F3] py-2 shadow-xl">
+                  <a
+                    href={CORPORATE_PORTAL_URL}
+                    onClick={(e) => { e.preventDefault(); goCorporatePortal(); }}
+                    className="block w-full px-5 py-2.5 text-left text-[12px] tracking-[0.08em] uppercase text-[#2A2825]/75 transition-colors hover:bg-[#F2EBE0] hover:text-[#C4785A]"
+                    style={{ fontFamily: "var(--font-body)" }}
+                  >
+                    CWP Platform
+                  </a>
+                </div>
               </div>
-            </div>
+            )}
           </div>
-          <div className="nav-submenu-menu group relative">
+          <div
+            className="nav-submenu-menu relative"
+            onMouseEnter={() => setOpenMenu("education")}
+            onMouseLeave={() => setOpenMenu(null)}
+          >
             <button
               type="button"
               onClick={() => nav("education")}
@@ -286,27 +319,34 @@ function Nav({
               }`}
               style={{ fontFamily: "var(--font-body)" }}
               aria-haspopup="true"
+              aria-expanded={openMenu === "education"}
             >
               Education
-              <ChevronDown size={14} className="nav-submenu-chevron shrink-0 transition-transform duration-200" />
+              <ChevronDown size={14} className={`shrink-0 transition-transform duration-200 ${openMenu === "education" ? "rotate-180" : ""}`} />
             </button>
-            <div className="nav-submenu-dropdown absolute left-1/2 top-full z-[100] w-[260px] -translate-x-1/2 pt-2">
-              <div className="border border-[#2A2825]/10 bg-[#FAF8F3] py-2 shadow-xl">
-                {EDUCATION_SUBMENU.map(({ label, section }) => (
-                  <button
-                    key={section}
-                    type="button"
-                    onClick={() => goEducationSection(section)}
-                    className="block w-full px-5 py-2.5 text-left text-[12px] tracking-[0.08em] uppercase text-[#2A2825]/75 transition-colors hover:bg-[#F2EBE0] hover:text-[#C4785A]"
-                    style={{ fontFamily: "var(--font-body)" }}
-                  >
-                    {label}
-                  </button>
-                ))}
+            {openMenu === "education" && (
+              <div className="absolute left-1/2 top-full z-[100] w-[260px] -translate-x-1/2 pt-2">
+                <div className="border border-[#2A2825]/10 bg-[#FAF8F3] py-2 shadow-xl">
+                  {EDUCATION_SUBMENU.map(({ label, section }) => (
+                    <button
+                      key={section}
+                      type="button"
+                      onClick={() => goEducationSection(section)}
+                      className="block w-full px-5 py-2.5 text-left text-[12px] tracking-[0.08em] uppercase text-[#2A2825]/75 transition-colors hover:bg-[#F2EBE0] hover:text-[#C4785A]"
+                      style={{ fontFamily: "var(--font-body)" }}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
               </div>
-            </div>
+            )}
           </div>
-          <div className="nav-submenu-menu group relative">
+          <div
+            className="nav-submenu-menu relative"
+            onMouseEnter={() => setOpenMenu("events")}
+            onMouseLeave={() => setOpenMenu(null)}
+          >
             <button
               type="button"
               onClick={() => nav("events")}
@@ -315,25 +355,28 @@ function Nav({
               }`}
               style={{ fontFamily: "var(--font-body)" }}
               aria-haspopup="true"
+              aria-expanded={openMenu === "events"}
             >
               Events
-              <ChevronDown size={14} className="nav-submenu-chevron shrink-0 transition-transform duration-200" />
+              <ChevronDown size={14} className={`shrink-0 transition-transform duration-200 ${openMenu === "events" ? "rotate-180" : ""}`} />
             </button>
-            <div className="nav-submenu-dropdown absolute left-1/2 top-full z-[100] w-[240px] -translate-x-1/2 pt-2">
-              <div className="border border-[#2A2825]/10 bg-[#FAF8F3] py-2 shadow-xl">
-                {EVENTS_SUBMENU.map(({ label, section }) => (
-                  <button
-                    key={section}
-                    type="button"
-                    onClick={() => goEventsSection(section)}
-                    className="block w-full px-5 py-2.5 text-left text-[12px] tracking-[0.08em] uppercase text-[#2A2825]/75 transition-colors hover:bg-[#F2EBE0] hover:text-[#C4785A]"
-                    style={{ fontFamily: "var(--font-body)" }}
-                  >
-                    {label}
-                  </button>
-                ))}
+            {openMenu === "events" && (
+              <div className="absolute left-1/2 top-full z-[100] w-[240px] -translate-x-1/2 pt-2">
+                <div className="border border-[#2A2825]/10 bg-[#FAF8F3] py-2 shadow-xl">
+                  {EVENTS_SUBMENU.map(({ label, section }) => (
+                    <button
+                      key={section}
+                      type="button"
+                      onClick={() => goEventsSection(section)}
+                      className="block w-full px-5 py-2.5 text-left text-[12px] tracking-[0.08em] uppercase text-[#2A2825]/75 transition-colors hover:bg-[#F2EBE0] hover:text-[#C4785A]"
+                      style={{ fontFamily: "var(--font-body)" }}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
               </div>
-            </div>
+            )}
           </div>
         </nav>
 
@@ -395,16 +438,25 @@ function Nav({
             </button>
           ))}
           <div>
-            <button
-              type="button"
-              onClick={() => setMobileCorporateOpen((open) => !open)}
-              className={`flex w-full items-center justify-between text-left text-[14px] tracking-[0.1em] uppercase ${page === "corporate" ? "text-[#C4785A]" : "text-[#2A2825]/70"}`}
-              style={{ fontFamily: "var(--font-body)" }}
-              aria-expanded={mobileCorporateOpen}
-            >
-              Corporate
-              <ChevronDown size={16} className={`transition-transform duration-200 ${mobileCorporateOpen ? "rotate-180" : ""}`} />
-            </button>
+            <div className="flex w-full items-center justify-between">
+              <button
+                type="button"
+                onClick={() => nav("corporate")}
+                className={`flex-1 text-left text-[14px] tracking-[0.1em] uppercase ${page === "corporate" ? "text-[#C4785A]" : "text-[#2A2825]/70"}`}
+                style={{ fontFamily: "var(--font-body)" }}
+              >
+                Corporate
+              </button>
+              <button
+                type="button"
+                onClick={() => setMobileCorporateOpen((open) => !open)}
+                className="ml-2 p-1 text-[#2A2825]/50"
+                aria-label="Toggle corporate submenu"
+                aria-expanded={mobileCorporateOpen}
+              >
+                <ChevronDown size={16} className={`transition-transform duration-200 ${mobileCorporateOpen ? "rotate-180" : ""}`} />
+              </button>
+            </div>
             {mobileCorporateOpen && (
               <div className="mt-3 flex flex-col gap-3 border-l border-[#C4785A]/30 pl-4">
                 <a
@@ -419,16 +471,25 @@ function Nav({
             )}
           </div>
           <div>
-            <button
-              type="button"
-              onClick={() => setMobileEducationOpen((open) => !open)}
-              className={`flex w-full items-center justify-between text-left text-[14px] tracking-[0.1em] uppercase ${page === "education" ? "text-[#C4785A]" : "text-[#2A2825]/70"}`}
-              style={{ fontFamily: "var(--font-body)" }}
-              aria-expanded={mobileEducationOpen}
-            >
-              Education
-              <ChevronDown size={16} className={`transition-transform duration-200 ${mobileEducationOpen ? "rotate-180" : ""}`} />
-            </button>
+            <div className="flex w-full items-center justify-between">
+              <button
+                type="button"
+                onClick={() => nav("education")}
+                className={`flex-1 text-left text-[14px] tracking-[0.1em] uppercase ${page === "education" ? "text-[#C4785A]" : "text-[#2A2825]/70"}`}
+                style={{ fontFamily: "var(--font-body)" }}
+              >
+                Education
+              </button>
+              <button
+                type="button"
+                onClick={() => setMobileEducationOpen((open) => !open)}
+                className="ml-2 p-1 text-[#2A2825]/50"
+                aria-label="Toggle education submenu"
+                aria-expanded={mobileEducationOpen}
+              >
+                <ChevronDown size={16} className={`transition-transform duration-200 ${mobileEducationOpen ? "rotate-180" : ""}`} />
+              </button>
+            </div>
             {mobileEducationOpen && (
               <div className="mt-3 flex flex-col gap-3 border-l border-[#C4785A]/30 pl-4">
                 {EDUCATION_SUBMENU.map(({ label, section }) => (
@@ -446,16 +507,25 @@ function Nav({
             )}
           </div>
           <div>
-            <button
-              type="button"
-              onClick={() => setMobileEventsOpen((open) => !open)}
-              className={`flex w-full items-center justify-between text-left text-[14px] tracking-[0.1em] uppercase ${page === "events" ? "text-[#C4785A]" : "text-[#2A2825]/70"}`}
-              style={{ fontFamily: "var(--font-body)" }}
-              aria-expanded={mobileEventsOpen}
-            >
-              Events
-              <ChevronDown size={16} className={`transition-transform duration-200 ${mobileEventsOpen ? "rotate-180" : ""}`} />
-            </button>
+            <div className="flex w-full items-center justify-between">
+              <button
+                type="button"
+                onClick={() => nav("events")}
+                className={`flex-1 text-left text-[14px] tracking-[0.1em] uppercase ${page === "events" ? "text-[#C4785A]" : "text-[#2A2825]/70"}`}
+                style={{ fontFamily: "var(--font-body)" }}
+              >
+                Events
+              </button>
+              <button
+                type="button"
+                onClick={() => setMobileEventsOpen((open) => !open)}
+                className="ml-2 p-1 text-[#2A2825]/50"
+                aria-label="Toggle events submenu"
+                aria-expanded={mobileEventsOpen}
+              >
+                <ChevronDown size={16} className={`transition-transform duration-200 ${mobileEventsOpen ? "rotate-180" : ""}`} />
+              </button>
+            </div>
             {mobileEventsOpen && (
               <div className="mt-3 flex flex-col gap-3 border-l border-[#C4785A]/30 pl-4">
                 {EVENTS_SUBMENU.map(({ label, section }) => (
@@ -888,18 +958,30 @@ function CorporatePage({
               </div>
             </div>
             {/* Platform Screenshots */}
-            <div className="relative flex flex-col gap-3">
-              {/* Large top screenshot */}
-              <div className="overflow-hidden border border-white/10 shadow-2xl">
-                <img src={platformImg1} alt="Platform dashboard" className="w-full object-cover object-top" style={{ maxHeight: "260px" }} />
-              </div>
-              {/* Two smaller screenshots side by side */}
-              <div className="grid grid-cols-2 gap-3">
-                <div className="overflow-hidden border border-white/10 shadow-xl">
-                  <img src={platformImg2} alt="Platform analytics" className="w-full object-cover object-top" style={{ maxHeight: "160px" }} />
+            <div className="relative">
+              {/* soft warm glow behind the composition */}
+              <div aria-hidden className="pointer-events-none absolute -inset-8 rounded-[2.5rem] bg-[#C4785A]/15 blur-3xl" />
+              <div className="relative flex flex-col gap-4">
+                {/* Main dashboard in a browser-style frame */}
+                <div className="overflow-hidden rounded-2xl border border-white/10 bg-[#211F1D] shadow-2xl transition-transform duration-500 hover:-translate-y-1">
+                  <div className="flex items-center gap-1.5 border-b border-white/5 px-4 py-3">
+                    <span className="h-2.5 w-2.5 rounded-full bg-[#E27D60]/80" />
+                    <span className="h-2.5 w-2.5 rounded-full bg-[#E8B04B]/80" />
+                    <span className="h-2.5 w-2.5 rounded-full bg-[#8BA06B]/80" />
+                    <span className="ml-3 truncate text-[10px] uppercase tracking-[0.2em] text-white/30" style={{ fontFamily: "var(--font-body)" }}>
+                      Dharma Space · Corporate Wellness
+                    </span>
+                  </div>
+                  <img src={platformImg1} alt="Platform dashboard" className="w-full object-cover object-top" style={{ maxHeight: "248px" }} />
                 </div>
-                <div className="overflow-hidden border border-white/10 shadow-xl">
-                  <img src={platformImg3} alt="Platform employee view" className="w-full object-cover object-top" style={{ maxHeight: "160px" }} />
+                {/* Supporting screens: wide events + portrait messenger */}
+                <div className="grid grid-cols-5 gap-4">
+                  <div className="col-span-3 h-44 overflow-hidden rounded-xl border border-white/10 shadow-xl transition-transform duration-500 hover:-translate-y-1">
+                    <img src={platformImg2} alt="Upcoming wellness events" className="h-full w-full object-cover object-top" />
+                  </div>
+                  <div className="col-span-2 h-44 overflow-hidden rounded-xl border border-white/10 shadow-xl transition-transform duration-500 hover:-translate-y-1">
+                    <img src={platformImg3} alt="Built-in employee–HR messenger" className="h-full w-full object-cover object-top" />
+                  </div>
                 </div>
               </div>
             </div>
@@ -2624,6 +2706,19 @@ function AdminLoginModal({ onClose, onSuccess }: { onClose: () => void; onSucces
   const [password, setPassword] = useState("");
   const [sending, setSending] = useState(false);
   const [error, setError] = useState("");
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+    };
+    document.addEventListener("keydown", onKey);
+    const prevOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.removeEventListener("keydown", onKey);
+      document.body.style.overflow = prevOverflow;
+    };
+  }, [onClose]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();

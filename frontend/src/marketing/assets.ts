@@ -36,6 +36,7 @@ export const natureWalkImg = teamBuilding("nature-walk.jpg");
 export const creativeMovementImg = teamBuilding("creative-movement.jpg");
 export const padelImg = teamBuilding("padel.jpg");
 
-export const platformImg1 = founderImg;
-export const platformImg2 = oxanaImg;
-export const platformImg3 = bolorImg;
+// Real CWP platform screenshots (served from frontend/public/cwp/platform).
+export const platformImg1 = u("/cwp/platform/platform-dashboard.png");
+export const platformImg2 = u("/cwp/platform/platform-events.png");
+export const platformImg3 = u("/cwp/platform/platform-messenger.png");
