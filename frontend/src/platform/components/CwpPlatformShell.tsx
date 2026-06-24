@@ -7,6 +7,7 @@ import { navForRole, type PlatformRole } from "../nav-config";
 import { goToMarketingSite, platformLogout } from "../platform-session";
 import { useSelectedCompany } from "../selected-company";
 import { MessengerWidget } from "./MessengerWidget";
+import { ChallengeWidget } from "./ChallengeWidget";
 
 const API_URL = import.meta.env.VITE_API_URL || "";
 
@@ -165,6 +166,7 @@ export function CwpPlatformShell({ role, userLabel = "User", children }: Props) 
         <main className="px-4 py-6 md:px-8 md:py-8">{children}</main>
       </div>
 
+      {role === "EMPLOYEE" && <ChallengeWidget />}
       <MessengerWidget />
     </div>
   );

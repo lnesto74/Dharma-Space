@@ -10,6 +10,7 @@ import {
   GraduationCap,
   Home,
   Shield,
+  Swords,
   User,
   Users
 } from "lucide-react";
@@ -39,6 +40,7 @@ const NAV_BY_ROLE: Record<PlatformRole, PlatformNavItem[]> = {
     { label: "Upcoming Events", to: "/app/events", icon: CalendarDays },
     { label: "My Bookings", to: "/app/bookings", icon: BookOpen },
     { label: "My Statistics", to: "/app/statistics", icon: Gauge },
+    { label: "Buddy Challenge", to: "/app/buddy-challenge", icon: Swords },
     { label: "Certificates", to: "/app/certificates", icon: Award },
     { label: "Profile", to: "/app/profile", icon: User }
   ],

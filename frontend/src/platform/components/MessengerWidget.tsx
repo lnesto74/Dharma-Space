@@ -1,6 +1,7 @@
 import { FormEvent, useCallback, useEffect, useRef, useState } from "react";
 import { ChevronLeft, MessageCircle, Plus, Send, X } from "lucide-react";
 import { UserAvatar } from "./UserAvatar";
+import { playMessageSound } from "../sounds";
 
 const API_URL = import.meta.env.VITE_API_URL || "";
 
@@ -99,6 +100,15 @@ export function MessengerWidget() {
     const id = window.setInterval(loadUnread, 12000);
     return () => window.clearInterval(id);
   }, [loadUnread]);
+
+  // Standard chime whenever the unread count rises (after the first load).
+  const prevUnreadRef = useRef<number | null>(null);
+  useEffect(() => {
+    if (prevUnreadRef.current !== null && unread > prevUnreadRef.current) {
+      playMessageSound();
+    }
+    prevUnreadRef.current = unread;
+  }, [unread]);
 
   // Refresh thread list while the list is visible.
   useEffect(() => {

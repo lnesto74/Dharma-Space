@@ -15,10 +15,10 @@ export function EmployeeJourneyHero({ stats }: Props) {
 
   return (
     <div className={`cwp-archetype-card overflow-hidden rounded-[2rem] p-5 md:p-6 ${meta.tone}`}>
-      <div className="grid gap-6 lg:grid-cols-[minmax(180px,220px)_1fr] lg:items-center">
-        <div className="grid place-items-center rounded-[1.75rem] bg-white/75 p-4 shadow-inner">
+      <div className="grid gap-6 lg:grid-cols-[minmax(180px,220px)_1fr] lg:items-start">
+        <div className="flex min-h-[160px] items-start justify-start rounded-[1.75rem] bg-white/75 p-4 shadow-inner">
           {imageSrc ? (
-            <WellnessBadgeImage src={imageSrc} alt={level.title} size="lg" />
+            <WellnessBadgeImage src={imageSrc} alt={level.title} size="lg" className="!mx-0 origin-top-left object-left-top md:scale-110" />
           ) : (
             <span className="text-6xl">{level.emoji}</span>
           )}

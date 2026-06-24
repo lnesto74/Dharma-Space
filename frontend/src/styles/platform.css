@@ -50,7 +50,7 @@
   --cwp-stat-11: var(--cwp-rose);
 
   /* Statistics section base */
-  --cwp-stat-deep: var(--cwp-olive);
+  --cwp-stat-deep: #324035;
   --cwp-stat-cream: color-mix(in srgb, var(--cwp-sand) 45%, white);
 }
 
@@ -288,23 +288,26 @@
 }
 
 .cwp-stat-metric {
+  position: relative;
   border-radius: 1.5rem;
-  padding: 1rem 1.1rem;
+  padding: 1.1rem 1.2rem;
   min-height: 7.5rem;
+  border: 1px solid rgba(50, 64, 53, 0.1);
+  box-shadow: 0 6px 18px rgba(74, 95, 77, 0.1);
 }
 
-.cwp-stat-metric--0 { background: color-mix(in srgb, var(--cwp-stat-0) 22%, var(--cwp-stat-cream)); }
-.cwp-stat-metric--1 { background: color-mix(in srgb, var(--cwp-stat-1) 30%, var(--cwp-stat-cream)); }
-.cwp-stat-metric--2 { background: color-mix(in srgb, var(--cwp-stat-2) 38%, var(--cwp-stat-cream)); }
-.cwp-stat-metric--3 { background: color-mix(in srgb, var(--cwp-stat-3) 32%, var(--cwp-stat-cream)); }
-.cwp-stat-metric--4 { background: color-mix(in srgb, var(--cwp-stat-4) 38%, var(--cwp-stat-cream)); }
-.cwp-stat-metric--5 { background: color-mix(in srgb, var(--cwp-stat-5) 28%, var(--cwp-stat-cream)); }
-.cwp-stat-metric--6 { background: color-mix(in srgb, var(--cwp-stat-6) 22%, var(--cwp-stat-cream)); }
-.cwp-stat-metric--7 { background: color-mix(in srgb, var(--cwp-stat-7) 28%, var(--cwp-stat-cream)); }
-.cwp-stat-metric--8 { background: color-mix(in srgb, var(--cwp-stat-8) 35%, var(--cwp-stat-cream)); }
-.cwp-stat-metric--9 { background: color-mix(in srgb, var(--cwp-stat-9) 26%, var(--cwp-stat-cream)); }
-.cwp-stat-metric--10 { background: color-mix(in srgb, var(--cwp-stat-10) 24%, var(--cwp-stat-cream)); }
-.cwp-stat-metric--11 { background: color-mix(in srgb, var(--cwp-stat-11) 30%, var(--cwp-stat-cream)); }
+.cwp-stat-metric--0 { background: color-mix(in srgb, var(--cwp-stat-0) 42%, var(--cwp-stat-cream)); }
+.cwp-stat-metric--1 { background: color-mix(in srgb, var(--cwp-stat-1) 52%, var(--cwp-stat-cream)); }
+.cwp-stat-metric--2 { background: color-mix(in srgb, var(--cwp-stat-2) 58%, var(--cwp-stat-cream)); }
+.cwp-stat-metric--3 { background: color-mix(in srgb, var(--cwp-stat-3) 54%, var(--cwp-stat-cream)); }
+.cwp-stat-metric--4 { background: color-mix(in srgb, var(--cwp-stat-4) 60%, var(--cwp-stat-cream)); }
+.cwp-stat-metric--5 { background: color-mix(in srgb, var(--cwp-stat-5) 46%, var(--cwp-stat-cream)); }
+.cwp-stat-metric--6 { background: color-mix(in srgb, var(--cwp-stat-6) 40%, var(--cwp-stat-cream)); }
+.cwp-stat-metric--7 { background: color-mix(in srgb, var(--cwp-stat-7) 46%, var(--cwp-stat-cream)); }
+.cwp-stat-metric--8 { background: color-mix(in srgb, var(--cwp-stat-8) 54%, var(--cwp-stat-cream)); }
+.cwp-stat-metric--9 { background: color-mix(in srgb, var(--cwp-stat-9) 44%, var(--cwp-stat-cream)); }
+.cwp-stat-metric--10 { background: color-mix(in srgb, var(--cwp-stat-10) 42%, var(--cwp-stat-cream)); }
+.cwp-stat-metric--11 { background: color-mix(in srgb, var(--cwp-stat-11) 50%, var(--cwp-stat-cream)); }
 
 .cwp-stat-icon {
   background: color-mix(in srgb, var(--cwp-stat-cream) 65%, white);

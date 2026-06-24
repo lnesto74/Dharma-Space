@@ -6,6 +6,15 @@ import { CwpPlatformShell } from "./components/CwpPlatformShell";
 import { ProfileAvatar } from "./components/ProfileAvatar";
 import { navForRole } from "./nav-config";
 import { useSelectedCompany } from "./selected-company";
+import {
+  buddyColleagues,
+  buddyChallengeTypes,
+  buddyChallengeTypeMap,
+  formatSeconds,
+  pointsForTarget
+} from "./challenge-types";
+import { ChallengeProvider, useChallenges } from "./challenge-store";
+import { DuelCard } from "./components/DuelCard";
 import { getMarketingSiteUrl } from "../lib/education";
 import { platformLogout } from "./platform-session";
 import { Link, Navigate, Route, Routes, useLocation, useNavigate, useParams } from "react-router-dom";
@@ -23,6 +32,7 @@ import {
   ChevronRight,
   CircleDollarSign,
   Crown,
+  Flame,
   Gauge,
   GraduationCap,
   HeartPulse,
@@ -33,10 +43,12 @@ import {
   Mail,
   Menu,
   Moon,
+  Plus,
   Search,
   Settings,
   Shield,
   Sparkles,
+  Swords,
   Trophy,
   User,
   Users,
@@ -444,6 +456,41 @@ const employeeStats = [
   { label: "Team building activities", value: 2 }
 ];
 
+// Demo "journey over time" data so employees can see their improvement.
+const journeyAttendance = [
+  { month: "Jan", attendance: 38 },
+  { month: "Feb", attendance: 47 },
+  { month: "Mar", attendance: 58 },
+  { month: "Apr", attendance: 66 },
+  { month: "May", attendance: 78 },
+  { month: "Jun", attendance: 86 }
+];
+
+const journeyPoints = [
+  { month: "Jan", points: 320 },
+  { month: "Feb", points: 540 },
+  { month: "Mar", points: 910 },
+  { month: "Apr", points: 1480 },
+  { month: "May", points: 2010 },
+  { month: "Jun", points: 2500 }
+];
+
+const journeyActivityMix = [
+  { name: "Yoga", value: 9 },
+  { name: "Wellness talks", value: 6 },
+  { name: "Meditation", value: 5 },
+  { name: "Breath work", value: 4 },
+  { name: "Team building", value: 2 }
+];
+
+const JOURNEY_MIX_COLORS = [
+  "var(--cwp-olive)",
+  "var(--cwp-terracotta)",
+  "var(--cwp-seafoam)",
+  "var(--cwp-yellow)",
+  "var(--cwp-periwinkle)"
+];
+
 const attendanceHistory = [
   { event: "Morning Coherence Breathwork", coach: "Talia Trainer", date: "May 10, 09:30", attended: "Maya, Ava, Theo, Priya" },
   { event: "Desk Yoga Reset", coach: "Amara Wells", date: "May 11, 12:00", attended: "Maya, Noah, Lina, Iris" },
@@ -815,7 +862,16 @@ function ReflectionCameraCard() {
   );
 }
 
+const BASE_EMPLOYEE_SCORE = 2500;
+
 function StatsGrid({ corporate = false }: { corporate?: boolean }) {
+  const { points: challengePoints } = useChallenges();
+  // Buddy Challenge winnings roll into the personal Score stat.
+  const personalStats = employeeStats.map((item) =>
+    item.label === "Score"
+      ? { label: "Score", value: `${(BASE_EMPLOYEE_SCORE + challengePoints).toLocaleString()} points` }
+      : item
+  );
   const data = corporate
     ? [
       { label: "Wellness improvement", value: "+18%" },
@@ -824,7 +880,7 @@ function StatsGrid({ corporate = false }: { corporate?: boolean }) {
       { label: "Active employees", value: "214" },
       ...employeeStats.slice(2)
     ]
-    : employeeStats;
+    : personalStats;
   return (
     <section className="cwp-stats-section">
       <div className="mb-5 flex items-center justify-between gap-4">
@@ -843,11 +899,311 @@ function StatsGrid({ corporate = false }: { corporate?: boolean }) {
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         {data.map((item, index) => (
           <div key={item.label} className={`cwp-stat-metric cwp-stat-metric--${index % 12}`}>
-            <p className="text-sm font-medium leading-5 text-[var(--cwp-stat-deep)]">{item.label}</p>
-            <p className="mt-4 text-3xl font-light text-[var(--cwp-stat-deep)]">{item.value}</p>
+            <p className="text-[11px] font-semibold uppercase leading-5 tracking-[0.14em] text-[var(--cwp-stat-deep)]/75">{item.label}</p>
+            <p className="mt-3 text-3xl font-bold tracking-tight text-[var(--cwp-stat-deep)]">{item.value}</p>
           </div>
         ))}
       </div>
+    </section>
+  );
+}
+
+function BuddyInitials({ name, color = "var(--cwp-olive)" }: { name: string; color?: string }) {
+  const initials = name === "You"
+    ? "Me"
+    : name.split(" ").map((p) => p[0]).slice(0, 2).join("").toUpperCase();
+  return (
+    <span className="grid h-9 w-9 shrink-0 place-items-center rounded-full text-xs font-bold text-white" style={{ background: color }}>
+      {initials}
+    </span>
+  );
+}
+
+function BuddyChallenge() {
+  const { duels, points, createDuel } = useChallenges();
+  const [buddy, setBuddy] = useState("");
+  const [typeId, setTypeId] = useState("squats");
+  const [target, setTarget] = useState(20);
+  const [witnesses, setWitnesses] = useState<string[]>([]);
+  const [showAllBuddies, setShowAllBuddies] = useState(false);
+  const [toast, setToast] = useState("");
+
+  const BUDDY_PREVIEW = 6;
+  const visibleBuddies = showAllBuddies ? buddyColleagues : buddyColleagues.slice(0, BUDDY_PREVIEW);
+
+  const activeType = buddyChallengeTypeMap[typeId];
+  const canSubmit = Boolean(buddy) && target > 0 && witnesses.length === 3;
+  const nameOf = (id: string) => buddyColleagues.find((c) => c.id === id)?.name || "";
+
+  const pickType = (id: string) => {
+    setTypeId(id);
+    setTarget(buddyChallengeTypeMap[id].defaultTarget);
+  };
+
+  const toggleWitness = (id: string) => {
+    setWitnesses((prev) => {
+      if (prev.includes(id)) return prev.filter((w) => w !== id);
+      if (prev.length >= 3) return prev;
+      return [...prev, id];
+    });
+  };
+
+  const sendChallenge = () => {
+    if (!canSubmit) return;
+    const opponentName = nameOf(buddy);
+    createDuel({
+      opponentId: buddy,
+      opponentName,
+      typeId,
+      target,
+      witnesses: witnesses.map((id) => ({ id, name: nameOf(id) }))
+    });
+    setToast(`Challenge sent to ${opponentName}! Awaiting their reply and 3 witnesses.`);
+    setBuddy("");
+    setWitnesses([]);
+    pickType("squats");
+    window.setTimeout(() => setToast(""), 3200);
+  };
+
+  const availableWitnesses = buddyColleagues.filter((c) => c.id !== buddy);
+  const stepSize = activeType.unit === "seconds" ? 5 : 1;
+
+  return (
+    <div className="grid gap-5">
+      {toast && (
+        <div className="rounded-4xl bg-[color-mix(in_srgb,var(--cwp-seafoam)_30%,white)] px-5 py-3 text-sm font-medium text-navy shadow-sm">
+          {toast}
+        </div>
+      )}
+
+      {/* Concept + points banner */}
+      <Card className="flex flex-wrap items-center justify-between gap-4">
+        <div className="flex items-center gap-4">
+          <span className="grid h-12 w-12 place-items-center rounded-full bg-[var(--cwp-olive)] text-white">
+            <Swords size={22} />
+          </span>
+          <div>
+            <h2 className="text-2xl font-light text-navy">Challenge a Buddy</h2>
+            <p className="text-sm text-stone">Quick physical breaks, verified by 3 witnesses. Move together, earn together.</p>
+          </div>
+        </div>
+        <div className="flex items-center gap-2 rounded-full bg-[color-mix(in_srgb,var(--cwp-yellow)_38%,white)] px-5 py-3">
+          <Flame size={18} className="text-[var(--cwp-terracotta)]" />
+          <span className="text-2xl font-bold text-navy">{points.toLocaleString()}</span>
+          <span className="text-xs font-semibold uppercase tracking-[0.14em] text-stone">points earned</span>
+        </div>
+      </Card>
+
+      <div className="grid gap-5 xl:grid-cols-[1fr_1fr]">
+        {/* Create challenge */}
+        <Card>
+          <ChartTitle title="New challenge" />
+
+          <p className="mb-2 text-xs font-semibold uppercase tracking-[0.16em] text-stone">1 · Choose your buddy</p>
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+            {visibleBuddies.map((c) => (
+              <button
+                key={c.id}
+                type="button"
+                onClick={() => { setBuddy(c.id); setWitnesses((w) => w.filter((id) => id !== c.id)); }}
+                className={`flex items-center gap-2 rounded-4xl border px-3 py-2 text-left text-sm transition-colors ${
+                  buddy === c.id ? "border-[var(--cwp-olive)] bg-[color-mix(in_srgb,var(--cwp-olive)_16%,white)]" : "border-transparent bg-white/70 hover:bg-white"
+                }`}
+              >
+                <BuddyInitials name={c.name} color="var(--cwp-slate)" />
+                <span className="min-w-0">
+                  <span className="block truncate font-medium text-navy">{c.name.split(" ")[0]}</span>
+                  <span className="block truncate text-xs text-stone">{c.department}</span>
+                </span>
+              </button>
+            ))}
+          </div>
+          {buddyColleagues.length > BUDDY_PREVIEW && (
+            <button
+              type="button"
+              onClick={() => setShowAllBuddies((v) => !v)}
+              className="mb-5 mt-2 rounded-full bg-white/70 px-4 py-1.5 text-xs font-semibold text-navy hover:bg-white"
+            >
+              {showAllBuddies ? "Show less" : `More (${buddyColleagues.length - BUDDY_PREVIEW})`}
+            </button>
+          )}
+          {buddyColleagues.length <= BUDDY_PREVIEW && <div className="mb-5" />}
+
+          <p className="mb-2 text-xs font-semibold uppercase tracking-[0.16em] text-stone">2 · Pick the exercise</p>
+          <div className="mb-4 grid grid-cols-2 gap-2 sm:grid-cols-4">
+            {buddyChallengeTypes.map((t) => (
+              <button
+                key={t.id}
+                type="button"
+                onClick={() => pickType(t.id)}
+                className={`flex flex-col items-center gap-1 rounded-4xl border px-2 py-3 transition-colors ${
+                  typeId === t.id ? "border-[var(--cwp-olive)] bg-[color-mix(in_srgb,var(--cwp-olive)_16%,white)]" : "border-transparent bg-white/70 hover:bg-white"
+                }`}
+              >
+                <img src={t.icon} alt="" className="h-12 w-12 object-contain" />
+                <span className="text-sm font-medium text-navy">{t.label}</span>
+                <span className="text-[11px] font-semibold text-[var(--cwp-olive)]">+{t.points} pts</span>
+              </button>
+            ))}
+          </div>
+
+          <p className="mb-2 text-xs font-semibold uppercase tracking-[0.16em] text-stone">
+            3 · Target {activeType.unit === "seconds" ? "(time)" : "(reps)"}
+          </p>
+          <div className="mb-5 flex items-center gap-3">
+            <button type="button" onClick={() => setTarget((n) => Math.max(stepSize, n - stepSize))} className="grid h-10 w-10 place-items-center rounded-full bg-white/70 text-xl font-semibold text-navy hover:bg-white">−</button>
+            <div className="flex min-w-[8rem] items-baseline justify-center gap-2 rounded-4xl bg-white/70 px-5 py-2">
+              {activeType.unit === "seconds" ? (
+                <span className="text-2xl font-bold text-navy">{formatSeconds(target)}</span>
+              ) : (
+                <>
+                  <span className="text-3xl font-bold text-navy">{target}</span>
+                  <span className="text-sm text-stone">reps</span>
+                </>
+              )}
+            </div>
+            <button type="button" onClick={() => setTarget((n) => n + stepSize)} className="grid h-10 w-10 place-items-center rounded-full bg-white/70 text-xl font-semibold text-navy hover:bg-white">+</button>
+          </div>
+          <p className="-mt-3 mb-5 text-xs text-stone">
+            Worth <span className="font-semibold text-[var(--cwp-olive)]">+{pointsForTarget(typeId, target)} pts</span>
+            {" "}— or <span className="font-semibold text-[var(--cwp-olive)]">+{pointsForTarget(typeId, target) * 2} pts</span> each if you both finish. Push harder to earn more.
+          </p>
+
+          <p className="mb-2 text-xs font-semibold uppercase tracking-[0.16em] text-stone">
+            4 · Choose 3 witnesses <span className="text-[var(--cwp-olive)]">({witnesses.length}/3)</span>
+          </p>
+          <div className="mb-5 flex flex-wrap gap-2">
+            {availableWitnesses.map((c) => {
+              const selected = witnesses.includes(c.id);
+              const disabled = !selected && witnesses.length >= 3;
+              return (
+                <button
+                  key={c.id}
+                  type="button"
+                  onClick={() => toggleWitness(c.id)}
+                  disabled={disabled}
+                  className={`rounded-full px-3 py-1.5 text-sm transition-colors ${
+                    selected
+                      ? "bg-[var(--cwp-olive)] text-white"
+                      : disabled
+                        ? "cursor-not-allowed bg-white/50 text-stone/50"
+                        : "bg-white/70 text-navy hover:bg-white"
+                  }`}
+                >
+                  {c.name.split(" ")[0]}
+                </button>
+              );
+            })}
+          </div>
+
+          <button
+            type="button"
+            onClick={sendChallenge}
+            disabled={!canSubmit}
+            className="flex w-full items-center justify-center gap-2 rounded-full bg-[var(--cwp-olive)] px-6 py-3 text-sm font-semibold uppercase tracking-[0.14em] text-white transition-opacity disabled:opacity-40"
+          >
+            <Plus size={16} /> Send challenge
+          </button>
+        </Card>
+
+        {/* Active challenges */}
+        <Card>
+          <ChartTitle title="Active & completed" />
+          <div className="grid gap-3">
+            {duels.length === 0 && <p className="text-sm text-stone">No challenges yet — send your first one!</p>}
+            {duels.map((duel) => (
+              <DuelCard key={duel.id} duel={duel} />
+            ))}
+          </div>
+        </Card>
+      </div>
+    </div>
+  );
+}
+
+function JourneyProgress() {
+  const pointsGain = journeyPoints[journeyPoints.length - 1].points - journeyPoints[0].points;
+  const attendanceGain = journeyAttendance[journeyAttendance.length - 1].attendance - journeyAttendance[0].attendance;
+  return (
+    <section className="mt-6">
+      <div className="mb-4 flex flex-wrap items-end justify-between gap-3">
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-[0.22em] text-stone">Progress over time</p>
+          <h2 className="mt-1 text-2xl font-light text-navy">My journey progress</h2>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <span className="rounded-full bg-[color-mix(in_srgb,var(--cwp-seafoam)_30%,white)] px-4 py-2 text-sm font-semibold text-navy">
+            +{attendanceGain}% attendance
+          </span>
+          <span className="rounded-full bg-[color-mix(in_srgb,var(--cwp-yellow)_38%,white)] px-4 py-2 text-sm font-semibold text-navy">
+            +{pointsGain.toLocaleString()} points
+          </span>
+        </div>
+      </div>
+      <div className="grid gap-5 xl:grid-cols-2">
+        <Card>
+          <ChartTitle title="Attendance growth" />
+          <div className="h-72">
+            <ResponsiveContainer width="100%" height="100%">
+              <AreaChart data={journeyAttendance} margin={{ top: 8, right: 12, bottom: 0, left: -16 }}>
+                <defs>
+                  <linearGradient id="journeyAttendanceFill" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor="var(--cwp-seafoam)" stopOpacity={0.55} />
+                    <stop offset="100%" stopColor="var(--cwp-seafoam)" stopOpacity={0.05} />
+                  </linearGradient>
+                </defs>
+                <CartesianGrid strokeDasharray="3 3" stroke="var(--cwp-border)" />
+                <XAxis dataKey="month" tick={{ fill: "var(--cwp-charcoal)", fontSize: 12 }} />
+                <YAxis domain={[0, 100]} tick={{ fill: "var(--cwp-charcoal)", fontSize: 12 }} unit="%" />
+                <Tooltip formatter={(value: number) => [`${value}%`, "Attendance"]} />
+                <Area dataKey="attendance" stroke="var(--cwp-olive)" strokeWidth={2.5} fill="url(#journeyAttendanceFill)" />
+              </AreaChart>
+            </ResponsiveContainer>
+          </div>
+        </Card>
+        <Card>
+          <ChartTitle title="Wellness points earned" />
+          <div className="h-72">
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={journeyPoints} margin={{ top: 8, right: 12, bottom: 0, left: -8 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="var(--cwp-border)" />
+                <XAxis dataKey="month" tick={{ fill: "var(--cwp-charcoal)", fontSize: 12 }} />
+                <YAxis tick={{ fill: "var(--cwp-charcoal)", fontSize: 12 }} />
+                <Tooltip formatter={(value: number) => [value.toLocaleString(), "Points"]} />
+                <Bar dataKey="points" fill="var(--cwp-olive)" radius={[12, 12, 0, 0]} />
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+        </Card>
+      </div>
+      <Card className="mt-5">
+        <ChartTitle title="Activity mix" />
+        <div className="grid items-center gap-4 md:grid-cols-[1fr_1fr]">
+          <div className="h-72">
+            <ResponsiveContainer width="100%" height="100%">
+              <PieChart>
+                <Pie data={journeyActivityMix} dataKey="value" nameKey="name" innerRadius={64} outerRadius={108} paddingAngle={2}>
+                  {journeyActivityMix.map((_entry, index) => (
+                    <Cell key={index} fill={JOURNEY_MIX_COLORS[index % JOURNEY_MIX_COLORS.length]} />
+                  ))}
+                </Pie>
+                <Tooltip formatter={(value: number, name) => [`${value} sessions`, name as string]} />
+              </PieChart>
+            </ResponsiveContainer>
+          </div>
+          <div className="grid gap-2">
+            {journeyActivityMix.map((item, index) => (
+              <div key={item.name} className="flex items-center justify-between rounded-4xl bg-white/70 px-4 py-3">
+                <span className="flex items-center gap-3 text-sm font-medium text-navy">
+                  <span className="h-3 w-3 rounded-full" style={{ background: JOURNEY_MIX_COLORS[index % JOURNEY_MIX_COLORS.length] }} />
+                  {item.name}
+                </span>
+                <span className="text-sm font-semibold text-navy">{item.value}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      </Card>
     </section>
   );
 }
@@ -873,10 +1229,10 @@ function WellnessArchetypeCard({ attendance = 82 }: { attendance?: number }) {
   const archetype = wellnessArchetypes.find((level) => attendance >= level.min && attendance <= level.max) || wellnessArchetypes[0];
   return (
     <div className={`cwp-archetype-card overflow-hidden rounded-[2rem] p-5 ${archetype.tone}`}>
-      <div className="grid gap-6 lg:grid-cols-[220px_1fr] lg:items-center">
-        <div className="grid place-items-center rounded-[1.75rem] bg-white/70 p-4 shadow-inner">
+      <div className="grid gap-6 lg:grid-cols-[220px_1fr] lg:items-start">
+        <div className="flex min-h-[180px] items-start justify-start rounded-[1.75rem] bg-white/70 p-4 shadow-inner">
           {"image" in archetype ? (
-            <img src={archetype.image} alt={archetype.title} className="h-44 w-44 object-contain" />
+            <img src={archetype.image} alt={archetype.title} className="h-44 w-44 origin-top-left object-contain object-left-top" />
           ) : (
             <div className="text-6xl">{archetype.emoji}</div>
           )}
@@ -2087,7 +2443,20 @@ function EmployeeBookingsPage({ auth }: { auth: ReturnType<typeof useAuth> }) {
 }
 
 function EmployeeStatisticsPage({ auth }: { auth: ReturnType<typeof useAuth> }) {
-  return <AppLayout auth={auth} title="My Statistics" subtitle="Your personal wellness activity points and attendance progress."><StatsGrid /></AppLayout>;
+  return (
+    <AppLayout auth={auth} title="My Statistics" subtitle="Your personal wellness activity points and attendance progress.">
+      <StatsGrid />
+      <JourneyProgress />
+    </AppLayout>
+  );
+}
+
+function BuddyChallengePage({ auth }: { auth: ReturnType<typeof useAuth> }) {
+  return (
+    <AppLayout auth={auth} title="Challenge a Buddy" subtitle="Challenge a colleague to a quick exercise, verified by 3 witnesses, and earn points.">
+      <BuddyChallenge />
+    </AppLayout>
+  );
 }
 
 function trainerAttendanceSummary() {
@@ -2331,6 +2700,7 @@ export default function PlatformApp() {
   const trainer = ["TRAINER", "SUPER_ADMIN"] as Role[];
 
   return (
+    <ChallengeProvider>
     <Shell auth={auth}>
       <Routes>
         <Route path="/login" element={<Login auth={auth} />} />
@@ -2342,6 +2712,7 @@ export default function PlatformApp() {
         <Route path="/app/events" element={<Protected auth={auth} roles={employee}><EmployeeEventsPage auth={auth} /></Protected>} />
         <Route path="/app/bookings" element={<Protected auth={auth} roles={employee}><EmployeeBookingsPage auth={auth} /></Protected>} />
         <Route path="/app/statistics" element={<Protected auth={auth} roles={employee}><EmployeeStatisticsPage auth={auth} /></Protected>} />
+        <Route path="/app/buddy-challenge" element={<Protected auth={auth} roles={employee}><BuddyChallengePage auth={auth} /></Protected>} />
         <Route path="/app/certificates" element={<Protected auth={auth} roles={employee}><CertificatesPage auth={auth} /></Protected>} />
         <Route path="/app/profile" element={<Protected auth={auth} roles={employee}><EmployeeProfilePage auth={auth} /></Protected>} />
         <Route path="/app/courses" element={<Navigate to="/app/events" replace />} />
@@ -2362,6 +2733,7 @@ export default function PlatformApp() {
         <Route path="*" element={<Navigate to={auth.user ? (auth.user.homePath || "/app/dashboard") : "/"} replace />} />
       </Routes>
     </Shell>
+    </ChallengeProvider>
   );
 }
 
