@@ -29,6 +29,8 @@ const courses = [
 ];
 
 async function main() {
+  await prisma.duelWitness.deleteMany();
+  await prisma.duel.deleteMany();
   await prisma.message.deleteMany();
   await prisma.conversationParticipant.deleteMany();
   await prisma.conversation.deleteMany();
@@ -114,6 +116,29 @@ async function main() {
     )
   );
   const learners = [demoUsers[0], ...employees];
+
+  // Demo "Challenge a Buddy" duel between Asteria colleagues so the feature isn't empty.
+  // Maya (employee@demo.com) is in company[0]; employees at indexes 0/5/10/15/20 share it.
+  const asteriaCrew = employees.filter((_, i) => i % companies.length === 0);
+  if (asteriaCrew.length >= 4) {
+    await prisma.duel.create({
+      data: {
+        companyId: companies[0].id,
+        challengerId: demoUsers[0].id,
+        opponentId: asteriaCrew[0].id,
+        typeId: "squats",
+        target: 25,
+        status: "active",
+        witnesses: {
+          create: [
+            { userId: asteriaCrew[1].id, response: "accepted" },
+            { userId: asteriaCrew[2].id, response: "accepted" },
+            { userId: asteriaCrew[3].id, response: "pending" }
+          ]
+        }
+      }
+    });
+  }
 
   const createdCourses = [];
   for (const [index, course] of courses.entries()) {
