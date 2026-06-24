@@ -160,6 +160,14 @@ function Nav({
   const [openMenu, setOpenMenu] = useState<null | "corporate" | "education" | "events">(null);
   const [adminOpen, setAdminOpen] = useState(false);
   const [isAdmin, setIsAdmin] = useState(false);
+  const headerRef = useRef<HTMLElement | null>(null);
+
+  const closeMobileMenu = () => {
+    setMenuOpen(false);
+    setMobileCorporateOpen(false);
+    setMobileEducationOpen(false);
+    setMobileEventsOpen(false);
+  };
 
   useEffect(() => {
     const handler = () => setScrolled(window.scrollY > 40);
@@ -183,6 +191,23 @@ function Nav({
       document.removeEventListener("keydown", onKey);
     };
   }, [openMenu]);
+
+  useEffect(() => {
+    if (!menuOpen) return;
+    const onPointerDown = (e: PointerEvent) => {
+      const target = e.target as Node | null;
+      if (target && headerRef.current && !headerRef.current.contains(target)) closeMobileMenu();
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") closeMobileMenu();
+    };
+    document.addEventListener("pointerdown", onPointerDown);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("pointerdown", onPointerDown);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [menuOpen]);
 
   useEffect(() => {
     const stored = localStorage.getItem("hsos_user");
@@ -251,6 +276,7 @@ function Nav({
 
   return (
     <header
+      ref={headerRef}
       className={`fixed top-0 left-0 right-0 z-50 overflow-visible transition-all duration-500 ${scrolled ? "bg-[#FAF8F3]/95 backdrop-blur-md shadow-sm" : "bg-[#FAF8F3]/95 backdrop-blur-md"}`}
     >
       <div className="max-w-7xl mx-auto px-6 lg:px-12 h-20 flex items-center justify-between overflow-visible">
@@ -294,6 +320,14 @@ function Nav({
             {openMenu === "corporate" && (
               <div className="absolute left-1/2 top-full z-[100] w-[240px] -translate-x-1/2 pt-2">
                 <div className="border border-[#2A2825]/10 bg-[#FAF8F3] py-2 shadow-xl">
+                  <button
+                    type="button"
+                    onClick={() => nav("corporate")}
+                    className="block w-full px-5 py-2.5 text-left text-[12px] tracking-[0.08em] uppercase text-[#2A2825]/75 transition-colors hover:bg-[#F2EBE0] hover:text-[#C4785A]"
+                    style={{ fontFamily: "var(--font-body)" }}
+                  >
+                    Corporate Wellness
+                  </button>
                   <a
                     href={CORPORATE_PORTAL_URL}
                     onClick={(e) => { e.preventDefault(); goCorporatePortal(); }}
@@ -424,7 +458,7 @@ function Nav({
           >
             Contact Us
           </button>
-          <button onClick={() => setMenuOpen(!menuOpen)} className="md:hidden text-[#2A2825] p-1">
+          <button onClick={() => (menuOpen ? closeMobileMenu() : setMenuOpen(true))} className="md:hidden text-[#2A2825] p-1" aria-label="Toggle menu" aria-expanded={menuOpen}>
             {menuOpen ? <X size={22} /> : <Menu size={22} />}
           </button>
         </div>
@@ -459,6 +493,14 @@ function Nav({
             </div>
             {mobileCorporateOpen && (
               <div className="mt-3 flex flex-col gap-3 border-l border-[#C4785A]/30 pl-4">
+                <button
+                  type="button"
+                  onClick={() => nav("corporate")}
+                  className="text-left text-[13px] tracking-[0.08em] uppercase text-[#2A2825]/65 hover:text-[#C4785A]"
+                  style={{ fontFamily: "var(--font-body)" }}
+                >
+                  Corporate Wellness
+                </button>
                 <a
                   href={CORPORATE_PORTAL_URL}
                   onClick={(e) => { e.preventDefault(); goCorporatePortal(); }}
