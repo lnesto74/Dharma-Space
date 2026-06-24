@@ -1,4 +1,4 @@
-import { FormEvent, ReactNode, useEffect, useMemo, useRef, useState } from "react";
+import { FormEvent, ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { CwpEmployeeDashboard } from "./app/CwpEmployeeDashboard";
 import { MedalRank } from "./components/wellness/MedalRank";
 import { CwpAppLayout } from "./components/CwpAppLayout";
@@ -15,6 +15,17 @@ import {
 } from "./challenge-types";
 import { ChallengeProvider, useChallenges } from "./challenge-store";
 import { DuelCard } from "./components/DuelCard";
+import { EventCard } from "./components/wellness/EventCard";
+import { LocationBadge } from "./components/wellness/LocationBadge";
+import { WellnessIcon } from "./components/wellness/wellness-icons";
+import {
+  bookWellnessEvent,
+  cancelWellnessBooking,
+  fetchMyWellnessBookings,
+  fetchWellnessCategories,
+  fetchWellnessEvents
+} from "../lib/wellness-api";
+import type { WellnessBooking, WellnessCategory, WellnessEvent } from "../types/wellness";
 import { getMarketingSiteUrl } from "../lib/education";
 import { platformLogout } from "./platform-session";
 import { Link, Navigate, Route, Routes, useLocation, useNavigate, useParams } from "react-router-dom";
@@ -52,7 +63,8 @@ import {
   Trophy,
   User,
   Users,
-  Wind
+  Wind,
+  XCircle
 } from "lucide-react";
 import {
   Area,
@@ -2435,11 +2447,195 @@ function EmployeeProfilePage({ auth }: { auth: ReturnType<typeof useAuth> }) {
 }
 
 function EmployeeEventsPage({ auth }: { auth: ReturnType<typeof useAuth> }) {
-  return <AppLayout auth={auth} title="Upcoming Events" subtitle="Book or join your next Dharma Space session."><EventList /></AppLayout>;
+  const token = auth.token || "";
+  const [events, setEvents] = useState<WellnessEvent[]>([]);
+  const [bookings, setBookings] = useState<WellnessBooking[]>([]);
+  const [categories, setCategories] = useState<WellnessCategory[]>([]);
+  const [categoryFilter, setCategoryFilter] = useState("");
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const [toast, setToast] = useState("");
+  const [joiningId, setJoiningId] = useState<string | null>(null);
+
+  const bookedEventIds = useMemo(
+    () => new Set(bookings.filter((b) => !b.cancelled).map((b) => b.event.id)),
+    [bookings]
+  );
+
+  const load = useCallback(async () => {
+    if (!token) return;
+    setLoading(true);
+    setError("");
+    try {
+      const [ev, bk, cats] = await Promise.all([
+        fetchWellnessEvents(token, { upcoming: true, categoryId: categoryFilter || undefined }),
+        fetchMyWellnessBookings(token),
+        fetchWellnessCategories(token)
+      ]);
+      setEvents(ev.events);
+      setBookings(bk.bookings);
+      setCategories(cats.categories);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to load events");
+    } finally {
+      setLoading(false);
+    }
+  }, [token, categoryFilter]);
+
+  useEffect(() => {
+    load();
+  }, [load]);
+
+  const showToast = (message: string) => {
+    setToast(message);
+    window.setTimeout(() => setToast(""), 3500);
+  };
+
+  const handleJoin = async (eventId: string) => {
+    setJoiningId(eventId);
+    try {
+      await bookWellnessEvent(token, eventId);
+      showToast("Booking confirmed");
+      await load();
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : "Booking failed");
+    } finally {
+      setJoiningId(null);
+    }
+  };
+
+  return (
+    <AppLayout auth={auth} title="Upcoming Events" subtitle="Book or join your next Dharma Space session.">
+      {toast && <div className="cwp-toast">{toast}</div>}
+      {loading ? (
+        <Loading />
+      ) : error ? (
+        <ErrorState message={error} />
+      ) : (
+        <>
+          <div className="mb-4 flex flex-wrap gap-2">
+            <button
+              type="button"
+              className={`cwp-pill ${!categoryFilter ? "cwp-pill-online" : "cwp-pill-room"}`}
+              onClick={() => setCategoryFilter("")}
+            >
+              All
+            </button>
+            {categories.map((cat) => (
+              <button
+                key={cat.id}
+                type="button"
+                className={`cwp-pill inline-flex items-center gap-1.5 ${categoryFilter === cat.id ? "cwp-pill-online" : "cwp-pill-room"}`}
+                onClick={() => setCategoryFilter(cat.id)}
+              >
+                <WellnessIcon symbol={cat.icon} name={cat.name} size={14} />
+                {cat.name}
+              </button>
+            ))}
+          </div>
+          <div className="grid gap-4 md:grid-cols-2">
+            {events.map((event) => (
+              <EventCard
+                key={event.id}
+                event={event}
+                isBooked={bookedEventIds.has(event.id)}
+                joinLoading={joiningId === event.id}
+                onJoin={() => handleJoin(event.id)}
+              />
+            ))}
+            {events.length === 0 && <p className="text-sm text-stone">No upcoming events — check back soon.</p>}
+          </div>
+        </>
+      )}
+    </AppLayout>
+  );
 }
 
 function EmployeeBookingsPage({ auth }: { auth: ReturnType<typeof useAuth> }) {
-  return <AppLayout auth={auth} title="My Bookings" subtitle="Your confirmed online, meeting room, and Dharma Space bookings."><BookingList /></AppLayout>;
+  const token = auth.token || "";
+  const [bookings, setBookings] = useState<WellnessBooking[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const [toast, setToast] = useState("");
+
+  const load = useCallback(async () => {
+    if (!token) return;
+    setLoading(true);
+    setError("");
+    try {
+      const bk = await fetchMyWellnessBookings(token);
+      setBookings(bk.bookings);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to load bookings");
+    } finally {
+      setLoading(false);
+    }
+  }, [token]);
+
+  useEffect(() => {
+    load();
+  }, [load]);
+
+  const showToast = (message: string) => {
+    setToast(message);
+    window.setTimeout(() => setToast(""), 3500);
+  };
+
+  const handleCancel = async (bookingId: string) => {
+    try {
+      await cancelWellnessBooking(token, bookingId);
+      showToast("Booking cancelled");
+      await load();
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : "Cancel failed");
+    }
+  };
+
+  const active = bookings.filter((b) => !b.cancelled);
+
+  return (
+    <AppLayout auth={auth} title="My Bookings" subtitle="Your confirmed online, meeting room, and Dharma Space bookings.">
+      {toast && <div className="cwp-toast">{toast}</div>}
+      {loading ? (
+        <Loading />
+      ) : error ? (
+        <ErrorState message={error} />
+      ) : (
+        <div className="grid gap-3">
+          {active.length === 0 && <p className="text-sm text-stone">No bookings yet — join an event to get started.</p>}
+          {active.map((booking) => {
+            const past = new Date(booking.event.dateTime) < new Date();
+            return (
+              <Card key={booking.id} className="flex flex-wrap items-center justify-between gap-3">
+                <div>
+                  <p className="font-semibold text-navy">{booking.event.title}</p>
+                  <p className="text-sm text-stone">
+                    {new Date(booking.event.dateTime).toLocaleString()}
+                    {booking.event.trainer ? ` · ${booking.event.trainer.name}` : ""}
+                  </p>
+                  <LocationBadge type={booking.event.locationType} detail={booking.event.locationDetail} />
+                  {past && (
+                    <p className="mt-2 inline-flex items-center gap-1.5 text-xs font-medium text-navy">
+                      {booking.attended ? (
+                        <><CheckCircle2 size={14} strokeWidth={1.75} className="text-[var(--cwp-success)]" /> Attended</>
+                      ) : (
+                        <><XCircle size={14} strokeWidth={1.75} className="text-[var(--cwp-error)]" /> Missed</>
+                      )}
+                    </p>
+                  )}
+                </div>
+                {!past && (
+                  <button type="button" className="rounded-full bg-navy px-5 py-2 text-sm font-semibold text-white" onClick={() => handleCancel(booking.id)}>
+                    Cancel booking
+                  </button>
+                )}
+              </Card>
+            );
+          })}
+        </div>
+      )}
+    </AppLayout>
+  );
 }
 
 function EmployeeStatisticsPage({ auth }: { auth: ReturnType<typeof useAuth> }) {
