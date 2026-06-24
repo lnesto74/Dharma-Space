@@ -73,7 +73,8 @@ export function registerAdminCwpRoutes(
         bookings,
         attendances,
         pendingScheduleRequests,
-        cwpInquiries
+        cwpInquiries,
+        pendingUsers
       ] = await Promise.all([
         prisma.company.count(),
         prisma.user.count({ where: { role: "EMPLOYEE" } }),
@@ -84,7 +85,8 @@ export function registerAdminCwpRoutes(
         prisma.wellnessBooking.count({ where: { cancelled: false } }),
         prisma.wellnessAttendance.count(),
         prisma.scheduleRequest.count({ where: { status: "pending" } }),
-        prisma.formSubmission.count({ where: { type: "CWP_DEMO" } })
+        prisma.formSubmission.count({ where: { type: "CWP_DEMO" } }),
+        prisma.user.count({ where: { accountStatus: "PENDING" } })
       ]);
 
       const recentCompanies = await prisma.company.findMany({
@@ -108,7 +110,8 @@ export function registerAdminCwpRoutes(
           activeBookings: bookings,
           totalAttendances: attendances,
           pendingScheduleRequests,
-          cwpInquiries
+          cwpInquiries,
+          pendingUsers
         },
         recentCompanies: recentCompanies.map(companySummary)
       });
@@ -284,10 +287,12 @@ export function registerAdminCwpRoutes(
     try {
       const companyId = typeof req.query.companyId === "string" ? req.query.companyId : undefined;
       const role = typeof req.query.role === "string" ? req.query.role : undefined;
+      const accountStatus = typeof req.query.accountStatus === "string" ? req.query.accountStatus : undefined;
       const users = await prisma.user.findMany({
         where: {
           ...(companyId ? { companyId } : {}),
-          ...(role ? { role } : {})
+          ...(role ? { role } : {}),
+          ...(accountStatus ? { accountStatus } : {})
         },
         include: { company: true, department: true },
         orderBy: { name: "asc" }
@@ -401,6 +406,7 @@ export function registerAdminCwpRoutes(
           email: body.email,
           passwordHash: await bcrypt.hash(body.password, 12),
           role: body.role,
+          accountStatus: "APPROVED",
           companyId: body.companyId ?? null,
           departmentId: body.departmentId ?? null
         }
@@ -416,7 +422,8 @@ export function registerAdminCwpRoutes(
     role: z.enum(PLATFORM_ROLES).optional(),
     companyId: z.string().nullable().optional(),
     departmentId: z.string().nullable().optional(),
-    password: z.string().min(6).optional()
+    password: z.string().min(6).optional(),
+    accountStatus: z.enum(["PENDING", "APPROVED", "REJECTED"]).optional()
   });
 
   app.patch("/api/admin/cwp/users/:id", auth, superAdmin, async (req, res, next) => {
@@ -427,6 +434,7 @@ export function registerAdminCwpRoutes(
       if (body.role !== undefined) data.role = body.role;
       if (body.companyId !== undefined) data.companyId = body.companyId;
       if (body.departmentId !== undefined) data.departmentId = body.departmentId;
+      if (body.accountStatus !== undefined) data.accountStatus = body.accountStatus;
       if (body.password) data.passwordHash = await bcrypt.hash(body.password, 12);
       const user = await prisma.user.update({ where: { id: req.params.id }, data });
       res.json({ user: sanitizeUser(user) });

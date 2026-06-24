@@ -12,6 +12,7 @@ import { LIVE_SITE_SPECIALISTS, type LiveSpecialist } from "./specialists-from-l
 import { Menu, X, ChevronRight, ChevronLeft, ChevronDown, MapPin, Mail, Phone, Instagram, MessageCircle, Star, Check, Building2, Leaf, Bell, Wind, Compass, Moon, BookOpen, Activity, Lock, LogOut, User } from "lucide-react";
 import { MemberAuthPanel } from "../components/MemberAuthPanel";
 import { MemberAccountModal } from "../components/MemberAccountModal";
+import { GoogleSignIn, GoogleSignInDivider, corporateGoogleSignIn } from "../components/GoogleSignIn";
 import { useMemberAuth } from "../auth/MemberAuthContext";
 import { createMemberBooking, confirmMemberBookingReturn, updateMemberProfile, fetchMemberBookings, memberHasActiveBooking } from "../lib/member-api";
 import { submitInquiry } from "../lib/inquiries";
@@ -2785,6 +2786,22 @@ function AdminLoginModal({ onClose, onSuccess }: { onClose: () => void; onSucces
     }
   };
 
+  const handleGoogle = async (credential: string) => {
+    setSending(true);
+    setError("");
+    try {
+      const data = await corporateGoogleSignIn(credential);
+      if (data.user.role !== "SUPER_ADMIN") throw new Error("Admin access only");
+      localStorage.setItem("hsos_token", data.token);
+      localStorage.setItem("hsos_user", JSON.stringify(data.user));
+      window.location.href = "/admin";
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Login failed");
+    } finally {
+      setSending(false);
+    }
+  };
+
   return (
     <div className="fixed inset-0 z-[110] flex items-center justify-center bg-[#1A1815]/70 backdrop-blur-sm p-6" onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
       <div className="bg-[#FAF8F3] w-full max-w-sm">
@@ -2796,6 +2813,8 @@ function AdminLoginModal({ onClose, onSuccess }: { onClose: () => void; onSucces
           <button type="button" onClick={onClose} className="text-[#2A2825]/40 hover:text-[#2A2825] p-1"><X size={20} /></button>
         </div>
         <form onSubmit={handleSubmit} className="p-6 space-y-4">
+          <GoogleSignIn onCredential={handleGoogle} onError={setError} disabled={sending} />
+          <GoogleSignInDivider />
           <div>
             <label className="block text-[11px] tracking-[0.2em] uppercase text-[#2A2825]/60 mb-2" style={{ fontFamily: "var(--font-body)" }}>Username</label>
             <input

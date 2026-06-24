@@ -1,3 +1,4 @@
+import { randomBytes } from "node:crypto";
 import dotenv from "dotenv";
 import path from "path";
 import { fileURLToPath } from "url";
@@ -20,7 +21,11 @@ import { registerSiteBookingRoutes } from "./site-bookings.js";
 import { sendBookingConfirmedEmails } from "./booking-emails.js";
 import { migrateClassScheduleFields } from "./class-schedule.js";
 import { migrateProgramScheduleFields } from "./program-schedule.js";
-import { verifyGoogleIdToken, isCorporateRole } from "./google-auth.js";
+import { verifyGoogleIdToken, isCorporateRole, corporateDomainAllowed } from "./google-auth.js";
+import {
+  notifyAdminPendingUser,
+  selfSignupDomainRejectedMessage
+} from "./pending-user-notifications.js";
 import { ensureSiteContent } from "../prisma/seed-site.js";
 import {
   isAllowedProxyUrl,
@@ -33,6 +38,7 @@ import { ensureDatabaseSchema } from "./ensure-schema.js";
 import { registerStripeWebhook, stripeStatusPayload } from "./stripe.js";
 import { registerWellnessRoutes } from "./wellness-routes.js";
 import { registerMessagingRoutes } from "./messaging-routes.js";
+import { registerChallengeRoutes } from "./challenge-routes.js";
 import { saveUploadedAvatarFile } from "./avatar-media.js";
 import { registerAdminCwpRoutes } from "./admin-cwp-routes.js";
 
@@ -103,6 +109,14 @@ const roleHome: Record<string, string> = {
 
 function signToken(user: User) {
   return jwt.sign({ sub: user.id, role: user.role }, jwtSecret, { expiresIn: "7d" });
+}
+
+function isAccountApproved(user: User) {
+  return user.accountStatus === "APPROVED" || !user.accountStatus;
+}
+
+function pendingAccountMessage() {
+  return "Your account is awaiting approval. A Dharma Space administrator will assign your access level and notify you when you can sign in.";
 }
 
 function sanitizeUser(user: User) {
@@ -333,7 +347,7 @@ async function ensureSiteAdmin() {
   if (existing) {
     await prisma.user.update({
       where: { email },
-      data: { passwordHash, role: "SUPER_ADMIN" }
+      data: { passwordHash, role: "SUPER_ADMIN", accountStatus: "APPROVED" }
     });
     return;
   }
@@ -343,6 +357,7 @@ async function ensureSiteAdmin() {
       email,
       passwordHash,
       role: "SUPER_ADMIN",
+      accountStatus: "APPROVED",
       avatar: "AD"
     }
   });
@@ -353,24 +368,25 @@ app.post("/api/auth/register", async (req, res, next) => {
     const body = z.object({
       name: z.string().min(2),
       email: z.string().email(),
-      password: z.string().min(8),
-      role: z.string().default("EMPLOYEE")
+      password: z.string().min(8)
     }).parse(req.body);
-    const firstCompany = await prisma.company.findFirst();
-    const firstDepartment = firstCompany
-      ? await prisma.department.findFirst({ where: { companyId: firstCompany.id } })
-      : null;
-    const user = await prisma.user.create({
+    const email = body.email.toLowerCase();
+    const existing = await prisma.user.findUnique({ where: { email } });
+    if (existing) return res.status(409).json({ message: "An account with this email already exists." });
+    if (!corporateDomainAllowed(email)) {
+      return res.status(403).json({ message: selfSignupDomainRejectedMessage() });
+    }
+    await prisma.user.create({
       data: {
         name: body.name,
-        email: body.email.toLowerCase(),
+        email,
         passwordHash: await bcrypt.hash(body.password, 12),
-        role: body.role,
-        companyId: firstCompany?.id,
-        departmentId: firstDepartment?.id
+        role: "EMPLOYEE",
+        accountStatus: "PENDING"
       }
     });
-    res.status(201).json({ token: signToken(user), user: sanitizeUser(user) });
+    await notifyAdminPendingUser({ name: body.name, email, method: "email" });
+    res.status(201).json({ pending: true, message: pendingAccountMessage() });
   } catch (error) {
     next(error);
   }
@@ -389,6 +405,12 @@ app.post("/api/auth/login", async (req, res, next) => {
     const user = await prisma.user.findUnique({ where: { email } });
     if (!user || !(await bcrypt.compare(body.password, user.passwordHash))) {
       return res.status(401).json({ message: "Invalid email or password" });
+    }
+    if (!isAccountApproved(user)) {
+      if (user.accountStatus === "REJECTED") {
+        return res.status(403).json({ message: "This account was not approved. Contact Dharma Space support if you need help." });
+      }
+      return res.status(403).json({ pending: true, message: pendingAccountMessage() });
     }
     res.json({ token: signToken(user), user: sanitizeUser(user) });
   } catch (error) {
@@ -410,8 +432,30 @@ app.post("/api/auth/google", async (req, res, next) => {
     if (!profile.emailVerified) {
       return res.status(401).json({ message: "Google email is not verified" });
     }
-    const user = await prisma.user.findUnique({ where: { email: profile.email } });
-    if (!user || !isCorporateRole(user.role)) {
+    let user = await prisma.user.findUnique({ where: { email: profile.email } });
+    if (!user) {
+      if (!corporateDomainAllowed(profile.email)) {
+        return res.status(403).json({ message: selfSignupDomainRejectedMessage() });
+      }
+      user = await prisma.user.create({
+        data: {
+          name: profile.name,
+          email: profile.email,
+          passwordHash: await bcrypt.hash(randomBytes(32).toString("hex"), 12),
+          role: "EMPLOYEE",
+          accountStatus: "PENDING"
+        }
+      });
+      await notifyAdminPendingUser({ name: profile.name, email: profile.email, method: "google" });
+      return res.status(403).json({ pending: true, message: pendingAccountMessage() });
+    }
+    if (!isAccountApproved(user)) {
+      if (user.accountStatus === "REJECTED") {
+        return res.status(403).json({ message: "This account was not approved. Contact Dharma Space support if you need help." });
+      }
+      return res.status(403).json({ pending: true, message: pendingAccountMessage() });
+    }
+    if (!isCorporateRole(user.role)) {
       return res.status(403).json({
         message: "No corporate workspace account for this Google email. Ask your HR admin to invite you."
       });
@@ -1040,6 +1084,7 @@ async function startServer() {
   registerWellnessRoutes(app, prisma, auth, requireRole, companyUserIds);
   registerAdminCwpRoutes(app, prisma, auth, requireRole, sanitizeUser);
   registerMessagingRoutes(app, prisma, auth);
+  registerChallengeRoutes(app, prisma, auth);
   installErrorHandler();
   await ensureSiteAdmin().catch((error) => console.error("[startup] site admin:", error));
   await ensureSiteContent(prisma).catch((error) => console.error("[startup] site content:", error));

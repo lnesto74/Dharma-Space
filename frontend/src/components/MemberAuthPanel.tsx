@@ -1,7 +1,8 @@
 import { FormEvent, useState } from "react";
 import { ChevronRight } from "lucide-react";
-import { memberLogin, memberRegister } from "../lib/member-api";
+import { memberLogin, memberRegister, memberGoogleLogin } from "../lib/member-api";
 import { useMemberAuth } from "../auth/MemberAuthContext";
+import { GoogleSignIn, GoogleSignInDivider } from "./GoogleSignIn";
 
 type MemberAuthPanelProps = {
   onSuccess?: () => void;
@@ -38,6 +39,20 @@ export function MemberAuthPanel({ onSuccess, compact }: MemberAuthPanelProps) {
     }
   };
 
+  const handleGoogle = async (credential: string) => {
+    setSending(true);
+    setError("");
+    try {
+      const result = await memberGoogleLogin(credential);
+      login(result.token, result.member);
+      onSuccess?.();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Google sign-in failed");
+    } finally {
+      setSending(false);
+    }
+  };
+
   return (
     <div className={compact ? "p-6" : "p-8"}>
       <p className="text-[11px] tracking-[0.2em] text-[#2A2825]/50 uppercase text-center mb-4" style={{ fontFamily: "var(--font-body)" }}>
@@ -60,6 +75,9 @@ export function MemberAuthPanel({ onSuccess, compact }: MemberAuthPanelProps) {
           </button>
         ))}
       </div>
+
+      <GoogleSignIn onCredential={handleGoogle} onError={setError} disabled={sending} />
+      <GoogleSignInDivider />
 
       <form onSubmit={handleSubmit} className="space-y-4">
         {mode === "register" && (

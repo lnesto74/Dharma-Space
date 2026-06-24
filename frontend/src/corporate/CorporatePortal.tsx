@@ -1,7 +1,7 @@
 import { FormEvent, useEffect, useState } from "react";
-import { GoogleOAuthProvider, GoogleLogin, CredentialResponse } from "@react-oauth/google";
 import PlatformApp from "../platform/PlatformApp";
 import { BrandLogo } from "../components/BrandLogo";
+import { GoogleSignIn, GoogleSignInDivider, corporateGoogleSignIn } from "../components/GoogleSignIn";
 
 const API_URL = import.meta.env.VITE_API_URL || "";
 const CORPORATE_ROLES = new Set(["EMPLOYEE", "HR_ADMIN", "CORPORATE_ADMIN", "TRAINER", "SUPER_ADMIN"]);
@@ -44,7 +44,7 @@ function CorporateLoginShell({ children, subtitle }: { children: React.ReactNode
   );
 }
 
-function CorporatePasswordLogin() {
+function CorporatePasswordLogin({ onGoogleCredential }: { onGoogleCredential: (credential: string) => Promise<void> }) {
   const [email, setEmail] = useState("employee@demo.com");
   const [password, setPassword] = useState("password123");
   const [error, setError] = useState("");
@@ -114,28 +114,22 @@ function CorporatePasswordLogin() {
           Production uses Google Workspace sign-in. Set <code className="text-[11px]">GOOGLE_CLIENT_ID</code> in{" "}
           <code className="text-[11px]">backend/.env</code> to enable it locally.
         </p>
+        <GoogleSignInDivider />
+        <GoogleSignIn onCredential={onGoogleCredential} onError={setError} disabled={loading} />
       </form>
     </CorporateLoginShell>
   );
 }
 
-function CorporateGoogleLogin() {
+function CorporateGoogleLogin({ onGoogleCredential }: { onGoogleCredential: (credential: string) => Promise<void> }) {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
-  const handleSuccess = async (response: CredentialResponse) => {
-    if (!response.credential) return;
+  const handleSuccess = async (credential: string) => {
     setLoading(true);
     setError("");
     try {
-      const res = await fetch(`${API_URL}/api/auth/google`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ idToken: response.credential })
-      });
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(data.message || "Google sign-in failed");
-      storeSession(data.token, data.user);
+      await onGoogleCredential(credential);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Sign-in failed");
     } finally {
@@ -149,17 +143,7 @@ function CorporateGoogleLogin() {
       {loading ? (
         <p className="text-center text-sm text-[var(--cwp-text-muted)]">Signing in…</p>
       ) : (
-        <div className="flex justify-center">
-          <GoogleLogin
-            onSuccess={handleSuccess}
-            onError={() => setError("Google sign-in was cancelled or failed")}
-            useOneTap={false}
-            theme="outline"
-            size="large"
-            text="continue_with"
-            shape="rectangular"
-          />
-        </div>
+        <GoogleSignIn onCredential={handleSuccess} onError={setError} disabled={loading} />
       )}
       <p className="mt-6 text-center text-xs text-[var(--cwp-text-muted)]">
         Employees, HR admins, specialists, and corporate partners only.
@@ -212,6 +196,11 @@ export default function CorporatePortal() {
   const [session, setSession] = useState<{ role: string } | null | "checking">(() =>
     readStoredSession() ? "checking" : null
   );
+
+  const handleGoogleCredential = async (credential: string) => {
+    const data = await corporateGoogleSignIn(credential);
+    storeSession(data.token, data.user);
+  };
 
   useEffect(() => {
     fetch(`${API_URL}/api/auth/google/config`)
@@ -269,14 +258,10 @@ export default function CorporatePortal() {
   }
 
   if (!clientId) {
-    return <CorporatePasswordLogin />;
+    return <CorporatePasswordLogin onGoogleCredential={handleGoogleCredential} />;
   }
 
-  return (
-    <GoogleOAuthProvider clientId={clientId}>
-      <CorporateGoogleLogin />
-    </GoogleOAuthProvider>
-  );
+  return <CorporateGoogleLogin onGoogleCredential={handleGoogleCredential} />;
 }
 
 export function CorporateRedirect() {

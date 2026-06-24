@@ -23,6 +23,7 @@ type Kpis = {
   totalAttendances: number;
   pendingScheduleRequests: number;
   cwpInquiries: number;
+  pendingUsers: number;
 };
 
 type CompanyRow = {
@@ -81,6 +82,7 @@ type UserRow = {
   company?: { id: string; name: string } | null;
   department?: { id: string; name: string } | null;
   totalWellnessScore?: number;
+  accountStatus?: string;
 };
 
 type CompanyDetail = CompanyRow & {
@@ -288,6 +290,7 @@ function OverviewTab({
           ["Upcoming events", kpis?.upcomingEvents ?? 0],
           ["Active bookings", kpis?.activeBookings ?? 0],
           ["Pending schedules", kpis?.pendingScheduleRequests ?? 0],
+          ["Pending user approvals", kpis?.pendingUsers ?? 0],
           ["CWP inquiries", kpis?.cwpInquiries ?? 0]
         ]}
       />
@@ -715,6 +718,7 @@ function UsersTab({
   const [users, setUsers] = useState<UserRow[]>([]);
   const [filterCompany, setFilterCompany] = useState("");
   const [filterRole, setFilterRole] = useState("");
+  const [filterStatus, setFilterStatus] = useState("");
   const blank = { name: "", email: "", password: "", role: "EMPLOYEE", companyId: "", departmentId: "" };
   const [form, setForm] = useState(blank);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -724,13 +728,14 @@ function UsersTab({
       const params = new URLSearchParams();
       if (filterCompany) params.set("companyId", filterCompany);
       if (filterRole) params.set("role", filterRole);
+      if (filterStatus) params.set("accountStatus", filterStatus);
       const qs = params.toString();
       const res = await adminApi<{ users: UserRow[] }>(`/api/admin/cwp/users${qs ? `?${qs}` : ""}`, token);
       setUsers(res.users);
     } catch (e: any) {
       setError(e.message || "Could not load users");
     }
-  }, [token, filterCompany, filterRole, setError]);
+  }, [token, filterCompany, filterRole, filterStatus, setError]);
 
   useEffect(() => { void load(); }, [load]);
 
@@ -745,8 +750,10 @@ function UsersTab({
           departmentId: form.departmentId || null
         };
         if (form.password) payload.password = form.password;
+        const editing = users.find((u) => u.id === editingId);
+        if (editing?.accountStatus === "PENDING") payload.accountStatus = "APPROVED";
         await adminApi(`/api/admin/cwp/users/${editingId}`, token, { method: "PATCH", body: JSON.stringify(payload) });
-        flash("User updated.");
+        flash(editing?.accountStatus === "PENDING" ? "User approved and updated." : "User updated.");
       } else {
         await adminApi("/api/admin/cwp/users", token, {
           method: "POST",
@@ -785,10 +792,42 @@ function UsersTab({
     }
   };
 
+  const approveUser = async (u: UserRow) => {
+    try {
+      await adminApi(`/api/admin/cwp/users/${u.id}`, token, {
+        method: "PATCH",
+        body: JSON.stringify({ accountStatus: "APPROVED", role: u.role || "EMPLOYEE" })
+      });
+      flash(`${u.name} approved.`);
+      void load();
+    } catch (e: any) {
+      setError(e.message || "Could not approve user");
+    }
+  };
+
+  const rejectUser = async (u: UserRow) => {
+    if (!window.confirm(`Reject access for ${u.email}? They will not be able to sign in.`)) return;
+    try {
+      await adminApi(`/api/admin/cwp/users/${u.id}`, token, {
+        method: "PATCH",
+        body: JSON.stringify({ accountStatus: "REJECTED" })
+      });
+      flash(`${u.name} rejected.`);
+      void load();
+    } catch (e: any) {
+      setError(e.message || "Could not reject user");
+    }
+  };
+
   return (
     <>
       <div className="admin-panel" style={{ marginBottom: 20 }}>
         <h2 className="admin-panel-title">{editingId ? "Edit user" : "Add user"}</h2>
+        {editingId && users.find((u) => u.id === editingId)?.accountStatus === "PENDING" && (
+          <p className="admin-muted" style={{ marginBottom: 12 }}>
+            Assign persona (role), company, and department, then save or use Approve in the table.
+          </p>
+        )}
         <form onSubmit={submit}>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 12 }}>
             <label className="admin-field"><span className="admin-field-label">Name</span>
@@ -828,30 +867,57 @@ function UsersTab({
           <option value="">All roles</option>
           {ROLES.map((r) => <option key={r} value={r}>{r}</option>)}
         </select>
+        <select className="admin-input" style={{ maxWidth: 200 }} value={filterStatus} onChange={(e) => setFilterStatus(e.target.value)}>
+          <option value="">All statuses</option>
+          <option value="PENDING">Pending approval</option>
+          <option value="APPROVED">Approved</option>
+          <option value="REJECTED">Rejected</option>
+        </select>
+        <button type="button" className="admin-btn admin-btn-sm" onClick={() => setFilterStatus("PENDING")}>
+          Show pending only
+        </button>
       </div>
 
       <div className="admin-table-wrap">
         <table className="admin-table">
           <thead>
-            <tr><th>Name</th><th>Email</th><th>Role</th><th>Company</th><th>Department</th><th /></tr>
+            <tr><th>Name</th><th>Email</th><th>Status</th><th>Role</th><th>Company</th><th>Department</th><th /></tr>
           </thead>
           <tbody>
             {users.map((u) => (
               <tr key={u.id}>
                 <td><strong>{u.name}</strong></td>
                 <td>{u.email}</td>
+                <td>
+                  <span style={{
+                    fontSize: 12,
+                    fontWeight: 600,
+                    color: u.accountStatus === "PENDING" ? "#b45309" : u.accountStatus === "REJECTED" ? "#b91c1c" : "#166534"
+                  }}>
+                    {u.accountStatus || "APPROVED"}
+                  </span>
+                </td>
                 <td>{u.role}</td>
                 <td>{u.company?.name || "—"}</td>
                 <td>{u.department?.name || "—"}</td>
                 <td>
                   <div className="admin-table-actions">
-                    <button type="button" className="admin-btn admin-btn-sm" onClick={() => startEdit(u)}>Edit</button>
+                    {u.accountStatus === "PENDING" && (
+                      <>
+                        <button type="button" className="admin-btn admin-btn-sm admin-btn-primary" onClick={() => startEdit(u)}>Assign role</button>
+                        <button type="button" className="admin-btn admin-btn-sm" onClick={() => void approveUser(u)}>Approve</button>
+                        <button type="button" className="admin-btn admin-btn-sm" onClick={() => void rejectUser(u)}>Reject</button>
+                      </>
+                    )}
+                    {u.accountStatus !== "PENDING" && (
+                      <button type="button" className="admin-btn admin-btn-sm" onClick={() => startEdit(u)}>Edit</button>
+                    )}
                     <button type="button" className="admin-btn admin-btn-sm" onClick={() => void remove(u)}>Delete</button>
                   </div>
                 </td>
               </tr>
             ))}
-            {users.length === 0 && <tr className="admin-table-empty"><td colSpan={6}>No users match.</td></tr>}
+            {users.length === 0 && <tr className="admin-table-empty"><td colSpan={7}>No users match.</td></tr>}
           </tbody>
         </table>
       </div>
