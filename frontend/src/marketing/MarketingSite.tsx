@@ -447,10 +447,13 @@ function Nav({
           <button
             type="button"
             onClick={onAccount}
-            className="hidden md:flex items-center gap-1.5 px-4 py-2.5 text-[12px] tracking-[0.12em] uppercase text-[#2A2825]/70 hover:text-[#2A2825] transition-all duration-300"
+            className="flex items-center gap-1.5 px-3 py-2 md:px-4 md:py-2.5 text-[11px] md:text-[12px] tracking-[0.12em] uppercase border border-[#C4785A]/50 text-[#C4785A] hover:bg-[#C4785A] hover:text-white transition-all duration-300"
             style={{ fontFamily: "var(--font-body)" }}
+            aria-label={isLoggedIn ? "My account" : "Sign in or create account"}
           >
-            <User size={14} /> {isLoggedIn ? (member?.name?.split(" ")[0] || "Account") : "Sign in"}
+            <User size={14} />
+            <span className="hidden sm:inline">{isLoggedIn ? (member?.name?.split(" ")[0] || "Account") : "Sign in / Join"}</span>
+            <span className="sm:hidden">{isLoggedIn ? "Account" : "Join"}</span>
           </button>
           <button
             onClick={onContact}
@@ -2698,7 +2701,15 @@ function CwpDemoModal({ onClose }: { onClose: () => void }) {
 
 // ── Footer ─────────────────────────────────────────────────────────────────────
 
-function Footer({ setPage, onContact }: { setPage: (p: Page) => void; onContact: () => void }) {
+function Footer({
+  setPage,
+  onContact,
+  onAccount
+}: {
+  setPage: (p: Page) => void;
+  onContact: () => void;
+  onAccount: () => void;
+}) {
   return (
     <footer className="bg-[#2A2825] text-white pt-20 pb-10">
       <div className="max-w-7xl mx-auto px-6 lg:px-12">
@@ -2728,9 +2739,17 @@ function Footer({ setPage, onContact }: { setPage: (p: Page) => void; onContact:
             <p className="text-[10px] tracking-[0.25em] text-[#C4785A] uppercase mb-6" style={{ fontFamily: "var(--font-body)" }}>Connect</p>
             <p className="text-white/50 text-[14px] mb-2" style={{ fontFamily: "var(--font-body)" }}>hello@dharma-space.com</p>
             <p className="text-white/50 text-[14px] mb-6" style={{ fontFamily: "var(--font-body)" }}>dharma-space.com</p>
-            <button onClick={onContact} className="px-6 py-3 border border-[#C4785A] text-[#C4785A] text-[11px] tracking-[0.15em] uppercase hover:bg-[#C4785A] hover:text-white transition-all duration-300" style={{ fontFamily: "var(--font-body)" }}>
-              Contact Us
-            </button>
+            <div className="flex flex-col gap-3">
+              <button onClick={onAccount} className="px-6 py-3 border border-white/25 text-white/80 text-[11px] tracking-[0.15em] uppercase hover:border-[#C4785A] hover:text-[#C4785A] transition-all duration-300" style={{ fontFamily: "var(--font-body)" }}>
+                Sign in / Create account
+              </button>
+              <a href={CORPORATE_PORTAL_URL} className="px-6 py-3 border border-[#C4785A] text-[#C4785A] text-[11px] tracking-[0.15em] uppercase hover:bg-[#C4785A] hover:text-white transition-all duration-300 text-center" style={{ fontFamily: "var(--font-body)" }}>
+                Corporate client login
+              </a>
+              <button onClick={onContact} className="px-6 py-3 border border-white/15 text-white/60 text-[11px] tracking-[0.15em] uppercase hover:border-[#C4785A] hover:text-[#C4785A] transition-all duration-300" style={{ fontFamily: "var(--font-body)" }}>
+                Contact Us
+              </button>
+            </div>
           </div>
         </div>
         <div className="border-t border-white/8 pt-8 flex flex-col sm:flex-row justify-between items-center gap-3">
@@ -2851,11 +2870,17 @@ function AdminLoginModal({ onClose, onSuccess }: { onClose: () => void; onSucces
 
 // ── Main App ──────────────────────────────────────────────────────────────────
 
-export default function MarketingSite({ initialPage = "about" }: { initialPage?: Page }) {
+export default function MarketingSite({
+  initialPage = "about",
+  openAccountOnMount = false
+}: {
+  initialPage?: Page;
+  openAccountOnMount?: boolean;
+}) {
   const [page, setPage] = useState<Page>(initialPage);
   const [contactOpen, setContactOpen] = useState(false);
   const [cwpDemoOpen, setCwpDemoOpen] = useState(false);
-  const [accountOpen, setAccountOpen] = useState(false);
+  const [accountOpen, setAccountOpen] = useState(openAccountOnMount);
   const [reserve, setReserve] = useState<ReserveInfo | null>(null);
   const [booking, setBooking] = useState<BookingInfo | null>(null);
   const [stripeBooking, setStripeBooking] = useState<PendingStripeBooking | null>(null);
@@ -3022,7 +3047,7 @@ export default function MarketingSite({ initialPage = "about" }: { initialPage?:
           />
         )}
       </main>
-      <Footer setPage={setPage} onContact={openContact} />
+      <Footer setPage={setPage} onContact={openContact} onAccount={() => setAccountOpen(true)} />
       {contactOpen && <ContactModal onClose={() => setContactOpen(false)} />}
       {cwpDemoOpen && <CwpDemoModal onClose={() => setCwpDemoOpen(false)} />}
       {accountOpen && (

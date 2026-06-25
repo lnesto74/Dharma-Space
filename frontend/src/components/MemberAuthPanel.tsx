@@ -55,8 +55,11 @@ export function MemberAuthPanel({ onSuccess, compact }: MemberAuthPanelProps) {
 
   return (
     <div className={compact ? "p-6" : "p-8"}>
-      <p className="text-[11px] tracking-[0.2em] text-[#2A2825]/50 uppercase text-center mb-4" style={{ fontFamily: "var(--font-body)" }}>
-        Sign in to book
+      <p className="text-[11px] tracking-[0.2em] text-[#2A2825]/50 uppercase text-center mb-1" style={{ fontFamily: "var(--font-body)" }}>
+        Member account
+      </p>
+      <p className="text-[13px] text-[#7A7468] text-center mb-4" style={{ fontFamily: "var(--font-body)" }}>
+        Sign in or create an account to book classes and events
       </p>
       <div className="flex gap-2 mb-6">
         {(["login", "register"] as const).map((tab) => (
