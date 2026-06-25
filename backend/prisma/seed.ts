@@ -76,11 +76,11 @@ async function main() {
   ]);
 
   const demoUsers = await Promise.all([
-    prisma.user.create({ data: { name: "Maya Employee", email: "employee@demo.com", passwordHash: hash, role: "EMPLOYEE", companyId: companies[0].id, departmentId: departments[1].id, avatar: "ME" } }),
-    prisma.user.create({ data: { name: "Harper HR", email: "hr@demo.com", passwordHash: hash, role: "HR_ADMIN", companyId: companies[0].id, departmentId: departments[0].id, avatar: "HH" } }),
-    prisma.user.create({ data: { name: "Talia Trainer", email: "trainer@demo.com", passwordHash: hash, role: "TRAINER", companyId: companies[0].id, departmentId: departments[4].id, avatar: "TT" } }),
-    prisma.user.create({ data: { name: "Cameron Company", email: "company@demo.com", passwordHash: hash, role: "CORPORATE_ADMIN", companyId: companies[0].id, departmentId: departments[0].id, avatar: "CC" } }),
-    prisma.user.create({ data: { name: "Sage Admin", email: "admin@demo.com", passwordHash: hash, role: "SUPER_ADMIN", avatar: "SA" } })
+    prisma.user.create({ data: { name: "Maya Employee", email: "employee@demo.com", passwordHash: hash, role: "EMPLOYEE", accountStatus: "APPROVED", companyId: companies[0].id, departmentId: departments[1].id, avatar: "ME" } }),
+    prisma.user.create({ data: { name: "Harper HR", email: "hr@demo.com", passwordHash: hash, role: "HR_ADMIN", accountStatus: "APPROVED", companyId: companies[0].id, departmentId: departments[0].id, avatar: "HH" } }),
+    prisma.user.create({ data: { name: "Talia Trainer", email: "trainer@demo.com", passwordHash: hash, role: "TRAINER", accountStatus: "APPROVED", companyId: companies[0].id, departmentId: departments[4].id, avatar: "TT" } }),
+    prisma.user.create({ data: { name: "Cameron Company", email: "company@demo.com", passwordHash: hash, role: "CORPORATE_ADMIN", accountStatus: "APPROVED", companyId: companies[0].id, departmentId: departments[0].id, avatar: "CC" } }),
+    prisma.user.create({ data: { name: "Sage Admin", email: "admin@demo.com", passwordHash: hash, role: "SUPER_ADMIN", accountStatus: "APPROVED", avatar: "SA" } })
   ]);
 
   const trainerUsers = await Promise.all(

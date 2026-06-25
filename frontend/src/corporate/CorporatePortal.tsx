@@ -6,12 +6,12 @@ import { GoogleSignIn, GoogleSignInDivider, corporateGoogleSignIn } from "../com
 const API_URL = import.meta.env.VITE_API_URL || "";
 const CORPORATE_ROLES = new Set(["EMPLOYEE", "HR_ADMIN", "CORPORATE_ADMIN", "TRAINER", "SUPER_ADMIN"]);
 
-const DEMO_ACCOUNTS: Array<[string, string]> = [
-  ["Employee", "employee@demo.com"],
-  ["HR Admin", "hr@demo.com"],
-  ["Corporate Admin", "company@demo.com"],
-  ["Specialist / Trainer", "trainer@demo.com"],
-  ["Dharma Admin", "admin@demo.com"]
+const DEMO_ACCOUNTS: Array<[string, string, string]> = [
+  ["Employee", "employee@demo.com", "/app/dashboard"],
+  ["HR Admin", "hr@demo.com", "/hr/dashboard"],
+  ["Corporate Admin", "company@demo.com", "/company/dashboard"],
+  ["Specialist / Trainer", "trainer@demo.com", "/trainer/dashboard"],
+  ["Dharma Admin", "admin@demo.com", "/hr/dashboard (CWP) · use website Admin for /admin"]
 ];
 
 function storeSession(token: string, user: { homePath?: string; role: string }) {
@@ -20,8 +20,6 @@ function storeSession(token: string, user: { homePath?: string; role: string }) 
   }
   localStorage.setItem("hsos_token", token);
   localStorage.setItem("hsos_user", JSON.stringify(user));
-  // Inside the CWP portal everyone (including the Dharma Admin) goes to the platform,
-  // not the website admin backend. The admin backend is reached from the website.
   window.location.href = user.role === "SUPER_ADMIN" ? "/hr/dashboard" : user.homePath || "/app/dashboard";
 }
 
@@ -44,13 +42,19 @@ function CorporateLoginShell({ children, subtitle }: { children: React.ReactNode
   );
 }
 
-function CorporatePasswordLogin({ onGoogleCredential }: { onGoogleCredential: (credential: string) => Promise<void> }) {
+function CorporateLogin({
+  onGoogleCredential,
+  showGoogle
+}: {
+  onGoogleCredential: (credential: string) => Promise<void>;
+  showGoogle: boolean;
+}) {
   const [email, setEmail] = useState("employee@demo.com");
   const [password, setPassword] = useState("password123");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
-  async function submit(event: FormEvent) {
+  async function submitPassword(event: FormEvent) {
     event.preventDefault();
     setLoading(true);
     setError("");
@@ -61,7 +65,10 @@ function CorporatePasswordLogin({ onGoogleCredential }: { onGoogleCredential: (c
         body: JSON.stringify({ email, password })
       });
       const data = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(data.message || "Sign-in failed");
+      if (!res.ok) {
+        if (data.pending) throw new Error(data.message || "Account pending approval");
+        throw new Error(data.message || "Sign-in failed");
+      }
       storeSession(data.token, data.user);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Sign-in failed");
@@ -70,22 +77,46 @@ function CorporatePasswordLogin({ onGoogleCredential }: { onGoogleCredential: (c
     }
   }
 
+  async function submitGoogle(credential: string) {
+    setLoading(true);
+    setError("");
+    try {
+      await onGoogleCredential(credential);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Google sign-in failed");
+    } finally {
+      setLoading(false);
+    }
+  }
+
   return (
-    <CorporateLoginShell subtitle="Google sign-in is not configured locally — use a demo corporate account below.">
-      <form onSubmit={submit} className="grid gap-4">
-        <div className="grid gap-2">
-          {DEMO_ACCOUNTS.map(([label, account]) => (
-            <button
-              key={account}
-              type="button"
-              onClick={() => setEmail(account)}
-              className="flex items-center justify-between rounded-xl border border-[var(--cwp-border)] px-4 py-3 text-left text-sm hover:bg-[var(--cwp-bg)]"
-            >
-              <span className="font-medium">{label}</span>
-              <span className="text-[var(--cwp-text-muted)]">{account}</span>
-            </button>
-          ))}
+    <CorporateLoginShell subtitle="Sign in with Google or your email to access the corporate wellness portal.">
+      {showGoogle && (
+        <>
+          <GoogleSignIn onCredential={submitGoogle} onError={setError} disabled={loading} />
+          <GoogleSignInDivider label="Or sign in with email" />
+        </>
+      )}
+
+      <form onSubmit={submitPassword} className="grid gap-4">
+        <div>
+          <p className="mb-2 text-xs uppercase tracking-[0.16em] text-[var(--cwp-text-muted)]">Demo accounts · password123</p>
+          <div className="grid gap-2">
+            {DEMO_ACCOUNTS.map(([label, account, portal]) => (
+              <button
+                key={account}
+                type="button"
+                onClick={() => setEmail(account)}
+                className="flex flex-col rounded-xl border border-[var(--cwp-border)] px-4 py-3 text-left text-sm hover:bg-[var(--cwp-bg)] sm:flex-row sm:items-center sm:justify-between"
+              >
+                <span className="font-medium">{label}</span>
+                <span className="text-[var(--cwp-text-muted)] text-xs sm:text-sm">{account}</span>
+                <span className="text-[10px] text-[var(--cwp-text-muted)] mt-1 sm:mt-0 sm:max-w-[40%] sm:text-right">{portal}</span>
+              </button>
+            ))}
+          </div>
         </div>
+
         <label className="grid gap-1.5 text-sm">
           Email
           <input
@@ -105,49 +136,17 @@ function CorporatePasswordLogin({ onGoogleCredential }: { onGoogleCredential: (c
             autoComplete="current-password"
           />
         </label>
-        <p className="text-xs text-[var(--cwp-text-muted)]">Demo password for all accounts: <strong>password123</strong></p>
+
         {error && <p className="text-sm text-[var(--cwp-error)]">{error}</p>}
+
         <button type="submit" disabled={loading} className="cwp-btn-primary w-full disabled:opacity-60">
-          {loading ? "Signing in…" : "Sign in"}
+          {loading ? "Signing in…" : "Sign in with email"}
         </button>
-        <p className="text-xs text-center text-[var(--cwp-text-muted)]">
-          Production uses Google Workspace sign-in. Set <code className="text-[11px]">GOOGLE_CLIENT_ID</code> in{" "}
-          <code className="text-[11px]">backend/.env</code> to enable it locally.
+
+        <p className="text-center text-xs text-[var(--cwp-text-muted)]">
+          Website CMS admin: marketing site header → <strong>Admin</strong> (username <code>admin</code>).
         </p>
-        <GoogleSignInDivider />
-        <GoogleSignIn onCredential={onGoogleCredential} onError={setError} disabled={loading} />
       </form>
-    </CorporateLoginShell>
-  );
-}
-
-function CorporateGoogleLogin({ onGoogleCredential }: { onGoogleCredential: (credential: string) => Promise<void> }) {
-  const [error, setError] = useState("");
-  const [loading, setLoading] = useState(false);
-
-  const handleSuccess = async (credential: string) => {
-    setLoading(true);
-    setError("");
-    try {
-      await onGoogleCredential(credential);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Sign-in failed");
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  return (
-    <CorporateLoginShell subtitle="Sign in with your company Google account to access your corporate wellness portal.">
-      {error && <p className="mb-4 text-sm text-[var(--cwp-error)]">{error}</p>}
-      {loading ? (
-        <p className="text-center text-sm text-[var(--cwp-text-muted)]">Signing in…</p>
-      ) : (
-        <GoogleSignIn onCredential={handleSuccess} onError={setError} disabled={loading} />
-      )}
-      <p className="mt-6 text-center text-xs text-[var(--cwp-text-muted)]">
-        Employees, HR admins, specialists, and corporate partners only.
-      </p>
     </CorporateLoginShell>
   );
 }
@@ -191,8 +190,6 @@ function readStoredSession(): { role: string } | null {
 
 export default function CorporatePortal() {
   const [clientId, setClientId] = useState<string | null | undefined>(undefined);
-  // "checking" until the stored token is validated against the server, so we never
-  // render the logged-in app with a stale token (which causes a blank page).
   const [session, setSession] = useState<{ role: string } | null | "checking">(() =>
     readStoredSession() ? "checking" : null
   );
@@ -223,7 +220,6 @@ export default function CorporatePortal() {
         if (res.ok) {
           setSession(readStoredSession());
         } else {
-          // Stale/invalid token (e.g. database reseeded) — clear and show login.
           localStorage.removeItem("hsos_token");
           localStorage.removeItem("hsos_user");
           setSession(null);
@@ -257,11 +253,9 @@ export default function CorporatePortal() {
     );
   }
 
-  if (!clientId) {
-    return <CorporatePasswordLogin onGoogleCredential={handleGoogleCredential} />;
-  }
-
-  return <CorporateGoogleLogin onGoogleCredential={handleGoogleCredential} />;
+  return (
+    <CorporateLogin onGoogleCredential={handleGoogleCredential} showGoogle={Boolean(clientId)} />
+  );
 }
 
 export function CorporateRedirect() {

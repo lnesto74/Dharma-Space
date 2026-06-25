@@ -35,6 +35,7 @@ import {
 import { PROGRAM_MEDIA_DIR } from "./program-media-cache.js";
 import { TEAM_BUILDING_MEDIA_DIR, AVATAR_MEDIA_DIR } from "./data-root.js";
 import { ensureDatabaseSchema } from "./ensure-schema.js";
+import { ensureDemoUsers } from "./ensure-demo-users.js";
 import { applySchemaPatches } from "./schema-patches.js";
 import { registerStripeWebhook, stripeStatusPayload } from "./stripe.js";
 import { registerWellnessRoutes } from "./wellness-routes.js";
@@ -104,7 +105,7 @@ const roleHome: Record<string, string> = {
   EMPLOYEE: "/app/dashboard",
   HR_ADMIN: "/hr/dashboard",
   TRAINER: "/trainer/dashboard",
-  CORPORATE_ADMIN: "/hr/dashboard",
+  CORPORATE_ADMIN: "/company/dashboard",
   SUPER_ADMIN: "/admin"
 };
 
@@ -1089,6 +1090,7 @@ async function startServer() {
   registerChallengeRoutes(app, prisma, auth);
   installErrorHandler();
   await ensureSiteAdmin().catch((error) => console.error("[startup] site admin:", error));
+  await ensureDemoUsers(prisma).catch((error) => console.error("[startup] demo users:", error));
   await ensureSiteContent(prisma).catch((error) => console.error("[startup] site content:", error));
   await migrateProgramCategories(prisma).catch((error) => console.error("[startup] program migrate:", error));
   await migrateProgramScheduleFields(prisma).catch((error) => console.error("[startup] program schedule migrate:", error));
