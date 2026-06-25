@@ -90,7 +90,17 @@ import { LOGO_URL } from "../brand";
 const API_URL = import.meta.env.VITE_API_URL || "";
 
 type Role = "EMPLOYEE" | "HR_ADMIN" | "TRAINER" | "CORPORATE_ADMIN" | "SUPER_ADMIN";
-type UserType = { id: string; name: string; email: string; role: Role; homePath: string; avatar?: string };
+type UserType = {
+  id: string;
+  name: string;
+  email: string;
+  role: Role;
+  homePath: string;
+  avatar?: string;
+  position?: string | null;
+  company?: { id: string; name: string } | null;
+  department?: { id: string; name: string } | null;
+};
 type Course = {
   id: string;
   title: string;

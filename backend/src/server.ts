@@ -449,7 +449,7 @@ app.post("/api/auth/google", async (req, res, next) => {
     if (!profile.emailVerified) {
       return res.status(401).json({ message: "Google email is not verified" });
     }
-    let user = await prisma.user.findUnique({
+    let user: UserWithRelations | null = await prisma.user.findUnique({
       where: { email: profile.email },
       include: USER_PROFILE_INCLUDE
     });
