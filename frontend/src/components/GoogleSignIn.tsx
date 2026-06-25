@@ -81,5 +81,9 @@ export async function corporateGoogleSignIn(idToken: string) {
     if (data.pending) throw new Error(data.message || "Account pending approval");
     throw new Error(data.message || "Google sign-in failed");
   }
-  return data as { token: string; user: { homePath?: string; role: string } };
+  return data as {
+    token: string;
+    user: { homePath?: string; role: string; needsOnboarding?: boolean; pendingApproval?: boolean };
+    needsOnboarding?: boolean;
+  };
 }

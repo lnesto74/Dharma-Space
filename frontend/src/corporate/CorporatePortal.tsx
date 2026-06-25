@@ -1,26 +1,58 @@
 import { FormEvent, useEffect, useState } from "react";
 import PlatformApp from "../platform/PlatformApp";
 import { BrandLogo } from "../components/BrandLogo";
-import { GoogleSignIn, GoogleSignInDivider, corporateGoogleSignIn } from "../components/GoogleSignIn";
+import { GoogleSignIn, GoogleSignInDivider } from "../components/GoogleSignIn";
+import { CorporateOnboarding, CorporatePendingApproval, type CorporateUser } from "./CorporateOnboarding";
 
 const API_URL = import.meta.env.VITE_API_URL || "";
 const CORPORATE_ROLES = new Set(["EMPLOYEE", "HR_ADMIN", "CORPORATE_ADMIN", "TRAINER", "SUPER_ADMIN"]);
 
-const DEMO_ACCOUNTS: Array<[string, string, string]> = [
-  ["Employee", "employee@demo.com", "/app/dashboard"],
-  ["HR Admin", "hr@demo.com", "/hr/dashboard"],
-  ["Corporate Admin", "company@demo.com", "/company/dashboard"],
-  ["Specialist / Trainer", "trainer@demo.com", "/trainer/dashboard"],
-  ["Dharma Admin", "admin@demo.com", "/hr/dashboard (CWP) · use website Admin for /admin"]
-];
+type PortalGate = "login" | "onboarding" | "pending" | "app";
 
-function storeSession(token: string, user: { homePath?: string; role: string }) {
+function storeSession(token: string, user: CorporateUser) {
   if (!CORPORATE_ROLES.has(user.role)) {
     throw new Error("This portal is for corporate wellness accounts only.");
   }
   localStorage.setItem("hsos_token", token);
   localStorage.setItem("hsos_user", JSON.stringify(user));
   window.location.href = user.role === "SUPER_ADMIN" ? "/hr/dashboard" : user.homePath || "/app/dashboard";
+}
+
+function clearSession() {
+  localStorage.removeItem("hsos_token");
+  localStorage.removeItem("hsos_user");
+}
+
+function readStoredUser(): CorporateUser | null {
+  const userRaw = localStorage.getItem("hsos_user");
+  if (!userRaw) return null;
+  try {
+    return JSON.parse(userRaw) as CorporateUser;
+  } catch {
+    return null;
+  }
+}
+
+function gateFromUser(user: CorporateUser | null, token: string | null): PortalGate {
+  if (!token || !user) return "login";
+  if (user.needsOnboarding) return "onboarding";
+  if (user.pendingApproval) return "pending";
+  if (CORPORATE_ROLES.has(user.role)) return "app";
+  return "login";
+}
+
+async function authRequest(path: string, body: object) {
+  const res = await fetch(`${API_URL}${path}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body)
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    if (data.pending) throw Object.assign(new Error(data.message), { pending: true });
+    throw new Error(data.message || "Request failed");
+  }
+  return data as { token?: string; user?: CorporateUser; needsOnboarding?: boolean };
 }
 
 function CorporateLoginShell({ children, subtitle }: { children: React.ReactNode; subtitle: string }) {
@@ -42,15 +74,19 @@ function CorporateLoginShell({ children, subtitle }: { children: React.ReactNode
   );
 }
 
-function CorporateLogin({
-  onGoogleCredential,
-  showGoogle
+function CorporateAuth({
+  mode,
+  setMode,
+  showGoogle,
+  onAuthResult
 }: {
-  onGoogleCredential: (credential: string) => Promise<void>;
+  mode: "login" | "signup";
+  setMode: (m: "login" | "signup") => void;
   showGoogle: boolean;
+  onAuthResult: (data: { token?: string; user?: CorporateUser; needsOnboarding?: boolean }, pendingMessage?: string) => void;
 }) {
-  const [email, setEmail] = useState("employee@demo.com");
-  const [password, setPassword] = useState("password123");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
@@ -59,19 +95,15 @@ function CorporateLogin({
     setLoading(true);
     setError("");
     try {
-      const res = await fetch(`${API_URL}/api/auth/login`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email, password })
-      });
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) {
-        if (data.pending) throw new Error(data.message || "Account pending approval");
-        throw new Error(data.message || "Sign-in failed");
+      const data = await authRequest(mode === "login" ? "/api/auth/login" : "/api/auth/register", { email, password });
+      onAuthResult(data);
+    } catch (err: unknown) {
+      const e = err as Error & { pending?: boolean };
+      if (e.pending) {
+        onAuthResult({}, e.message);
+        return;
       }
-      storeSession(data.token, data.user);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Sign-in failed");
+      setError(e.message || "Sign-in failed");
     } finally {
       setLoading(false);
     }
@@ -81,7 +113,20 @@ function CorporateLogin({
     setLoading(true);
     setError("");
     try {
-      await onGoogleCredential(credential);
+      const res = await fetch(`${API_URL}/api/auth/google`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ idToken: credential })
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        if (data.pending) {
+          onAuthResult({}, data.message);
+          return;
+        }
+        throw new Error(data.message || "Google sign-in failed");
+      }
+      onAuthResult(data);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Google sign-in failed");
     } finally {
@@ -90,38 +135,45 @@ function CorporateLogin({
   }
 
   return (
-    <CorporateLoginShell subtitle="Sign in with Google or your email to access the corporate wellness portal.">
+    <CorporateLoginShell
+      subtitle={
+        mode === "login"
+          ? "Sign in with Google or your email to access the corporate wellness portal."
+          : "Create your account to join your company on the corporate wellness platform."
+      }
+    >
+      <div className="mb-4 flex gap-2">
+        {(["login", "signup"] as const).map((tab) => (
+          <button
+            key={tab}
+            type="button"
+            onClick={() => setMode(tab)}
+            className={`flex-1 rounded-xl border py-2.5 text-sm font-medium ${
+              mode === tab
+                ? "border-[var(--cwp-army)] bg-[var(--cwp-army)] text-white"
+                : "border-[var(--cwp-border)] text-[var(--cwp-text-muted)]"
+            }`}
+          >
+            {tab === "login" ? "Sign in" : "Sign up"}
+          </button>
+        ))}
+      </div>
+
       {showGoogle && (
         <>
           <GoogleSignIn onCredential={submitGoogle} onError={setError} disabled={loading} />
-          <GoogleSignInDivider label="Or sign in with email" />
+          <GoogleSignInDivider label="Or continue with email" />
         </>
       )}
 
       <form onSubmit={submitPassword} className="grid gap-4">
-        <div>
-          <p className="mb-2 text-xs uppercase tracking-[0.16em] text-[var(--cwp-text-muted)]">Demo accounts · password123</p>
-          <div className="grid gap-2">
-            {DEMO_ACCOUNTS.map(([label, account, portal]) => (
-              <button
-                key={account}
-                type="button"
-                onClick={() => setEmail(account)}
-                className="flex flex-col rounded-xl border border-[var(--cwp-border)] px-4 py-3 text-left text-sm hover:bg-[var(--cwp-bg)] sm:flex-row sm:items-center sm:justify-between"
-              >
-                <span className="font-medium">{label}</span>
-                <span className="text-[var(--cwp-text-muted)] text-xs sm:text-sm">{account}</span>
-                <span className="text-[10px] text-[var(--cwp-text-muted)] mt-1 sm:mt-0 sm:max-w-[40%] sm:text-right">{portal}</span>
-              </button>
-            ))}
-          </div>
-        </div>
-
         <label className="grid gap-1.5 text-sm">
           Email
           <input
+            type="email"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
+            required
             className="rounded-xl border border-[var(--cwp-border)] px-4 py-3 outline-none focus:border-[var(--cwp-army)]"
             autoComplete="username"
           />
@@ -132,72 +184,51 @@ function CorporateLogin({
             type="password"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
+            required
+            minLength={8}
             className="rounded-xl border border-[var(--cwp-border)] px-4 py-3 outline-none focus:border-[var(--cwp-army)]"
-            autoComplete="current-password"
+            autoComplete={mode === "login" ? "current-password" : "new-password"}
           />
         </label>
-
         {error && <p className="text-sm text-[var(--cwp-error)]">{error}</p>}
-
         <button type="submit" disabled={loading} className="cwp-btn-primary w-full disabled:opacity-60">
-          {loading ? "Signing in…" : "Sign in with email"}
+          {loading ? "Please wait…" : mode === "login" ? "Sign in" : "Create account"}
         </button>
-
-        <p className="text-center text-xs text-[var(--cwp-text-muted)]">
-          Website CMS admin: marketing site header → <strong>Admin</strong> (username <code>admin</code>).
-        </p>
       </form>
     </CorporateLoginShell>
   );
 }
 
-// When the Dharma Admin crosses over from the website admin backend (a different
-// origin), the session arrives in the URL hash as "#sso=<base64>". Ingest it into
-// localStorage and strip the hash before anything reads the session.
 function ingestSsoHash() {
   if (typeof window === "undefined") return;
   const hash = window.location.hash;
   if (!hash.startsWith("#sso=")) return;
   try {
-    const decoded = JSON.parse(atob(decodeURIComponent(hash.slice(5)))) as {
-      token?: string;
-      user?: unknown;
-    };
+    const decoded = JSON.parse(atob(decodeURIComponent(hash.slice(5)))) as { token?: string; user?: unknown };
     if (decoded.token && decoded.user) {
       localStorage.setItem("hsos_token", decoded.token);
       localStorage.setItem("hsos_user", JSON.stringify(decoded.user));
     }
   } catch {
-    /* malformed handoff — ignore and fall back to login */
+    /* ignore */
   }
   window.history.replaceState(null, "", window.location.pathname + window.location.search);
 }
 
 ingestSsoHash();
 
-function readStoredSession(): { role: string } | null {
-  const token = localStorage.getItem("hsos_token");
-  const userRaw = localStorage.getItem("hsos_user");
-  if (!token || !userRaw) return null;
-  try {
-    const user = JSON.parse(userRaw);
-    if (CORPORATE_ROLES.has(user.role)) return user;
-  } catch {
-    /* corrupt — treat as no session */
-  }
-  return null;
-}
-
 export default function CorporatePortal() {
   const [clientId, setClientId] = useState<string | null | undefined>(undefined);
-  const [session, setSession] = useState<{ role: string } | null | "checking">(() =>
-    readStoredSession() ? "checking" : null
+  const [authMode, setAuthMode] = useState<"login" | "signup">("login");
+  const [gate, setGate] = useState<PortalGate | "checking">(() => {
+    const t = localStorage.getItem("hsos_token");
+    return t ? "checking" : "login";
+  });
+  const [user, setUser] = useState<CorporateUser | null>(() => readStoredUser());
+  const [token, setToken] = useState(() => localStorage.getItem("hsos_token") || "");
+  const [pendingMessage, setPendingMessage] = useState(
+    "Your profile was submitted. A Dharma Space administrator will review your access request."
   );
-
-  const handleGoogleCredential = async (credential: string) => {
-    const data = await corporateGoogleSignIn(credential);
-    storeSession(data.token, data.user);
-  };
 
   useEffect(() => {
     fetch(`${API_URL}/api/auth/google/config`)
@@ -207,33 +238,65 @@ export default function CorporatePortal() {
   }, []);
 
   useEffect(() => {
-    if (session !== "checking") return;
-    const token = localStorage.getItem("hsos_token");
-    if (!token) {
-      setSession(null);
+    if (gate !== "checking") return;
+    const storedToken = localStorage.getItem("hsos_token");
+    if (!storedToken) {
+      setGate("login");
       return;
     }
     let active = true;
-    fetch(`${API_URL}/api/auth/me`, { headers: { Authorization: `Bearer ${token}` } })
-      .then((res) => {
+    fetch(`${API_URL}/api/auth/me`, { headers: { Authorization: `Bearer ${storedToken}` } })
+      .then(async (res) => {
         if (!active) return;
-        if (res.ok) {
-          setSession(readStoredSession());
-        } else {
-          localStorage.removeItem("hsos_token");
-          localStorage.removeItem("hsos_user");
-          setSession(null);
+        if (!res.ok) {
+          clearSession();
+          setToken("");
+          setUser(null);
+          setGate("login");
+          return;
         }
+        const data = await res.json();
+        const nextUser = data.user as CorporateUser;
+        setUser(nextUser);
+        setToken(storedToken);
+        localStorage.setItem("hsos_user", JSON.stringify(nextUser));
+        setGate(gateFromUser(nextUser, storedToken));
       })
       .catch(() => {
-        if (active) setSession(readStoredSession());
+        if (active) setGate(gateFromUser(readStoredUser(), storedToken));
       });
     return () => {
       active = false;
     };
-  }, [session]);
+  }, [gate]);
 
-  if (session === "checking") {
+  function handleAuthResult(
+    data: { token?: string; user?: CorporateUser; needsOnboarding?: boolean },
+    pendingMsg?: string
+  ) {
+    if (pendingMsg) {
+      setPendingMessage(pendingMsg);
+      setGate("pending");
+      return;
+    }
+    if (!data.token || !data.user) return;
+    localStorage.setItem("hsos_token", data.token);
+    localStorage.setItem("hsos_user", JSON.stringify(data.user));
+    setToken(data.token);
+    setUser(data.user);
+    if (data.needsOnboarding || data.user.needsOnboarding) {
+      setGate("onboarding");
+      return;
+    }
+    if (data.user.pendingApproval) {
+      setPendingMessage("Your account is awaiting administrator approval.");
+      setGate("pending");
+      return;
+    }
+    storeSession(data.token, data.user);
+  }
+
+  if (gate === "checking") {
     return (
       <div className="cwp-page flex min-h-screen items-center justify-center text-sm text-[var(--cwp-text-muted)]">
         Loading…
@@ -241,8 +304,43 @@ export default function CorporatePortal() {
     );
   }
 
-  if (session) {
+  if (gate === "app") {
     return <PlatformApp />;
+  }
+
+  if (gate === "onboarding" && token && user) {
+    return (
+      <CorporateLoginShell subtitle="Tell us about your role so we can set up your corporate wellness access.">
+        <CorporateOnboarding
+          token={token}
+          initialName={user.name}
+          initialEmail={user.email}
+          onComplete={(message) => {
+            const next = { ...user, needsOnboarding: false, pendingApproval: true };
+            setUser(next);
+            localStorage.setItem("hsos_user", JSON.stringify(next));
+            setPendingMessage(message);
+            setGate("pending");
+          }}
+        />
+      </CorporateLoginShell>
+    );
+  }
+
+  if (gate === "pending") {
+    return (
+      <CorporateLoginShell subtitle="Access request submitted">
+        <CorporatePendingApproval
+          message={pendingMessage}
+          onSignOut={() => {
+            clearSession();
+            setToken("");
+            setUser(null);
+            setGate("login");
+          }}
+        />
+      </CorporateLoginShell>
+    );
   }
 
   if (clientId === undefined) {
@@ -254,7 +352,12 @@ export default function CorporatePortal() {
   }
 
   return (
-    <CorporateLogin onGoogleCredential={handleGoogleCredential} showGoogle={Boolean(clientId)} />
+    <CorporateAuth
+      mode={authMode}
+      setMode={setAuthMode}
+      showGoogle={Boolean(clientId)}
+      onAuthResult={handleAuthResult}
+    />
   );
 }
 

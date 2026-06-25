@@ -18,6 +18,12 @@ export async function applySchemaPatches(): Promise<void> {
     await client.$executeRawUnsafe(
       `ALTER TABLE "User" ADD COLUMN IF NOT EXISTS "accountStatus" TEXT NOT NULL DEFAULT 'APPROVED'`
     );
+    await client.$executeRawUnsafe(
+      `ALTER TABLE "User" ADD COLUMN IF NOT EXISTS "onboardingCompleted" BOOLEAN NOT NULL DEFAULT true`
+    );
+    await client.$executeRawUnsafe(
+      `ALTER TABLE "User" ADD COLUMN IF NOT EXISTS "position" TEXT`
+    );
 
     await ensureDuelTables(client);
 

@@ -407,6 +407,7 @@ export function registerAdminCwpRoutes(
           passwordHash: await bcrypt.hash(body.password, 12),
           role: body.role,
           accountStatus: "APPROVED",
+          onboardingCompleted: true,
           companyId: body.companyId ?? null,
           departmentId: body.departmentId ?? null
         }
@@ -423,7 +424,8 @@ export function registerAdminCwpRoutes(
     companyId: z.string().nullable().optional(),
     departmentId: z.string().nullable().optional(),
     password: z.string().min(6).optional(),
-    accountStatus: z.enum(["PENDING", "APPROVED", "REJECTED"]).optional()
+    accountStatus: z.enum(["PENDING", "APPROVED", "REJECTED"]).optional(),
+    position: z.string().nullable().optional()
   });
 
   app.patch("/api/admin/cwp/users/:id", auth, superAdmin, async (req, res, next) => {
@@ -435,6 +437,7 @@ export function registerAdminCwpRoutes(
       if (body.companyId !== undefined) data.companyId = body.companyId;
       if (body.departmentId !== undefined) data.departmentId = body.departmentId;
       if (body.accountStatus !== undefined) data.accountStatus = body.accountStatus;
+      if (body.position !== undefined) data.position = body.position;
       if (body.password) data.passwordHash = await bcrypt.hash(body.password, 12);
       const user = await prisma.user.update({ where: { id: req.params.id }, data });
       res.json({ user: sanitizeUser(user) });
