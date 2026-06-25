@@ -35,6 +35,7 @@ import {
 import { PROGRAM_MEDIA_DIR } from "./program-media-cache.js";
 import { TEAM_BUILDING_MEDIA_DIR, AVATAR_MEDIA_DIR } from "./data-root.js";
 import { ensureDatabaseSchema } from "./ensure-schema.js";
+import { applySchemaPatches } from "./schema-patches.js";
 import { registerStripeWebhook, stripeStatusPayload } from "./stripe.js";
 import { registerWellnessRoutes } from "./wellness-routes.js";
 import { registerMessagingRoutes } from "./messaging-routes.js";
@@ -1078,6 +1079,7 @@ async function startServer() {
   if (!schemaReady) {
     console.warn("[startup] API starting without database tables — redeploy after this deployment succeeds.");
   }
+  await applySchemaPatches().catch((error) => console.error("[startup] schema patches:", error));
   prisma = new PrismaClient();
   registerSiteContentRoutes(app, prisma, auth, requireRole);
   registerSiteBookingRoutes(app, prisma, jwtSecret, auth, requireRole("SUPER_ADMIN"));
