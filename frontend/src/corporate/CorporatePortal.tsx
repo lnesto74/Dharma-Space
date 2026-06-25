@@ -44,11 +44,12 @@ function CorporateLoginShell({ children, subtitle }: { children: React.ReactNode
   );
 }
 
-function CorporatePasswordLogin() {
-  const [email, setEmail] = useState("employee@demo.com");
-  const [password, setPassword] = useState("password123");
+function CorporatePasswordLogin({ googleClientId }: { googleClientId?: string | null }) {
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  const isLocal = typeof window !== "undefined" && /localhost|127\.0\.0\.1/.test(window.location.hostname);
 
   async function submit(event: FormEvent) {
     event.preventDefault();
@@ -71,21 +72,26 @@ function CorporatePasswordLogin() {
   }
 
   return (
-    <CorporateLoginShell subtitle="Google sign-in is not configured locally — use a demo corporate account below.">
+    <CorporateLoginShell subtitle="Sign in with your corporate email and password.">
       <form onSubmit={submit} className="grid gap-4">
-        <div className="grid gap-2">
-          {DEMO_ACCOUNTS.map(([label, account]) => (
-            <button
-              key={account}
-              type="button"
-              onClick={() => setEmail(account)}
-              className="flex items-center justify-between rounded-xl border border-[var(--cwp-border)] px-4 py-3 text-left text-sm hover:bg-[var(--cwp-bg)]"
-            >
-              <span className="font-medium">{label}</span>
-              <span className="text-[var(--cwp-text-muted)]">{account}</span>
-            </button>
-          ))}
-        </div>
+        {isLocal && (
+          <div className="grid gap-2">
+            {DEMO_ACCOUNTS.map(([label, account]) => (
+              <button
+                key={account}
+                type="button"
+                onClick={() => {
+                  setEmail(account);
+                  setPassword("password123");
+                }}
+                className="flex items-center justify-between rounded-xl border border-[var(--cwp-border)] px-4 py-3 text-left text-sm hover:bg-[var(--cwp-bg)]"
+              >
+                <span className="font-medium">{label}</span>
+                <span className="text-[var(--cwp-text-muted)]">{account}</span>
+              </button>
+            ))}
+          </div>
+        )}
         <label className="grid gap-1.5 text-sm">
           Email
           <input
@@ -105,21 +111,28 @@ function CorporatePasswordLogin() {
             autoComplete="current-password"
           />
         </label>
-        <p className="text-xs text-[var(--cwp-text-muted)]">Demo password for all accounts: <strong>password123</strong></p>
+        <p className="text-xs text-[var(--cwp-text-muted)]">
+          {isLocal ? "Demo password for all accounts: " : "Use the password set by your HR admin or Dharma Space."}
+          {isLocal && <strong> password123</strong>}
+        </p>
         {error && <p className="text-sm text-[var(--cwp-error)]">{error}</p>}
         <button type="submit" disabled={loading} className="cwp-btn-primary w-full disabled:opacity-60">
           {loading ? "Signing in…" : "Sign in"}
         </button>
-        <p className="text-xs text-center text-[var(--cwp-text-muted)]">
-          Production uses Google Workspace sign-in. Set <code className="text-[11px]">GOOGLE_CLIENT_ID</code> in{" "}
-          <code className="text-[11px]">backend/.env</code> to enable it locally.
-        </p>
       </form>
+      {googleClientId && (
+        <div className="mt-6 border-t border-[var(--cwp-border)] pt-6">
+          <p className="mb-3 text-center text-xs text-[var(--cwp-text-muted)]">Or continue with Google</p>
+          <GoogleOAuthProvider clientId={googleClientId}>
+            <CorporateGoogleLogin compact />
+          </GoogleOAuthProvider>
+        </div>
+      )}
     </CorporateLoginShell>
   );
 }
 
-function CorporateGoogleLogin() {
+function CorporateGoogleLogin({ compact = false }: { compact?: boolean }) {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
@@ -142,6 +155,29 @@ function CorporateGoogleLogin() {
       setLoading(false);
     }
   };
+
+  if (compact) {
+    return (
+      <div>
+        {error && <p className="mb-3 text-sm text-[var(--cwp-error)]">{error}</p>}
+        {loading ? (
+          <p className="text-center text-sm text-[var(--cwp-text-muted)]">Signing in…</p>
+        ) : (
+          <div className="flex justify-center">
+            <GoogleLogin
+              onSuccess={handleSuccess}
+              onError={() => setError("Google sign-in was cancelled or failed")}
+              useOneTap={false}
+              theme="outline"
+              size="large"
+              text="continue_with"
+              shape="rectangular"
+            />
+          </div>
+        )}
+      </div>
+    );
+  }
 
   return (
     <CorporateLoginShell subtitle="Sign in with your company Google account to access your corporate wellness portal.">
@@ -260,23 +296,7 @@ export default function CorporatePortal() {
     return <PlatformApp />;
   }
 
-  if (clientId === undefined) {
-    return (
-      <div className="cwp-page flex min-h-screen items-center justify-center text-sm text-[var(--cwp-text-muted)]">
-        Loading…
-      </div>
-    );
-  }
-
-  if (!clientId) {
-    return <CorporatePasswordLogin />;
-  }
-
-  return (
-    <GoogleOAuthProvider clientId={clientId}>
-      <CorporateGoogleLogin />
-    </GoogleOAuthProvider>
-  );
+  return <CorporatePasswordLogin googleClientId={clientId} />;
 }
 
 export function CorporateRedirect() {
