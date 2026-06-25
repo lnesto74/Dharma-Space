@@ -110,14 +110,6 @@ type Course = {
   modules?: { id: string; title: string; description: string; duration: string }[];
 };
 
-const demoAccounts = [
-  ["Employee", "employee@demo.com"],
-  ["HR Admin", "hr@demo.com"],
-  ["Trainer", "trainer@demo.com"],
-  ["Corporate Admin", "company@demo.com"],
-  ["Dharma Admin", "admin@demo.com"]
-];
-
 const categories = [
   "All",
   "Yoga",
