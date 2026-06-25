@@ -93,6 +93,7 @@ export async function sendMail(
     to: string | string[];
     subject: string;
     text: string;
+    html?: string;
     replyTo?: string;
     cc?: string | string[];
   }
@@ -109,7 +110,8 @@ export async function sendMail(
       cc: options.cc,
       replyTo: options.replyTo,
       subject: options.subject,
-      text: options.text
+      text: options.text,
+      html: options.html
     });
     return true;
   } catch (error) {

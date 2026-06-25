@@ -4,7 +4,7 @@ import { MedalRank } from "./components/wellness/MedalRank";
 import { CwpAppLayout } from "./components/CwpAppLayout";
 import { CwpPlatformShell } from "./components/CwpPlatformShell";
 import { ProfileAvatar } from "./components/ProfileAvatar";
-import { navForRole } from "./nav-config";
+import { navForRole, homePathForRole } from "./nav-config";
 import { useSelectedCompany } from "./selected-company";
 import {
   buddyChallengeTypes,
@@ -247,13 +247,14 @@ const stitchIconMap: Record<string, string> = {
 
 function useAuth() {
   const [token, setToken] = useState(() => localStorage.getItem("hsos_token") || "");
+  const [sessionReady, setSessionReady] = useState(() => !localStorage.getItem("hsos_token"));
   const [user, setUser] = useState<UserType | null>(() => {
     const stored = localStorage.getItem("hsos_user");
     if (!stored) return null;
     try {
       const parsed = JSON.parse(stored) as UserType;
       if (parsed.role === "SUPER_ADMIN") {
-        parsed.homePath = "/hr/dashboard";
+        parsed.homePath = homePathForRole("SUPER_ADMIN");
       }
       return parsed;
     } catch {
@@ -261,14 +262,52 @@ function useAuth() {
     }
   });
 
+  // Always trust the server for role/homePath — localStorage can be stale when switching accounts.
+  useEffect(() => {
+    if (!token) {
+      setSessionReady(true);
+      return;
+    }
+    let active = true;
+    setSessionReady(false);
+    fetch(`${API_URL}/api/auth/me`, { headers: { Authorization: `Bearer ${token}` } })
+      .then(async (res) => {
+        if (!active) return;
+        if (!res.ok) {
+          localStorage.removeItem("hsos_token");
+          localStorage.removeItem("hsos_user");
+          setToken("");
+          setUser(null);
+          return;
+        }
+        const data = await res.json();
+        const nextUser = data.user as UserType;
+        const userWithHome =
+          nextUser.role === "SUPER_ADMIN"
+            ? { ...nextUser, homePath: homePathForRole("SUPER_ADMIN") }
+            : { ...nextUser, homePath: nextUser.homePath || homePathForRole(nextUser.role as Role) };
+        localStorage.setItem("hsos_user", JSON.stringify(userWithHome));
+        setUser(userWithHome);
+      })
+      .catch(() => {
+        /* Network error — keep cached session and let later calls retry. */
+      })
+      .finally(() => active && setSessionReady(true));
+    return () => {
+      active = false;
+    };
+  }, [token]);
+
   const login = (nextToken: string, nextUser: UserType) => {
-    const userWithHome = nextUser.role === "SUPER_ADMIN"
-      ? { ...nextUser, homePath: "/hr/dashboard" }
-      : nextUser;
+    const userWithHome =
+      nextUser.role === "SUPER_ADMIN"
+        ? { ...nextUser, homePath: homePathForRole("SUPER_ADMIN") }
+        : { ...nextUser, homePath: nextUser.homePath || homePathForRole(nextUser.role as Role) };
     localStorage.setItem("hsos_token", nextToken);
     localStorage.setItem("hsos_user", JSON.stringify(userWithHome));
     setToken(nextToken);
     setUser(userWithHome);
+    setSessionReady(true);
   };
 
   const logout = () => {
@@ -276,6 +315,7 @@ function useAuth() {
     localStorage.removeItem("hsos_user");
     setToken("");
     setUser(null);
+    setSessionReady(true);
   };
 
   const updateUser = (patch: Partial<UserType>) => {
@@ -287,7 +327,7 @@ function useAuth() {
     });
   };
 
-  return { token, user, login, logout, updateUser };
+  return { token, user, sessionReady, login, logout, updateUser };
 }
 
 async function api<T>(path: string, token?: string, options: RequestInit = {}): Promise<T> {
@@ -400,8 +440,18 @@ function StitchPage({ children, railLabel, role = "EMPLOYEE" }: { children: Reac
 }
 
 function Protected({ auth, roles, children }: { auth: ReturnType<typeof useAuth>; roles?: Role[]; children: ReactNode }) {
+  if (!auth.sessionReady) {
+    return (
+      <div className="flex min-h-[40vh] items-center justify-center text-sm text-stone">
+        Loading your workspace…
+      </div>
+    );
+  }
   if (!auth.user) return <Navigate to="/" replace />;
-  if (roles && !roles.includes(auth.user.role)) return <Navigate to={auth.user.homePath || "/admin"} replace />;
+  if (roles && !roles.includes(auth.user.role)) {
+    const home = auth.user.homePath || homePathForRole(auth.user.role as Role);
+    return <Navigate to={home} replace />;
+  }
   return <>{children}</>;
 }
 
@@ -2892,6 +2942,14 @@ export default function PlatformApp() {
   const employee = ["EMPLOYEE"] as Role[];
   const hr = ["HR_ADMIN", "CORPORATE_ADMIN", "SUPER_ADMIN"] as Role[];
   const trainer = ["TRAINER", "SUPER_ADMIN"] as Role[];
+
+  if (auth.token && !auth.sessionReady) {
+    return (
+      <div className="cwp-page flex min-h-screen items-center justify-center text-sm text-[var(--cwp-text-muted)]">
+        Loading your workspace…
+      </div>
+    );
+  }
 
   return (
     <ChallengeProvider token={auth.token || null} userId={auth.user?.id ?? null} userName={auth.user?.name ?? null}>

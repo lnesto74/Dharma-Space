@@ -47,6 +47,7 @@ export type UserRow = {
   totalWellnessScore?: number;
   accountStatus?: string;
   position?: string | null;
+  createdAt?: string;
 };
 
 export type DepartmentRow = {

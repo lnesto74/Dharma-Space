@@ -1461,3 +1461,208 @@
 .admin-upload-input {
   display: none;
 }
+
+/* Floating pending-approvals widget (admin backend) */
+.admin-pending-widget {
+  position: fixed;
+  bottom: 24px;
+  right: 24px;
+  z-index: 200;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+}
+
+.admin-pending-fab {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 52px;
+  height: 52px;
+  border-radius: 9999px;
+  border: 1px solid var(--admin-border);
+  background: var(--admin-bg);
+  color: var(--admin-green);
+  box-shadow: 0 8px 28px rgba(55, 53, 47, 0.18);
+  cursor: pointer;
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+.admin-pending-fab:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 12px 32px rgba(55, 53, 47, 0.22);
+}
+
+.admin-pending-fab-badge {
+  position: absolute;
+  top: -4px;
+  right: -4px;
+  min-width: 20px;
+  height: 20px;
+  padding: 0 6px;
+  border-radius: 9999px;
+  background: var(--admin-orange);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 20px;
+  text-align: center;
+}
+
+.admin-pending-fab {
+  position: relative;
+}
+
+.admin-pending-panel {
+  width: min(22rem, calc(100vw - 2rem));
+  max-height: min(32rem, calc(100vh - 6rem));
+  margin-bottom: 12px;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border: 1px solid var(--admin-border);
+  border-radius: 14px;
+  background: var(--admin-bg);
+  box-shadow: 0 16px 48px rgba(55, 53, 47, 0.18);
+}
+
+.admin-pending-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--admin-border);
+  background: var(--admin-green-bg);
+}
+
+.admin-pending-header-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--admin-text);
+}
+
+.admin-pending-header-count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 22px;
+  height: 22px;
+  padding: 0 6px;
+  border-radius: 9999px;
+  background: var(--admin-orange);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.admin-pending-icon-btn {
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--admin-text-secondary);
+  cursor: pointer;
+}
+
+.admin-pending-icon-btn:hover {
+  background: var(--admin-hover);
+}
+
+.admin-pending-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 10px;
+}
+
+.admin-pending-error {
+  margin-bottom: 8px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: var(--admin-red-bg);
+  color: var(--admin-red);
+  font-size: 12px;
+}
+
+.admin-pending-empty {
+  padding: 24px 12px;
+  text-align: center;
+  font-size: 13px;
+  color: var(--admin-text-secondary);
+}
+
+.admin-pending-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.admin-pending-card {
+  padding: 12px;
+  border: 1px solid var(--admin-border);
+  border-radius: 10px;
+  background: var(--admin-sidebar);
+}
+
+.admin-pending-card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+
+.admin-pending-card-head strong {
+  font-size: 14px;
+}
+
+.admin-pending-pill {
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  padding: 2px 8px;
+  border-radius: 9999px;
+  background: var(--admin-orange-bg);
+  color: var(--admin-orange);
+}
+
+.admin-pending-meta {
+  margin: 2px 0;
+  font-size: 12px;
+  color: var(--admin-text-secondary);
+  line-height: 1.4;
+}
+
+.admin-pending-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 10px;
+}
+
+.admin-pending-footer {
+  border-top: 1px solid var(--admin-border);
+  padding: 10px 14px;
+  background: var(--admin-sidebar);
+}
+
+.admin-pending-footer-link {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--admin-blue);
+  text-decoration: none;
+}
+
+.admin-pending-footer-link:hover {
+  text-decoration: underline;
+}

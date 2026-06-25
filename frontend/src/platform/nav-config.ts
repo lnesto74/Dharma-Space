@@ -71,6 +71,19 @@ export function navForRole(role?: PlatformRole): PlatformNavItem[] {
   return NAV_BY_ROLE[role] ?? NAV_BY_ROLE.EMPLOYEE;
 }
 
+export const ROLE_HOME: Record<PlatformRole, string> = {
+  EMPLOYEE: "/app/dashboard",
+  HR_ADMIN: "/hr/dashboard",
+  TRAINER: "/trainer/dashboard",
+  CORPORATE_ADMIN: "/hr/dashboard",
+  SUPER_ADMIN: "/hr/dashboard"
+};
+
+export function homePathForRole(role?: PlatformRole): string {
+  if (!role) return ROLE_HOME.EMPLOYEE;
+  return ROLE_HOME[role] ?? ROLE_HOME.EMPLOYEE;
+}
+
 export function readPlatformUser(): { name: string; role: PlatformRole } | null {
   try {
     const raw = localStorage.getItem("hsos_user");

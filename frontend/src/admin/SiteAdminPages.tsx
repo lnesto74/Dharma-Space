@@ -1,5 +1,6 @@
 import { FormEvent, ReactNode, useEffect, useState } from "react";
 import { Link, NavLink } from "react-router-dom";
+import { PendingApprovalsWidget } from "./PendingApprovalsWidget";
 import {
   BookOpen,
   Building2,
@@ -202,6 +203,7 @@ export function AdminShell({
           </div>
         </div>
       </div>
+      <PendingApprovalsWidget token={auth.token} />
     </div>
   );
 }

@@ -7,6 +7,7 @@ export type CorporateUser = {
   name: string;
   email: string;
   role: string;
+  accountStatus?: string;
   position?: string | null;
   homePath?: string;
   needsOnboarding?: boolean;

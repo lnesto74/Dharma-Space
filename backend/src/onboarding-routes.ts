@@ -89,7 +89,12 @@ export function registerOnboardingRoutes(
       await notifyAdminPendingUser({
         name: updated.name,
         email: updated.email,
-        method: "email"
+        method: "email",
+        role: updated.role,
+        position: updated.position,
+        company: updated.company?.name,
+        companyId: updated.companyId,
+        department: updated.department?.name
       });
 
       res.json({

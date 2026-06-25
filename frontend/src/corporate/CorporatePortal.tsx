@@ -1,5 +1,4 @@
 import { FormEvent, useEffect, useState } from "react";
-import { Navigate } from "react-router-dom";
 import { BrandLogo } from "../components/BrandLogo";
 import { GoogleSignIn, GoogleSignInDivider } from "../components/GoogleSignIn";
 import { CorporateOnboarding, CorporatePendingApproval, type CorporateUser } from "./CorporateOnboarding";
@@ -24,6 +23,14 @@ const ROLE_HOME: Record<string, string> = {
   TRAINER: "/trainer/dashboard",
   CORPORATE_ADMIN: "/company/dashboard",
   SUPER_ADMIN: "/hr/dashboard"
+};
+
+const ROLE_LABELS: Record<string, string> = {
+  EMPLOYEE: "Employee",
+  HR_ADMIN: "HR Admin",
+  CORPORATE_ADMIN: "Corporate Admin",
+  TRAINER: "Specialist / Trainer",
+  SUPER_ADMIN: "Dharma Admin"
 };
 
 function resolveHomePath(user: CorporateUser): string {
@@ -108,12 +115,20 @@ function CorporateAuth({
   mode,
   setMode,
   showGoogle,
-  onAuthResult
+  onAuthResult,
+  activeSession,
+  onContinueSession,
+  onSwitchAccount,
+  onBeforeSignIn
 }: {
   mode: "login" | "signup";
   setMode: (m: "login" | "signup") => void;
   showGoogle: boolean;
   onAuthResult: (data: { token?: string; user?: CorporateUser; needsOnboarding?: boolean }, pendingMessage?: string) => void;
+  activeSession?: { user: CorporateUser; token: string } | null;
+  onContinueSession?: () => void;
+  onSwitchAccount?: () => void;
+  onBeforeSignIn?: () => void;
 }) {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -124,6 +139,7 @@ function CorporateAuth({
     event.preventDefault();
     setLoading(true);
     setError("");
+    onBeforeSignIn?.();
     try {
       const data = await authRequest(mode === "login" ? "/api/auth/login" : "/api/auth/register", { email, password });
       onAuthResult(data);
@@ -142,6 +158,7 @@ function CorporateAuth({
   async function submitGoogle(credential: string) {
     setLoading(true);
     setError("");
+    onBeforeSignIn?.();
     try {
       const res = await fetch(`${API_URL}/api/auth/google`, {
         method: "POST",
@@ -172,6 +189,27 @@ function CorporateAuth({
           : "Create your account to join your company on the corporate wellness platform."
       }
     >
+      {activeSession && (
+        <div className="mb-4 rounded-xl border border-[var(--cwp-border)] bg-[var(--cwp-bg)] p-4 text-sm">
+          <p className="font-medium text-[var(--cwp-charcoal)]">
+            Signed in as {activeSession.user.name}
+            <span className="text-[var(--cwp-text-muted)]">
+              {" "}
+              ({ROLE_LABELS[activeSession.user.role] || activeSession.user.role})
+            </span>
+          </p>
+          <p className="mt-1 text-xs text-[var(--cwp-text-muted)]">{activeSession.user.email}</p>
+          <div className="mt-3 flex flex-wrap gap-2">
+            <button type="button" className="cwp-btn-primary" onClick={onContinueSession}>
+              Continue to dashboard
+            </button>
+            <button type="button" className="cwp-btn-secondary" onClick={onSwitchAccount}>
+              Use a different account
+            </button>
+          </div>
+        </div>
+      )}
+
       <div className="mb-4 flex gap-2">
         {(["login", "signup"] as const).map((tab) => (
           <button
@@ -311,10 +349,16 @@ export default function CorporatePortal() {
         setUser(nextUser);
         setToken(storedToken);
         localStorage.setItem("hsos_user", JSON.stringify(nextUser));
-        setGate(gateFromUser(nextUser, storedToken));
+        const nextGate = gateFromUser(nextUser, storedToken);
+        // Don't auto-redirect — let the user continue as this account or sign in as someone else.
+        setGate(nextGate === "app" ? "login" : nextGate);
       })
       .catch(() => {
-        if (active) setGate(gateFromUser(readStoredUser(), storedToken));
+        if (active) {
+          const storedUser = readStoredUser();
+          const nextGate = gateFromUser(storedUser, storedToken);
+          setGate(nextGate === "app" ? "login" : nextGate);
+        }
       });
     return () => {
       active = false;
@@ -355,10 +399,6 @@ export default function CorporatePortal() {
     );
   }
 
-  if (gate === "app" && user) {
-    return <Navigate to={resolveHomePath(user)} replace />;
-  }
-
   if (gate === "onboarding" && token && user) {
     return (
       <CorporateLoginShell subtitle="Tell us about your role so we can set up your corporate wellness access.">
@@ -394,12 +434,32 @@ export default function CorporatePortal() {
     );
   }
 
+  function resetPortalSession() {
+    clearSession();
+    setToken("");
+    setUser(null);
+  }
+
+  const activeSession =
+    gate === "login" &&
+    user &&
+    token &&
+    !user.needsOnboarding &&
+    !user.pendingApproval &&
+    user.accountStatus !== "REJECTED"
+      ? { user, token }
+      : null;
+
   return (
     <CorporateAuth
       mode={authMode}
       setMode={setAuthMode}
       showGoogle={clientId !== null && Boolean(clientId)}
       onAuthResult={handleAuthResult}
+      activeSession={activeSession}
+      onContinueSession={() => user && token && storeSession(token, user)}
+      onSwitchAccount={resetPortalSession}
+      onBeforeSignIn={resetPortalSession}
     />
   );
 }

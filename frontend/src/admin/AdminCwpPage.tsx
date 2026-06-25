@@ -4,7 +4,7 @@ import { Building2, ExternalLink, Mail, RefreshCw } from "lucide-react";
 import { adminApi } from "./adminApi";
 import { AdminShell } from "./SiteAdminPages";
 import type { UserType } from "../auth/useAuth";
-import type { CompanyRow } from "./cwp/types";
+import type { CompanyRow, UserRow } from "./cwp/types";
 
 function goToCwpPlatform() {
   window.location.assign("/hr/dashboard");
@@ -67,6 +67,7 @@ export function AdminCwpPage({ auth }: { auth: Auth }) {
   const [overview, setOverview] = useState<Overview | null>(null);
   const [companies, setCompanies] = useState<CompanyRow[]>([]);
   const [requests, setRequests] = useState<ScheduleRequest[]>([]);
+  const [pendingUsers, setPendingUsers] = useState<UserRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
@@ -80,14 +81,16 @@ export function AdminCwpPage({ auth }: { auth: Auth }) {
     setLoading(true);
     setError("");
     try {
-      const [ov, co, sr] = await Promise.all([
+      const [ov, co, sr, pending] = await Promise.all([
         adminApi<Overview>("/api/admin/cwp/overview", auth.token),
         adminApi<{ companies: CompanyRow[] }>("/api/admin/cwp/companies", auth.token),
-        adminApi<{ requests: ScheduleRequest[] }>("/api/admin/cwp/schedule-requests?status=pending", auth.token)
+        adminApi<{ requests: ScheduleRequest[] }>("/api/admin/cwp/schedule-requests?status=pending", auth.token),
+        adminApi<{ users: UserRow[] }>("/api/admin/cwp/users?accountStatus=PENDING", auth.token)
       ]);
       setOverview(ov);
       setCompanies(co.companies);
       setRequests(sr.requests);
+      setPendingUsers(pending.users || []);
     } catch (e: any) {
       setError(e.message || "Could not load CWP data");
     } finally {
@@ -149,6 +152,7 @@ export function AdminCwpPage({ auth }: { auth: Auth }) {
               kpis={kpis}
               companies={companies}
               requests={requests}
+              pendingUsers={pendingUsers}
               token={auth.token}
               onChanged={() => void load()}
               flash={flash}
@@ -189,6 +193,7 @@ function OverviewTab({
   kpis,
   companies,
   requests,
+  pendingUsers,
   token,
   onChanged,
   flash,
@@ -198,6 +203,7 @@ function OverviewTab({
   kpis?: Kpis;
   companies: CompanyRow[];
   requests: ScheduleRequest[];
+  pendingUsers: UserRow[];
   token: string;
   onChanged: () => void;
   flash: (m: string) => void;
@@ -214,6 +220,37 @@ function OverviewTab({
       onChanged();
     } catch (e: any) {
       setError(e.message || "Could not update request");
+    }
+  };
+
+  const approveUser = async (user: UserRow) => {
+    try {
+      await adminApi(`/api/admin/cwp/users/${user.id}`, token, {
+        method: "PATCH",
+        body: JSON.stringify({
+          accountStatus: "APPROVED",
+          role: user.role || "EMPLOYEE",
+          companyId: user.companyId
+        })
+      });
+      flash(`${user.name} approved.`);
+      onChanged();
+    } catch (e: any) {
+      setError(e.message || "Could not approve user");
+    }
+  };
+
+  const rejectUser = async (user: UserRow) => {
+    if (!window.confirm(`Reject access for ${user.email}?`)) return;
+    try {
+      await adminApi(`/api/admin/cwp/users/${user.id}`, token, {
+        method: "PATCH",
+        body: JSON.stringify({ accountStatus: "REJECTED" })
+      });
+      flash(`${user.name} rejected.`);
+      onChanged();
+    } catch (e: any) {
+      setError(e.message || "Could not reject user");
     }
   };
 
@@ -257,6 +294,59 @@ function OverviewTab({
         </table>
       </div>
       <button type="button" className="admin-btn" style={{ marginTop: 12 }} onClick={goCompanies}>Add a company →</button>
+
+      <div className="admin-section-label" style={{ marginTop: 24 }}>Pending user approvals</div>
+      <p className="admin-muted" style={{ marginBottom: 12 }}>
+        Signups waiting for review. Use the briefcase icon (lower right) on any admin page for quick approve/reject.
+      </p>
+      <div className="admin-table-wrap">
+        <table className="admin-table">
+          <thead>
+            <tr>
+              <th>Name</th>
+              <th>Email</th>
+              <th>Role</th>
+              <th>Position</th>
+              <th>Company</th>
+              <th>Department</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            {pendingUsers.map((u) => (
+              <tr key={u.id}>
+                <td><strong>{u.name}</strong></td>
+                <td>{u.email}</td>
+                <td>{u.role}</td>
+                <td>{u.position || "—"}</td>
+                <td>
+                  {u.company ? (
+                    <Link to={`/admin/cwp/companies/${u.company.id}?tab=people`}>{u.company.name}</Link>
+                  ) : (
+                    "—"
+                  )}
+                </td>
+                <td>{u.department?.name || "—"}</td>
+                <td>
+                  <div className="admin-table-actions">
+                    <button type="button" className="admin-btn admin-btn-sm admin-btn-primary" onClick={() => void approveUser(u)}>
+                      Approve
+                    </button>
+                    <button type="button" className="admin-btn admin-btn-sm" onClick={() => void rejectUser(u)}>
+                      Reject
+                    </button>
+                  </div>
+                </td>
+              </tr>
+            ))}
+            {pendingUsers.length === 0 && (
+              <tr className="admin-table-empty">
+                <td colSpan={7}>No pending signups.</td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+      </div>
 
       <div className="admin-section-label" style={{ marginTop: 24 }}>Pending schedule requests</div>
       <div className="admin-table-wrap">

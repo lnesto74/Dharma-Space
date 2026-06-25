@@ -2,7 +2,8 @@ import type { Express, NextFunction, Request, Response } from "express";
 import type { PrismaClient, User } from "@prisma/client";
 import bcrypt from "bcryptjs";
 import { z } from "zod";
-import { createUser } from "./user-auth.js";
+import { createUser, USER_PROFILE_INCLUDE } from "./user-auth.js";
+import { notifyUserApproved } from "./pending-user-notifications.js";
 
 type AuthedRequest = Request & { user?: User };
 
@@ -545,6 +546,12 @@ export function registerAdminCwpRoutes(
   app.patch("/api/admin/cwp/users/:id", auth, superAdmin, async (req, res, next) => {
     try {
       const body = userPatchSchema.parse(req.body);
+      const before = await prisma.user.findUnique({
+        where: { id: req.params.id },
+        include: { company: true, department: true }
+      });
+      if (!before) return res.status(404).json({ message: "User not found" });
+
       const data: Record<string, unknown> = {};
       if (body.name !== undefined) data.name = body.name;
       if (body.role !== undefined) data.role = body.role;
@@ -553,7 +560,24 @@ export function registerAdminCwpRoutes(
       if (body.accountStatus !== undefined) data.accountStatus = body.accountStatus;
       if (body.position !== undefined) data.position = body.position;
       if (body.password) data.passwordHash = await bcrypt.hash(body.password, 12);
-      const user = await prisma.user.update({ where: { id: req.params.id }, data });
+
+      const user = await prisma.user.update({
+        where: { id: req.params.id },
+        data,
+        include: USER_PROFILE_INCLUDE
+      });
+
+      if (body.accountStatus === "APPROVED" && before.accountStatus === "PENDING") {
+        await notifyUserApproved({
+          name: user.name,
+          email: user.email,
+          role: user.role,
+          position: user.position,
+          company: user.company?.name,
+          department: user.department?.name
+        });
+      }
+
       res.json({ user: sanitizeUser(user) });
     } catch (error) {
       next(error);
