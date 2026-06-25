@@ -84,23 +84,12 @@ import {
 } from "recharts";
 
 import { BrandLogo } from "../components/BrandLogo";
-import { GoogleSignIn, GoogleSignInDivider, corporateGoogleSignIn } from "../components/GoogleSignIn";
 import { LOGO_URL } from "../brand";
 
 const API_URL = import.meta.env.VITE_API_URL || "";
 
 type Role = "EMPLOYEE" | "HR_ADMIN" | "TRAINER" | "CORPORATE_ADMIN" | "SUPER_ADMIN";
-type UserType = {
-  id: string;
-  name: string;
-  email: string;
-  role: Role;
-  homePath: string;
-  avatar?: string;
-  position?: string | null;
-  company?: { id: string; name: string } | null;
-  department?: { id: string; name: string } | null;
-};
+type UserType = { id: string; name: string; email: string; role: Role; homePath: string; avatar?: string };
 type Course = {
   id: string;
   title: string;
@@ -119,6 +108,14 @@ type Course = {
   instructor?: { name: string };
   modules?: { id: string; title: string; description: string; duration: string }[];
 };
+
+const demoAccounts = [
+  ["Employee", "employee@demo.com"],
+  ["HR Admin", "hr@demo.com"],
+  ["Trainer", "trainer@demo.com"],
+  ["Corporate Admin", "company@demo.com"],
+  ["Dharma Admin", "admin@demo.com"]
+];
 
 const categories = [
   "All",
@@ -934,7 +931,7 @@ function BuddyInitials({ name, color = "var(--cwp-olive)" }: { name: string; col
 }
 
 function BuddyChallenge() {
-  const { duels, points, createDuel, colleagues } = useChallenges();
+  const { duels, points, colleagues, createDuel } = useChallenges();
   const [buddy, setBuddy] = useState("");
   const [typeId, setTypeId] = useState("squats");
   const [target, setTarget] = useState(20);
@@ -965,7 +962,12 @@ function BuddyChallenge() {
   const sendChallenge = () => {
     if (!canSubmit) return;
     const opponentName = nameOf(buddy);
-    void createDuel({ opponentId: buddy, typeId, target, witnessIds: witnesses });
+    createDuel({
+      opponentId: buddy,
+      typeId,
+      target,
+      witnessIds: witnesses
+    });
     setToast(`Challenge sent to ${opponentName}! Awaiting their reply and 3 witnesses.`);
     setBuddy("");
     setWitnesses([]);
@@ -1026,9 +1028,6 @@ function BuddyChallenge() {
               </button>
             ))}
           </div>
-          {colleagues.length === 0 && (
-            <p className="mb-5 mt-1 text-sm text-stone">No colleagues found in your company yet.</p>
-          )}
           {colleagues.length > BUDDY_PREVIEW && (
             <button
               type="button"
@@ -1038,7 +1037,7 @@ function BuddyChallenge() {
               {showAllBuddies ? "Show less" : `More (${colleagues.length - BUDDY_PREVIEW})`}
             </button>
           )}
-          {colleagues.length > 0 && colleagues.length <= BUDDY_PREVIEW && <div className="mb-5" />}
+          {colleagues.length <= BUDDY_PREVIEW && <div className="mb-5" />}
 
           <p className="mb-2 text-xs font-semibold uppercase tracking-[0.16em] text-stone">2 · Pick the exercise</p>
           <div className="mb-4 grid grid-cols-2 gap-2 sm:grid-cols-4">
@@ -1407,8 +1406,8 @@ function Landing() {
 function Login({ auth }: { auth: ReturnType<typeof useAuth> }) {
   const navigate = useNavigate();
   if (auth.user) return <Navigate to={auth.user.homePath || "/admin"} replace />;
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
+  const [email, setEmail] = useState("employee@demo.com");
+  const [password, setPassword] = useState("password123");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
@@ -1417,37 +1416,12 @@ function Login({ auth }: { auth: ReturnType<typeof useAuth> }) {
     setLoading(true);
     setError("");
     try {
-      const result = await api<{ token: string; user: UserType; pending?: boolean; message?: string; needsOnboarding?: boolean }>("/api/auth/login", undefined, {
+      const result = await api<{ token: string; user: UserType }>("/api/auth/login", undefined, {
         method: "POST",
         body: JSON.stringify({ email, password })
       });
-      if (result.needsOnboarding) {
-        auth.login(result.token, result.user);
-        window.location.href = "/portal";
-        return;
-      }
-      if (result.pending) throw new Error(result.message || "Account pending approval");
       auth.login(result.token, result.user);
-      navigate(result.user.homePath || "/app/dashboard");
-    } catch (err: any) {
-      setError(err.message);
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  async function googleSignIn(credential: string) {
-    setLoading(true);
-    setError("");
-    try {
-      const result = await corporateGoogleSignIn(credential);
-      if (result.needsOnboarding) {
-        auth.login(result.token, result.user as UserType);
-        window.location.href = "/portal";
-        return;
-      }
-      auth.login(result.token, result.user as UserType);
-      navigate((result.user.homePath || "/app/dashboard") as string);
+      navigate(result.user.homePath);
     } catch (err: any) {
       setError(err.message);
     } finally {
@@ -1456,18 +1430,26 @@ function Login({ auth }: { auth: ReturnType<typeof useAuth> }) {
   }
 
   return (
-    <div className="mx-auto flex min-h-[calc(100vh-82px)] max-w-md flex-col justify-center px-5 py-12">
+    <div className="mx-auto grid min-h-[calc(100vh-82px)] max-w-6xl gap-8 px-5 py-12 lg:grid-cols-[1fr_.9fr] lg:items-center">
+      <div>
+        <p className="text-sm uppercase tracking-[0.24em] text-stone">Demo access</p>
+        <h1 className="mt-4 text-5xl font-light text-navy">Enter Dharma Space.</h1>
+        <p className="mt-4 text-stone">Use any demo account. Password for all roles is <span className="font-semibold text-navy">password123</span>.</p>
+        <div className="mt-6 grid gap-3">
+          {demoAccounts.map(([label, account]) => (
+            <button key={account} onClick={() => setEmail(account)} className="flex items-center justify-between rounded-full glass px-5 py-3 text-left text-sm">
+              <span className="font-medium text-navy">{label}</span><span className="text-stone">{account}</span>
+            </button>
+          ))}
+        </div>
+      </div>
       <Card>
-        <h1 className="text-3xl font-light text-navy">Sign in</h1>
-        <p className="mt-2 text-sm text-stone">Use your corporate wellness account. New users can sign up at the corporate portal.</p>
-        <form onSubmit={submit} className="mt-6 grid gap-4">
-          <label className="grid gap-2 text-sm font-medium text-navy">Email<input type="email" required value={email} onChange={(event) => setEmail(event.target.value)} className="rounded-full border border-sand bg-white/70 px-5 py-3 outline-none focus:border-navy" /></label>
-          <label className="grid gap-2 text-sm font-medium text-navy">Password<input type="password" required value={password} onChange={(event) => setPassword(event.target.value)} className="rounded-full border border-sand bg-white/70 px-5 py-3 outline-none focus:border-navy" /></label>
+        <form onSubmit={submit} className="grid gap-4">
+          <label className="grid gap-2 text-sm font-medium text-navy">Email<input value={email} onChange={(event) => setEmail(event.target.value)} className="rounded-full border border-sand bg-white/70 px-5 py-3 outline-none focus:border-navy" /></label>
+          <label className="grid gap-2 text-sm font-medium text-navy">Password<input type="password" value={password} onChange={(event) => setPassword(event.target.value)} className="rounded-full border border-sand bg-white/70 px-5 py-3 outline-none focus:border-navy" /></label>
           {error && <p className="rounded-3xl bg-red-50 px-4 py-3 text-sm text-red-700">{error}</p>}
-          <button disabled={loading} className="rounded-full bg-navy px-5 py-3 font-medium text-white disabled:opacity-60">{loading ? "Signing in..." : "Sign in"}</button>
-          <GoogleSignInDivider />
-          <GoogleSignIn onCredential={googleSignIn} onError={setError} disabled={loading} />
-          <a href="/portal" className="text-center text-sm font-medium text-navy">Corporate portal sign up</a>
+          <button disabled={loading} className="rounded-full bg-navy px-5 py-3 font-medium text-white disabled:opacity-60">{loading ? "Signing in..." : "Login"}</button>
+          <Link to="/register" className="text-center text-sm font-medium text-navy">Create a new employee account</Link>
         </form>
       </Card>
     </div>
@@ -1478,64 +1460,27 @@ function Register({ auth }: { auth: ReturnType<typeof useAuth> }) {
   const navigate = useNavigate();
   const [form, setForm] = useState({ name: "", email: "", password: "" });
   const [error, setError] = useState("");
-  const [pendingMessage, setPendingMessage] = useState("");
-  const [loading, setLoading] = useState(false);
-
   async function submit(event: FormEvent) {
     event.preventDefault();
-    setLoading(true);
-    setError("");
-    setPendingMessage("");
     try {
-      const result = await api<{ token?: string; user?: UserType; pending?: boolean; message?: string }>("/api/auth/register", undefined, { method: "POST", body: JSON.stringify(form) });
-      if (result.pending) {
-        setPendingMessage(result.message || "Account created. A Dharma Space administrator will approve your access.");
-        return;
-      }
-      if (result.token && result.user) {
-        auth.login(result.token, result.user);
-        navigate(result.user.homePath);
-      }
+      const result = await api<{ token: string; user: UserType }>("/api/auth/register", undefined, { method: "POST", body: JSON.stringify(form) });
+      auth.login(result.token, result.user);
+      navigate(result.user.homePath);
     } catch (err: any) {
       setError(err.message);
-    } finally {
-      setLoading(false);
     }
   }
-
-  async function googleSignIn(credential: string) {
-    setLoading(true);
-    setError("");
-    setPendingMessage("");
-    try {
-      const result = await corporateGoogleSignIn(credential);
-      auth.login(result.token, result.user as UserType);
-      navigate((result.user.homePath || "/app/dashboard") as string);
-    } catch (err: any) {
-      if (err.message?.includes("awaiting approval")) {
-        setPendingMessage(err.message);
-      } else {
-        setError(err.message);
-      }
-    } finally {
-      setLoading(false);
-    }
-  }
-
   return (
     <div className="mx-auto max-w-xl px-5 py-16">
       <Card>
         <h1 className="text-3xl font-light text-navy">Create your account</h1>
-        <p className="mt-2 text-sm text-stone">New accounts are reviewed by a Dharma Space administrator before access is granted.</p>
-        <GoogleSignIn className="mt-6" onCredential={googleSignIn} onError={setError} disabled={loading} />
-        <GoogleSignInDivider label="Or register with email" />
-        <form onSubmit={submit} className="mt-2 grid gap-4">
+        <form onSubmit={submit} className="mt-6 grid gap-4">
           {(["name", "email", "password"] as const).map((field) => (
             <input key={field} type={field === "password" ? "password" : "text"} placeholder={field} value={form[field]} onChange={(event) => setForm({ ...form, [field]: event.target.value })} className="rounded-full border border-sand bg-white/70 px-5 py-3 outline-none" />
           ))}
-          {pendingMessage && <p className="rounded-3xl bg-amber-50 px-4 py-3 text-sm text-amber-900">{pendingMessage}</p>}
           {error && <p className="text-sm text-red-700">{error}</p>}
-          <button disabled={loading} className="rounded-full bg-navy px-5 py-3 font-medium text-white disabled:opacity-60">{loading ? "Submitting…" : "Request access"}</button>
+          <button className="rounded-full bg-navy px-5 py-3 font-medium text-white">Register</button>
+          <SocialLoginButtons />
         </form>
       </Card>
     </div>
@@ -1543,7 +1488,19 @@ function Register({ auth }: { auth: ReturnType<typeof useAuth> }) {
 }
 
 function SocialLoginButtons() {
-  return null;
+  return (
+    <div className="mt-2 grid gap-3 border-t border-sand/70 pt-4">
+      <p className="text-center text-xs uppercase tracking-[0.2em] text-stone">Or continue with</p>
+      <div className="grid gap-2 sm:grid-cols-3">
+        {["Google", "Facebook", "Instagram"].map((provider) => (
+          <button key={provider} type="button" className="rounded-full bg-white/70 px-4 py-3 text-sm font-medium text-navy hover:bg-white">
+            {provider}
+          </button>
+        ))}
+      </div>
+      <p className="text-center text-xs text-stone">Social login is a frontend placeholder for future OAuth setup.</p>
+    </div>
+  );
 }
 
 function CoursesPage() {
@@ -2413,12 +2370,11 @@ function EmployeeCommunityPage({ auth }: { auth: ReturnType<typeof useAuth> }) {
 
 function EmployeeProfilePage({ auth }: { auth: ReturnType<typeof useAuth> }) {
   const { data: dashboard } = useApi<any>("/api/employee/dashboard", auth.token);
-  const roleLabel = auth.user?.role?.replace(/_/g, " ") || "Employee";
-  const profileRows = [
-    { label: "Company", value: auth.user?.company?.name || "—" },
-    { label: "Department", value: auth.user?.department?.name || "—" },
-    { label: "Position", value: auth.user?.position || "—" },
-    { label: "Role", value: roleLabel }
+  const preferences = [
+    { label: "Learning goal", value: "Become a certified mindful leadership facilitator" },
+    { label: "Preferred practice window", value: "Morning, 9:00-10:00 AM" },
+    { label: "Focus areas", value: "Recovery, emotional intelligence, leadership wellbeing" },
+    { label: "Notification tone", value: "Gentle nudges only" }
   ];
   const skillMap = [
     { name: "Recovery", value: 78 },
@@ -2441,19 +2397,19 @@ function EmployeeProfilePage({ auth }: { auth: ReturnType<typeof useAuth> }) {
             />
             <h2 className="mt-4 text-3xl font-light text-navy">{auth.user?.name}</h2>
             <p className="mt-1 text-stone">{auth.user?.email}</p>
-            <span className="mt-4 rounded-full bg-sage/20 px-4 py-2 text-sm font-medium text-navy">{roleLabel}</span>
+            <span className="mt-4 rounded-full bg-sage/20 px-4 py-2 text-sm font-medium text-navy">Employee · Practitioner Path</span>
           </div>
           <div className="mt-6 grid grid-cols-2 gap-3">
-            <StatPill label="Streak" value={`${dashboard?.kpis?.streakDays || 0} days`} />
-            <StatPill label="Score" value={dashboard?.kpis?.wellbeingScore || 0} />
-            <StatPill label="Certificates" value={dashboard?.kpis?.certificates || 0} />
-            <StatPill label="Company" value={auth.user?.company?.name?.split(" ")[0] || "—"} />
+            <StatPill label="Streak" value={`${dashboard?.kpis?.streakDays || 16} days`} />
+            <StatPill label="Score" value={dashboard?.kpis?.wellbeingScore || 84} />
+            <StatPill label="Certificates" value={dashboard?.kpis?.certificates || 2} />
+            <StatPill label="Level" value="Practitioner" />
           </div>
         </Card>
         <Card>
-          <ChartTitle title="Work profile" />
+          <ChartTitle title="Profile preferences" />
           <div className="grid gap-3">
-            {profileRows.map((item) => (
+            {preferences.map((item) => (
               <div key={item.label} className="rounded-4xl bg-white/70 p-4">
                 <p className="text-xs uppercase tracking-[0.18em] text-stone">{item.label}</p>
                 <p className="mt-1 font-medium text-navy">{item.value}</p>
@@ -2938,7 +2894,7 @@ export default function PlatformApp() {
   const trainer = ["TRAINER", "SUPER_ADMIN"] as Role[];
 
   return (
-    <ChallengeProvider token={auth.token} userId={auth.user?.id ?? null} userName={auth.user?.name ?? null}>
+    <ChallengeProvider token={auth.token || null} userId={auth.user?.id ?? null} userName={auth.user?.name ?? null}>
     <Shell auth={auth}>
       <Routes>
         <Route path="/login" element={<Login auth={auth} />} />
