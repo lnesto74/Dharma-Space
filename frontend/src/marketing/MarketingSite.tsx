@@ -254,7 +254,7 @@ function Nav({
     setMenuOpen(false);
     setMobileCorporateOpen(false);
     setOpenMenu(null);
-    window.location.href = CORPORATE_PORTAL_URL;
+    navigate("/portal");
   };
 
   const goEventsSection = (section: EventsSection) => {

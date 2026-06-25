@@ -1,11 +1,24 @@
 import { FormEvent, useEffect, useState } from "react";
-import PlatformApp from "../platform/PlatformApp";
+import { Navigate } from "react-router-dom";
 import { BrandLogo } from "../components/BrandLogo";
 import { GoogleSignIn, GoogleSignInDivider } from "../components/GoogleSignIn";
 import { CorporateOnboarding, CorporatePendingApproval, type CorporateUser } from "./CorporateOnboarding";
 
 const API_URL = import.meta.env.VITE_API_URL || "";
 const CORPORATE_ROLES = new Set(["EMPLOYEE", "HR_ADMIN", "CORPORATE_ADMIN", "TRAINER", "SUPER_ADMIN"]);
+
+const ROLE_HOME: Record<string, string> = {
+  EMPLOYEE: "/app/dashboard",
+  HR_ADMIN: "/hr/dashboard",
+  TRAINER: "/trainer/dashboard",
+  CORPORATE_ADMIN: "/company/dashboard",
+  SUPER_ADMIN: "/hr/dashboard"
+};
+
+function resolveHomePath(user: CorporateUser): string {
+  if (user.homePath && user.homePath !== "/portal") return user.homePath;
+  return ROLE_HOME[user.role] || "/app/dashboard";
+}
 
 type PortalGate = "login" | "onboarding" | "pending" | "app";
 
@@ -15,7 +28,7 @@ function storeSession(token: string, user: CorporateUser) {
   }
   localStorage.setItem("hsos_token", token);
   localStorage.setItem("hsos_user", JSON.stringify(user));
-  window.location.href = user.role === "SUPER_ADMIN" ? "/hr/dashboard" : user.homePath || "/app/dashboard";
+  window.location.href = resolveHomePath(user);
 }
 
 function clearSession() {
@@ -304,8 +317,8 @@ export default function CorporatePortal() {
     );
   }
 
-  if (gate === "app") {
-    return <PlatformApp />;
+  if (gate === "app" && user) {
+    return <Navigate to={resolveHomePath(user)} replace />;
   }
 
   if (gate === "onboarding" && token && user) {
@@ -343,19 +356,11 @@ export default function CorporatePortal() {
     );
   }
 
-  if (clientId === undefined) {
-    return (
-      <div className="cwp-page flex min-h-screen items-center justify-center text-sm text-[var(--cwp-text-muted)]">
-        Loading…
-      </div>
-    );
-  }
-
   return (
     <CorporateAuth
       mode={authMode}
       setMode={setAuthMode}
-      showGoogle={Boolean(clientId)}
+      showGoogle={clientId !== null && Boolean(clientId)}
       onAuthResult={handleAuthResult}
     />
   );

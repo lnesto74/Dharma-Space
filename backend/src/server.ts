@@ -30,12 +30,14 @@ import {
 } from "./trainer-media-cache.js";
 import { PROGRAM_MEDIA_DIR } from "./program-media-cache.js";
 import { TEAM_BUILDING_MEDIA_DIR, AVATAR_MEDIA_DIR } from "./data-root.js";
-import { ensureDatabaseSchema } from "./ensure-schema.js";
+import { ensureDatabaseSchema, ensurePrismaClientGenerated } from "./ensure-schema.js";
 import { applySchemaPatches } from "./schema-patches.js";
 import { registerOnboardingRoutes } from "./onboarding-routes.js";
 import {
   pendingAccountMessage,
   sanitizeUser,
+  createUser,
+  withAuthFields,
   USER_PROFILE_INCLUDE,
   type UserWithRelations
 } from "./user-auth.js";
@@ -108,26 +110,27 @@ function signToken(user: User) {
 }
 
 function buildAuthResponse(user: UserWithRelations) {
-  const profile = sanitizeUser(user);
-  if (!user.onboardingCompleted) {
-    return { token: signToken(user), user: profile, needsOnboarding: true as const };
+  const u = withAuthFields(user);
+  const profile = sanitizeUser(u);
+  if (!u.onboardingCompleted) {
+    return { token: signToken(u), user: profile, needsOnboarding: true as const };
   }
-  if (user.accountStatus === "REJECTED") {
+  if (u.accountStatus === "REJECTED") {
     return {
       rejected: true as const,
       message: "This account was not approved. Contact Dharma Space support if you need help."
     };
   }
-  if (user.accountStatus === "PENDING") {
+  if (u.accountStatus === "PENDING") {
     return { pending: true as const, message: pendingAccountMessage(), user: profile };
   }
-  const portalRole = isCorporateRole(user.role) || user.role === "TRAINER";
+  const portalRole = isCorporateRole(u.role) || u.role === "TRAINER";
   if (!portalRole) {
     return {
       message: "No corporate workspace account for this email. Ask your HR admin to invite you."
     };
   }
-  return { token: signToken(user), user: profile };
+  return { token: signToken(u), user: profile };
 }
 
 async function auth(req: AuthedRequest, res: Response, next: NextFunction) {
@@ -357,16 +360,14 @@ async function ensureSiteAdmin() {
     });
     return;
   }
-  await prisma.user.create({
-    data: {
-      name: "Website Admin",
-      email,
-      passwordHash,
-      role: "SUPER_ADMIN",
-      accountStatus: "APPROVED",
-      onboardingCompleted: true,
-      avatar: "AD"
-    }
+  await createUser(prisma, {
+    name: "Website Admin",
+    email,
+    passwordHash,
+    role: "SUPER_ADMIN",
+    accountStatus: "APPROVED",
+    onboardingCompleted: true,
+    avatar: "AD"
   });
 }
 
@@ -380,16 +381,13 @@ app.post("/api/auth/register", async (req, res, next) => {
     const email = body.email.toLowerCase();
     const existing = await prisma.user.findUnique({ where: { email } });
     if (existing) return res.status(409).json({ message: "An account with this email already exists." });
-    const user = await prisma.user.create({
-      data: {
-        name: body.name?.trim() || email.split("@")[0],
-        email,
-        passwordHash: await bcrypt.hash(body.password, 12),
-        role: "EMPLOYEE",
-        accountStatus: "PENDING",
-        onboardingCompleted: false
-      },
-      include: USER_PROFILE_INCLUDE
+    const user = await createUser(prisma, {
+      name: body.name?.trim() || email.split("@")[0],
+      email,
+      passwordHash: await bcrypt.hash(body.password, 12),
+      role: "EMPLOYEE",
+      accountStatus: "PENDING",
+      onboardingCompleted: false
     });
     res.status(201).json(buildAuthResponse(user));
   } catch (error) {
@@ -456,20 +454,17 @@ app.post("/api/auth/google", async (req, res, next) => {
       include: USER_PROFILE_INCLUDE
     });
     if (!user) {
-      user = await prisma.user.create({
-        data: {
-          name: profile.name,
-          email: profile.email,
-          passwordHash: await bcrypt.hash(randomBytes(32).toString("hex"), 12),
-          role: "EMPLOYEE",
-          accountStatus: "PENDING",
-          onboardingCompleted: false
-        },
-        include: USER_PROFILE_INCLUDE
+      user = await createUser(prisma, {
+        name: profile.name,
+        email: profile.email,
+        passwordHash: await bcrypt.hash(randomBytes(32).toString("hex"), 12),
+        role: "EMPLOYEE",
+        accountStatus: "PENDING",
+        onboardingCompleted: false
       });
       return res.status(201).json(buildAuthResponse(user));
     }
-    if (!user.onboardingCompleted && user.name !== profile.name) {
+    if (!withAuthFields(user).onboardingCompleted && user.name !== profile.name) {
       user = await prisma.user.update({
         where: { id: user.id },
         data: { name: profile.name },
@@ -1106,6 +1101,7 @@ async function startServer() {
     console.warn("[startup] API starting without database tables — redeploy after this deployment succeeds.");
   }
   await applySchemaPatches().catch((error) => console.error("[startup] schema patches:", error));
+  ensurePrismaClientGenerated();
   prisma = new PrismaClient();
   registerSiteContentRoutes(app, prisma, auth, requireRole);
   registerSiteBookingRoutes(app, prisma, jwtSecret, auth, requireRole("SUPER_ADMIN"));
