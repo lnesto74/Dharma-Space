@@ -10,7 +10,6 @@ import { AdminSiteProgramsPage } from "./AdminProgramsPage";
 import { AdminSiteTrainersPage } from "./AdminTrainersPage";
 import { AdminSiteClassesPage } from "./AdminClassesPage";
 import { AdminCwpPage } from "./AdminCwpPage";
-import { AdminCompanyPage } from "./AdminCompanyPage";
 
 export default function AdminApp() {
   const auth = useAuth();
@@ -24,7 +23,6 @@ export default function AdminApp() {
       <Route path="bookings" element={<AdminBookingsPage auth={auth} />} />
       <Route path="inquiries" element={<AdminInquiriesPage auth={auth} />} />
       <Route path="cwp" element={<AdminCwpPage auth={auth} />} />
-      <Route path="cwp/companies/:companyId" element={<AdminCompanyPage auth={auth} />} />
       <Route path="site/trainers" element={<AdminSiteTrainersPage auth={auth} />} />
       <Route path="site/classes" element={<AdminSiteClassesPage auth={auth} />} />
       <Route path="site/programs" element={<AdminSiteProgramsPage auth={auth} />} />

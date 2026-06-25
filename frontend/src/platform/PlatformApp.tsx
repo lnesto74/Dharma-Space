@@ -7,6 +7,7 @@ import { ProfileAvatar } from "./components/ProfileAvatar";
 import { navForRole } from "./nav-config";
 import { useSelectedCompany } from "./selected-company";
 import {
+  buddyColleagues,
   buddyChallengeTypes,
   buddyChallengeTypeMap,
   formatSeconds,
@@ -931,7 +932,7 @@ function BuddyInitials({ name, color = "var(--cwp-olive)" }: { name: string; col
 }
 
 function BuddyChallenge() {
-  const { duels, points, colleagues, createDuel } = useChallenges();
+  const { duels, points, createDuel } = useChallenges();
   const [buddy, setBuddy] = useState("");
   const [typeId, setTypeId] = useState("squats");
   const [target, setTarget] = useState(20);
@@ -940,11 +941,11 @@ function BuddyChallenge() {
   const [toast, setToast] = useState("");
 
   const BUDDY_PREVIEW = 6;
-  const visibleBuddies = showAllBuddies ? colleagues : colleagues.slice(0, BUDDY_PREVIEW);
+  const visibleBuddies = showAllBuddies ? buddyColleagues : buddyColleagues.slice(0, BUDDY_PREVIEW);
 
   const activeType = buddyChallengeTypeMap[typeId];
   const canSubmit = Boolean(buddy) && target > 0 && witnesses.length === 3;
-  const nameOf = (id: string) => colleagues.find((c) => c.id === id)?.name || "";
+  const nameOf = (id: string) => buddyColleagues.find((c) => c.id === id)?.name || "";
 
   const pickType = (id: string) => {
     setTypeId(id);
@@ -964,9 +965,10 @@ function BuddyChallenge() {
     const opponentName = nameOf(buddy);
     createDuel({
       opponentId: buddy,
+      opponentName,
       typeId,
       target,
-      witnessIds: witnesses
+      witnesses: witnesses.map((id) => ({ id, name: nameOf(id) }))
     });
     setToast(`Challenge sent to ${opponentName}! Awaiting their reply and 3 witnesses.`);
     setBuddy("");
@@ -975,7 +977,7 @@ function BuddyChallenge() {
     window.setTimeout(() => setToast(""), 3200);
   };
 
-  const availableWitnesses = colleagues.filter((c) => c.id !== buddy);
+  const availableWitnesses = buddyColleagues.filter((c) => c.id !== buddy);
   const stepSize = activeType.unit === "seconds" ? 5 : 1;
 
   return (
@@ -1028,16 +1030,16 @@ function BuddyChallenge() {
               </button>
             ))}
           </div>
-          {colleagues.length > BUDDY_PREVIEW && (
+          {buddyColleagues.length > BUDDY_PREVIEW && (
             <button
               type="button"
               onClick={() => setShowAllBuddies((v) => !v)}
               className="mb-5 mt-2 rounded-full bg-white/70 px-4 py-1.5 text-xs font-semibold text-navy hover:bg-white"
             >
-              {showAllBuddies ? "Show less" : `More (${colleagues.length - BUDDY_PREVIEW})`}
+              {showAllBuddies ? "Show less" : `More (${buddyColleagues.length - BUDDY_PREVIEW})`}
             </button>
           )}
-          {colleagues.length <= BUDDY_PREVIEW && <div className="mb-5" />}
+          {buddyColleagues.length <= BUDDY_PREVIEW && <div className="mb-5" />}
 
           <p className="mb-2 text-xs font-semibold uppercase tracking-[0.16em] text-stone">2 · Pick the exercise</p>
           <div className="mb-4 grid grid-cols-2 gap-2 sm:grid-cols-4">
@@ -2894,7 +2896,7 @@ export default function PlatformApp() {
   const trainer = ["TRAINER", "SUPER_ADMIN"] as Role[];
 
   return (
-    <ChallengeProvider token={auth.token || null} userId={auth.user?.id ?? null} userName={auth.user?.name ?? null}>
+    <ChallengeProvider>
     <Shell auth={auth}>
       <Routes>
         <Route path="/login" element={<Login auth={auth} />} />

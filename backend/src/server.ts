@@ -1,4 +1,3 @@
-import { randomBytes } from "node:crypto";
 import dotenv from "dotenv";
 import path from "path";
 import { fileURLToPath } from "url";
@@ -30,21 +29,10 @@ import {
 } from "./trainer-media-cache.js";
 import { PROGRAM_MEDIA_DIR } from "./program-media-cache.js";
 import { TEAM_BUILDING_MEDIA_DIR, AVATAR_MEDIA_DIR } from "./data-root.js";
-import { ensureDatabaseSchema, ensurePrismaClientGenerated } from "./ensure-schema.js";
-import { applySchemaPatches } from "./schema-patches.js";
-import { registerOnboardingRoutes } from "./onboarding-routes.js";
-import {
-  pendingAccountMessage,
-  sanitizeUser,
-  createUser,
-  withAuthFields,
-  USER_PROFILE_INCLUDE,
-  type UserWithRelations
-} from "./user-auth.js";
+import { ensureDatabaseSchema } from "./ensure-schema.js";
 import { registerStripeWebhook, stripeStatusPayload } from "./stripe.js";
 import { registerWellnessRoutes } from "./wellness-routes.js";
 import { registerMessagingRoutes } from "./messaging-routes.js";
-import { registerChallengeRoutes } from "./challenge-routes.js";
 import { saveUploadedAvatarFile } from "./avatar-media.js";
 import { registerAdminCwpRoutes } from "./admin-cwp-routes.js";
 
@@ -105,32 +93,21 @@ app.get("/api/media/proxy", async (req, res, next) => {
 
 type AuthedRequest = Request & { user?: User };
 
+const roleHome: Record<string, string> = {
+  EMPLOYEE: "/app/dashboard",
+  HR_ADMIN: "/hr/dashboard",
+  TRAINER: "/trainer/dashboard",
+  CORPORATE_ADMIN: "/hr/dashboard",
+  SUPER_ADMIN: "/admin"
+};
+
 function signToken(user: User) {
   return jwt.sign({ sub: user.id, role: user.role }, jwtSecret, { expiresIn: "7d" });
 }
 
-function buildAuthResponse(user: UserWithRelations) {
-  const u = withAuthFields(user);
-  const profile = sanitizeUser(u);
-  if (!u.onboardingCompleted) {
-    return { token: signToken(u), user: profile, needsOnboarding: true as const };
-  }
-  if (u.accountStatus === "REJECTED") {
-    return {
-      rejected: true as const,
-      message: "This account was not approved. Contact Dharma Space support if you need help."
-    };
-  }
-  if (u.accountStatus === "PENDING") {
-    return { pending: true as const, message: pendingAccountMessage(), user: profile };
-  }
-  const portalRole = isCorporateRole(u.role) || u.role === "TRAINER";
-  if (!portalRole) {
-    return {
-      message: "No corporate workspace account for this email. Ask your HR admin to invite you."
-    };
-  }
-  return { token: signToken(u), user: profile };
+function sanitizeUser(user: User) {
+  const { passwordHash, ...safe } = user;
+  return { ...safe, homePath: roleHome[user.role] || "/app/dashboard" };
 }
 
 async function auth(req: AuthedRequest, res: Response, next: NextFunction) {
@@ -356,64 +333,48 @@ async function ensureSiteAdmin() {
   if (existing) {
     await prisma.user.update({
       where: { email },
-      data: { passwordHash, role: "SUPER_ADMIN", accountStatus: "APPROVED", onboardingCompleted: true }
+      data: { passwordHash, role: "SUPER_ADMIN" }
     });
     return;
   }
-  await createUser(prisma, {
-    name: "Website Admin",
-    email,
-    passwordHash,
-    role: "SUPER_ADMIN",
-    accountStatus: "APPROVED",
-    onboardingCompleted: true,
-    avatar: "AD"
+  await prisma.user.create({
+    data: {
+      name: "Website Admin",
+      email,
+      passwordHash,
+      role: "SUPER_ADMIN",
+      avatar: "AD"
+    }
   });
 }
 
 app.post("/api/auth/register", async (req, res, next) => {
   try {
     const body = z.object({
-      name: z.string().min(2).optional(),
+      name: z.string().min(2),
       email: z.string().email(),
-      password: z.string().min(8)
+      password: z.string().min(8),
+      role: z.string().default("EMPLOYEE")
     }).parse(req.body);
-    const email = body.email.toLowerCase();
-    const existing = await prisma.user.findUnique({ where: { email } });
-    if (existing) return res.status(409).json({ message: "An account with this email already exists." });
-    const user = await createUser(prisma, {
-      name: body.name?.trim() || email.split("@")[0],
-      email,
-      passwordHash: await bcrypt.hash(body.password, 12),
-      role: "EMPLOYEE",
-      accountStatus: "PENDING",
-      onboardingCompleted: false
+    const firstCompany = await prisma.company.findFirst();
+    const firstDepartment = firstCompany
+      ? await prisma.department.findFirst({ where: { companyId: firstCompany.id } })
+      : null;
+    const user = await prisma.user.create({
+      data: {
+        name: body.name,
+        email: body.email.toLowerCase(),
+        passwordHash: await bcrypt.hash(body.password, 12),
+        role: body.role,
+        companyId: firstCompany?.id,
+        departmentId: firstDepartment?.id
+      }
     });
-    res.status(201).json(buildAuthResponse(user));
+    res.status(201).json({ token: signToken(user), user: sanitizeUser(user) });
   } catch (error) {
     next(error);
   }
 });
-
-function respondAuth(res: Response, result: ReturnType<typeof buildAuthResponse>, created = false) {
-  if ("needsOnboarding" in result && result.needsOnboarding) {
-    res.status(created ? 201 : 200).json(result);
-    return;
-  }
-  if ("pending" in result && result.pending) {
-    res.status(403).json(result);
-    return;
-  }
-  if ("rejected" in result && result.rejected) {
-    res.status(403).json(result);
-    return;
-  }
-  if (!("token" in result)) {
-    res.status(403).json(result);
-    return;
-  }
-  res.status(created ? 201 : 200).json(result);
-}
 
 app.post("/api/auth/login", async (req, res, next) => {
   try {
@@ -425,11 +386,11 @@ app.post("/api/auth/login", async (req, res, next) => {
     const loginKey = (body.username || body.email || "").trim().toLowerCase();
     if (!loginKey) return res.status(400).json({ message: "Email or username required" });
     const email = loginKey === "admin" ? "admin@dharma-space.com" : loginKey;
-    const user = await prisma.user.findUnique({ where: { email }, include: USER_PROFILE_INCLUDE });
+    const user = await prisma.user.findUnique({ where: { email } });
     if (!user || !(await bcrypt.compare(body.password, user.passwordHash))) {
       return res.status(401).json({ message: "Invalid email or password" });
     }
-    respondAuth(res, buildAuthResponse(user));
+    res.json({ token: signToken(user), user: sanitizeUser(user) });
   } catch (error) {
     next(error);
   }
@@ -449,46 +410,19 @@ app.post("/api/auth/google", async (req, res, next) => {
     if (!profile.emailVerified) {
       return res.status(401).json({ message: "Google email is not verified" });
     }
-    let user: UserWithRelations | null = await prisma.user.findUnique({
-      where: { email: profile.email },
-      include: USER_PROFILE_INCLUDE
-    });
-    if (!user) {
-      user = await createUser(prisma, {
-        name: profile.name,
-        email: profile.email,
-        passwordHash: await bcrypt.hash(randomBytes(32).toString("hex"), 12),
-        role: "EMPLOYEE",
-        accountStatus: "PENDING",
-        onboardingCompleted: false
-      });
-      return res.status(201).json(buildAuthResponse(user));
-    }
-    if (!withAuthFields(user).onboardingCompleted && user.name !== profile.name) {
-      user = await prisma.user.update({
-        where: { id: user.id },
-        data: { name: profile.name },
-        include: USER_PROFILE_INCLUDE
+    const user = await prisma.user.findUnique({ where: { email: profile.email } });
+    if (!user || !isCorporateRole(user.role)) {
+      return res.status(403).json({
+        message: "No corporate workspace account for this Google email. Ask your HR admin to invite you."
       });
     }
-    respondAuth(res, buildAuthResponse(user));
+    res.json({ token: signToken(user), user: sanitizeUser(user) });
   } catch (error) {
     next(error);
   }
 });
 
-app.get("/api/auth/me", auth, async (req: AuthedRequest, res, next) => {
-  try {
-    const user = await prisma.user.findUnique({
-      where: { id: req.user!.id },
-      include: USER_PROFILE_INCLUDE
-    });
-    if (!user) return res.status(401).json({ message: "Invalid token" });
-    res.json({ user: sanitizeUser(user) });
-  } catch (error) {
-    next(error);
-  }
-});
+app.get("/api/auth/me", auth, (req: AuthedRequest, res) => res.json({ user: sanitizeUser(req.user!) }));
 
 const avatarUploadSchema = z.object({
   data: z.string().min(1),
@@ -1100,16 +1034,12 @@ async function startServer() {
   if (!schemaReady) {
     console.warn("[startup] API starting without database tables — redeploy after this deployment succeeds.");
   }
-  await applySchemaPatches().catch((error) => console.error("[startup] schema patches:", error));
-  ensurePrismaClientGenerated();
   prisma = new PrismaClient();
   registerSiteContentRoutes(app, prisma, auth, requireRole);
   registerSiteBookingRoutes(app, prisma, jwtSecret, auth, requireRole("SUPER_ADMIN"));
   registerWellnessRoutes(app, prisma, auth, requireRole, companyUserIds);
   registerAdminCwpRoutes(app, prisma, auth, requireRole, sanitizeUser);
-  registerOnboardingRoutes(app, prisma, auth);
   registerMessagingRoutes(app, prisma, auth);
-  registerChallengeRoutes(app, prisma, auth);
   installErrorHandler();
   await ensureSiteAdmin().catch((error) => console.error("[startup] site admin:", error));
   await ensureSiteContent(prisma).catch((error) => console.error("[startup] site content:", error));

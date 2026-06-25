@@ -1,18 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { buddyChallengeTypeMap, getMeId, pointsForTarget, setMe } from "./challenge-types";
+import { ME_ID, ME_NAME, buddyChallengeTypeMap, pointsForTarget } from "./challenge-types";
 import { playSwordsSound } from "./sounds";
-import {
-  createChallenge,
-  dismissChallenge,
-  fetchChallenges,
-  fetchColleagues,
-  finishChallenge,
-  respondChallenge,
-  startChallenge,
-  voteChallenge,
-  witnessRespondChallenge,
-  type Colleague
-} from "../lib/challenge-api";
 
 export type WitnessResponse = "pending" | "accepted" | "busy";
 export type ParticipantResult = "pending" | "done" | "failed";
@@ -32,7 +20,7 @@ export type Duel = {
   target: number;
   status: DuelStatus;
   witnesses: DuelWitness[];
-  // Timed exercises only: epoch ms when the shared countdown ends, and whether it finished.
+  // Timed exercises only: when the shared countdown ends, and whether it finished.
   timerEndsAt: number | null;
   timerDone: boolean;
   // Hidden from the lists once the user clears a finished duel (points still count).
@@ -42,23 +30,88 @@ export type Duel = {
 
 export type CreateDuelInput = {
   opponentId: string;
+  opponentName: string;
   typeId: string;
   target: number;
-  witnessIds: string[];
+  witnesses: { id: string; name: string }[];
 };
+
+const noVotes = (): WitnessVotes => ({ challenger: "pending", opponent: "pending" });
+
+const seedDuels: Duel[] = [
+  {
+    // Incoming invite to me: I decide accept/reject, then start the timed plank.
+    id: "duel-invite",
+    challengerId: "u-theo",
+    challengerName: "Theo Malik",
+    opponentId: ME_ID,
+    opponentName: ME_NAME,
+    typeId: "plank",
+    target: 90,
+    status: "invited",
+    witnesses: [
+      { id: "u-ava", name: "Ava Morgan", response: "accepted", votes: noVotes() },
+      { id: "u-noah", name: "Noah Kim", response: "accepted", votes: noVotes() },
+      { id: "u-iris", name: "Iris Wong", response: "accepted", votes: noVotes() }
+    ],
+    timerEndsAt: null,
+    timerDone: false,
+    dismissed: false,
+    createdAt: Date.now() - 60000
+  },
+  {
+    // I'm the deciding 3rd witness — the others already pressed Done.
+    id: "duel-witness",
+    challengerId: "u-ava",
+    challengerName: "Ava Morgan",
+    opponentId: "u-priya",
+    opponentName: "Priya Shah",
+    typeId: "squats",
+    target: 25,
+    status: "active",
+    witnesses: [
+      { id: ME_ID, name: ME_NAME, response: "accepted", votes: noVotes() },
+      { id: "u-noah", name: "Noah Kim", response: "accepted", votes: { challenger: "done", opponent: "done" } },
+      { id: "u-felix", name: "Felix Grant", response: "accepted", votes: { challenger: "done", opponent: "done" } }
+    ],
+    timerEndsAt: null,
+    timerDone: false,
+    dismissed: false,
+    createdAt: Date.now() - 120000
+  },
+  {
+    // Completed: all witnesses confirmed me (Done → +points); opponent had a Failed vote.
+    id: "duel-done",
+    challengerId: ME_ID,
+    challengerName: ME_NAME,
+    opponentId: "u-lina",
+    opponentName: "Lina Cortez",
+    typeId: "pullups",
+    target: 8,
+    status: "active",
+    witnesses: [
+      { id: "u-rowan", name: "Rowan Diaz", response: "accepted", votes: { challenger: "done", opponent: "done" } },
+      { id: "u-iris", name: "Iris Wong", response: "accepted", votes: { challenger: "done", opponent: "failed" } },
+      { id: "u-felix", name: "Felix Grant", response: "accepted", votes: { challenger: "done", opponent: "done" } }
+    ],
+    timerEndsAt: null,
+    timerDone: true,
+    dismissed: false,
+    createdAt: Date.now() - 300000
+  }
+];
 
 export type MyRole = "challenger" | "opponent" | "witness" | null;
 
 export function myRole(duel: Duel): MyRole {
-  const me = getMeId();
-  if (duel.challengerId === me) return "challenger";
-  if (duel.opponentId === me) return "opponent";
-  if (duel.witnesses.some((w) => w.id === me)) return "witness";
+  if (duel.challengerId === ME_ID) return "challenger";
+  if (duel.opponentId === ME_ID) return "opponent";
+  if (duel.witnesses.some((w) => w.id === ME_ID)) return "witness";
   return null;
 }
 
 export function myWitness(duel: Duel): DuelWitness | undefined {
-  return duel.witnesses.find((w) => w.id === getMeId());
+  return duel.witnesses.find((w) => w.id === ME_ID);
 }
 
 export function acceptedWitnesses(duel: Duel): DuelWitness[] {
@@ -107,6 +160,13 @@ export function participantEarned(duel: Duel, key: ParticipantKey): number {
   return bothSucceeded(duel) ? base * 2 : base;
 }
 
+function myPointsForDuel(duel: Duel): number {
+  let pts = 0;
+  if (duel.challengerId === ME_ID) pts += participantEarned(duel, "challenger");
+  if (duel.opponentId === ME_ID) pts += participantEarned(duel, "opponent");
+  return pts;
+}
+
 /** Whether the current user has an outstanding action on this duel. */
 export function duelNeedsMyAction(duel: Duel): boolean {
   if (duel.dismissed) return false;
@@ -115,8 +175,10 @@ export function duelNeedsMyAction(duel: Duel): boolean {
   if (duel.status !== "active" || duelComplete(duel)) return false;
 
   if (role === "challenger" || role === "opponent") {
-    // A timed duel still needs to be started by a participant; otherwise they wait on witnesses.
-    return isTimed(duel) && !duel.timerEndsAt;
+    // Timed duel still needs to be started by a participant.
+    if (isTimed(duel) && !duel.timerEndsAt) return true;
+    // Otherwise the participant collects their witnesses' calls.
+    if (readyToJudge(duel)) return true;
   }
   if (role === "witness") {
     const w = myWitness(duel);
@@ -130,9 +192,7 @@ export function duelNeedsMyAction(duel: Duel): boolean {
 type Ctx = {
   duels: Duel[];
   points: number;
-  colleagues: Colleague[];
-  loading: boolean;
-  createDuel: (input: CreateDuelInput) => Promise<void>;
+  createDuel: (input: CreateDuelInput) => void;
   respondInvite: (id: string, accept: boolean) => void;
   witnessRespond: (id: string, accept: boolean) => void;
   startTimer: (id: string) => void;
@@ -144,122 +204,84 @@ type Ctx = {
 
 const ChallengeContext = createContext<Ctx | null>(null);
 
-export function ChallengeProvider({
-  children,
-  token,
-  userId,
-  userName
-}: {
-  children: ReactNode;
-  token: string | null;
-  userId: string | null;
-  userName: string | null;
-}) {
-  const [duels, setDuels] = useState<Duel[]>([]);
-  const [points, setPoints] = useState(0);
-  const [colleagues, setColleagues] = useState<Colleague[]>([]);
-  const [loading, setLoading] = useState(true);
+export function ChallengeProvider({ children }: { children: ReactNode }) {
+  const [duels, setDuels] = useState<Duel[]>(seedDuels);
 
-  // Make "me" resolvable by the role/result helpers as soon as we know the session.
-  useEffect(() => {
-    setMe(userId || "", userName || "You");
-  }, [userId, userName]);
+  // Points are fully derived from witness votes — you earn only when all witnesses said Done.
+  const points = useMemo(() => duels.reduce((sum, d) => sum + myPointsForDuel(d), 0), [duels]);
 
-  const refresh = useCallback(async () => {
-    if (!token) {
-      setDuels([]);
-      setPoints(0);
-      setLoading(false);
-      return;
-    }
-    try {
-      const data = await fetchChallenges(token);
-      setDuels(data.duels);
-      setPoints(data.points);
-    } catch {
-      // Keep the last known state on transient errors.
-    } finally {
-      setLoading(false);
-    }
-  }, [token]);
-
-  // Initial load of duels + colleagues, then poll for changes from other people.
-  useEffect(() => {
-    if (!token) {
-      setLoading(false);
-      return;
-    }
-    let active = true;
-    setLoading(true);
-    refresh();
-    fetchColleagues(token)
-      .then((data) => active && setColleagues(data.colleagues))
-      .catch(() => {});
-    const id = window.setInterval(refresh, 6000);
-    return () => {
-      active = false;
-      window.clearInterval(id);
+  const createDuel = useCallback((input: CreateDuelInput) => {
+    const duel: Duel = {
+      id: `duel-${Date.now()}`,
+      challengerId: ME_ID,
+      challengerName: ME_NAME,
+      opponentId: input.opponentId,
+      opponentName: input.opponentName,
+      typeId: input.typeId,
+      target: input.target,
+      // Demo: opponent auto-accepts and chosen witnesses are on board so the duel is playable.
+      status: "active",
+      witnesses: input.witnesses.map((w) => ({ id: w.id, name: w.name, response: "accepted", votes: noVotes() })),
+      timerEndsAt: null,
+      timerDone: false,
+      dismissed: false,
+      createdAt: Date.now()
     };
-  }, [token, refresh]);
-
-  // Wrap a mutating API call so the UI always re-syncs with the server afterward.
-  const run = useCallback(
-    async (fn: () => Promise<unknown>) => {
-      if (!token) return;
-      try {
-        await fn();
-      } catch {
-        // ignore — refresh below restores authoritative state
-      }
-      await refresh();
-    },
-    [token, refresh]
-  );
-
-  const createDuel = useCallback(
-    async (input: CreateDuelInput) => {
-      if (!token) return;
-      await run(() =>
-        createChallenge(token, {
-          opponentId: input.opponentId,
-          typeId: input.typeId,
-          target: input.target,
-          witnessIds: input.witnessIds
-        })
-      );
-    },
-    [token, run]
-  );
-
-  const respondInvite = useCallback((id: string, accept: boolean) => {
-    void run(() => respondChallenge(token!, id, accept));
-  }, [token, run]);
-
-  const witnessRespond = useCallback((id: string, accept: boolean) => {
-    void run(() => witnessRespondChallenge(token!, id, accept));
-  }, [token, run]);
-
-  const startTimer = useCallback((id: string) => {
-    void run(() => startChallenge(token!, id));
-  }, [token, run]);
-
-  const finishTimer = useCallback((id: string) => {
-    void run(() => finishChallenge(token!, id));
-  }, [token, run]);
-
-  const castVote = useCallback((id: string, _witnessId: string, who: ParticipantKey, vote: "done" | "failed") => {
-    // Only the witness themselves may vote — the backend authorizes against the session.
-    void run(() => voteChallenge(token!, id, who, vote));
-  }, [token, run]);
+    setDuels((prev) => [duel, ...prev]);
+  }, []);
 
   const dismissDuel = useCallback((id: string) => {
-    void run(() => dismissChallenge(token!, id));
-  }, [token, run]);
+    setDuels((prev) => prev.map((d) => (d.id === id ? { ...d, dismissed: true } : d)));
+  }, []);
+
+  const startTimer = useCallback((id: string) => {
+    setDuels((prev) =>
+      prev.map((d) => {
+        if (d.id !== id || d.status !== "active" || d.timerEndsAt) return d;
+        return { ...d, timerEndsAt: Date.now() + d.target * 1000, timerDone: false };
+      })
+    );
+  }, []);
+
+  const finishTimer = useCallback((id: string) => {
+    setDuels((prev) => prev.map((d) => (d.id === id && !d.timerDone ? { ...d, timerDone: true } : d)));
+  }, []);
+
+  const respondInvite = useCallback((id: string, accept: boolean) => {
+    setDuels((prev) => prev.map((d) => (d.id === id ? { ...d, status: accept ? "active" : "rejected" } : d)));
+  }, []);
+
+  const witnessRespond = useCallback((id: string, accept: boolean) => {
+    setDuels((prev) =>
+      prev.map((d) =>
+        d.id === id
+          ? { ...d, witnesses: d.witnesses.map((w) => (w.id === ME_ID ? { ...w, response: accept ? "accepted" : "busy" } : w)) }
+          : d
+      )
+    );
+  }, []);
+
+  const castVote = useCallback((id: string, witnessId: string, who: ParticipantKey, vote: "done" | "failed") => {
+    setDuels((prev) =>
+      prev.map((d) =>
+        d.id === id
+          ? {
+              ...d,
+              witnesses: d.witnesses.map((w) =>
+                w.id === witnessId && w.response === "accepted"
+                  ? { ...w, votes: { ...w.votes, [who]: w.votes[who] === vote ? "pending" : vote } }
+                  : w
+              )
+            }
+          : d
+      )
+    );
+  }, []);
 
   const actionable = useMemo(() => duels.filter(duelNeedsMyAction), [duels]);
   const visibleDuels = useMemo(() => duels.filter((d) => !d.dismissed), [duels]);
 
-  // Clang the swords when a new challenge needs your attention (after first load).
+  // Clang the swords when a new challenge needs your attention (after first render).
   const prevActionableRef = useRef<number | null>(null);
   useEffect(() => {
     const count = actionable.length;
@@ -273,8 +295,6 @@ export function ChallengeProvider({
     () => ({
       duels: visibleDuels,
       points,
-      colleagues,
-      loading,
       createDuel,
       respondInvite,
       witnessRespond,
@@ -284,7 +304,7 @@ export function ChallengeProvider({
       dismissDuel,
       actionable
     }),
-    [visibleDuels, points, colleagues, loading, createDuel, respondInvite, witnessRespond, startTimer, finishTimer, castVote, dismissDuel, actionable]
+    [visibleDuels, points, createDuel, respondInvite, witnessRespond, startTimer, finishTimer, castVote, dismissDuel, actionable]
   );
 
   return <ChallengeContext.Provider value={value}>{children}</ChallengeContext.Provider>;
@@ -297,9 +317,7 @@ export function useChallenges(): Ctx {
     return {
       duels: [],
       points: 0,
-      colleagues: [],
-      loading: false,
-      createDuel: async () => {},
+      createDuel: () => {},
       respondInvite: () => {},
       witnessRespond: () => {},
       startTimer: () => {},

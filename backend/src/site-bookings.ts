@@ -18,7 +18,6 @@ import {
   retrieveCheckoutSession
 } from "./stripe.js";
 import { completeBookingPayment, sendBookingPayNowPendingEmails } from "./booking-emails.js";
-import { verifyGoogleIdToken } from "./google-auth.js";
 
 export type MemberToken = { sub: string; kind: "site_member" };
 
@@ -430,32 +429,6 @@ export function registerSiteBookingRoutes(
       const member = await prisma.siteMember.findUnique({ where: { email: body.email.toLowerCase() } });
       if (!member || !(await bcrypt.compare(body.password, member.passwordHash))) {
         return res.status(401).json({ message: "Invalid email or password." });
-      }
-      res.json({
-        token: signMemberToken(member, jwtSecret),
-        member: sanitizeMember(member)
-      });
-    } catch (error) {
-      next(error);
-    }
-  });
-
-  app.post("/api/member/google", async (req, res, next) => {
-    try {
-      const { idToken } = z.object({ idToken: z.string().min(10) }).parse(req.body);
-      const profile = await verifyGoogleIdToken(idToken);
-      if (!profile.emailVerified) {
-        return res.status(401).json({ message: "Google email is not verified." });
-      }
-      let member = await prisma.siteMember.findUnique({ where: { email: profile.email } });
-      if (!member) {
-        member = await prisma.siteMember.create({
-          data: {
-            name: profile.name,
-            email: profile.email,
-            passwordHash: await bcrypt.hash(randomBytes(32).toString("hex"), 12)
-          }
-        });
       }
       res.json({
         token: signMemberToken(member, jwtSecret),

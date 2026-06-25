@@ -112,13 +112,8 @@ export function MemberAccountModal({ onClose, onBookProgram, onBookClass }: Memb
               My account
             </p>
             <h2 className="text-2xl font-normal text-[#2A2825]" style={{ fontFamily: "var(--font-display)" }}>
-              {isLoggedIn ? member?.name : "Sign in or join"}
+              {isLoggedIn ? member?.name : "Sign in"}
             </h2>
-            {!isLoggedIn && (
-              <p className="text-[13px] text-[#7A7468] mt-1" style={{ fontFamily: "var(--font-body)" }}>
-                Use Google or email — free account for bookings
-              </p>
-            )}
           </div>
           <button type="button" onClick={onClose} className="text-[#2A2825]/40 hover:text-[#2A2825] p-1">
             <X size={20} />

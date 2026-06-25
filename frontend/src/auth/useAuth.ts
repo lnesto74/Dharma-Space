@@ -7,11 +7,6 @@ export type UserType = {
   email: string;
   role: string;
   homePath?: string;
-  position?: string | null;
-  company?: { id: string; name: string } | null;
-  department?: { id: string; name: string } | null;
-  needsOnboarding?: boolean;
-  pendingApproval?: boolean;
 };
 
 export function useAuth() {

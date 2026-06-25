@@ -59,12 +59,6 @@ envs:
   scope: RUN_AND_BUILD_TIME
   type: SECRET
   value: EV[1:YWULLepWHmQKzO6yTdHdL1wFcH93hR0P:ar6SPg7W9aHj41Cqj4Y2Tyh7Y1cv]
-- key: GOOGLE_CLIENT_ID
-  scope: RUN_AND_BUILD_TIME
-  value: 543226071891-7eciin4ohgck1us7b2h6dt4u5cubb821.apps.googleusercontent.com
-- key: CORPORATE_ALLOWED_DOMAINS
-  scope: RUN_AND_BUILD_TIME
-  value: dharma-space.com
 domains:
 - domain: dharma-space.com
   type: PRIMARY
@@ -97,12 +91,6 @@ services:
   - key: DATABASE_URL
     scope: RUN_TIME
     value: ${dharma-db.DATABASE_URL}
-  - key: GOOGLE_CLIENT_ID
-    scope: RUN_TIME
-    value: 543226071891-7eciin4ohgck1us7b2h6dt4u5cubb821.apps.googleusercontent.com
-  - key: CORPORATE_ALLOWED_DOMAINS
-    scope: RUN_TIME
-    value: dharma-space.com
   github:
     branch: main
     deploy_on_push: true

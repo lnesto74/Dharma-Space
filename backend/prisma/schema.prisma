@@ -13,9 +13,6 @@ model User {
   email                 String                   @unique
   passwordHash          String
   role                  String
-  accountStatus         String                   @default("APPROVED")
-  onboardingCompleted   Boolean                  @default(true)
-  position              String?
   companyId             String?
   departmentId          String?
   avatar                String?
@@ -39,9 +36,6 @@ model User {
   scheduleRequests      ScheduleRequest[]
   conversationMemberships ConversationParticipant[]
   sentMessages          Message[]               @relation("SentMessages")
-  duelsAsChallenger     Duel[]                  @relation("DuelsAsChallenger")
-  duelsAsOpponent       Duel[]                  @relation("DuelsAsOpponent")
-  duelWitnessing        DuelWitness[]           @relation("DuelWitnessing")
 }
 
 model Company {
@@ -480,43 +474,4 @@ model Message {
 
   @@index([conversationId])
   @@index([createdAt])
-}
-
-// A "Challenge a Buddy" duel between two employees, verified by witnesses.
-model Duel {
-  id                String        @id @default(cuid())
-  companyId         String?
-  challengerId      String
-  opponentId        String
-  typeId            String
-  target            Int
-  status            String        @default("invited") // invited | active | rejected
-  timerEndsAt       DateTime?
-  timerDone         Boolean       @default(false)
-  // Points already credited to each participant's wellness score (for reconciliation).
-  challengerPoints  Int           @default(0)
-  opponentPoints    Int           @default(0)
-  dismissedBy       String[]      @default([])
-  createdAt         DateTime      @default(now())
-  updatedAt         DateTime      @updatedAt
-  challenger        User          @relation("DuelsAsChallenger", fields: [challengerId], references: [id])
-  opponent          User          @relation("DuelsAsOpponent", fields: [opponentId], references: [id])
-  witnesses         DuelWitness[]
-
-  @@index([challengerId])
-  @@index([opponentId])
-}
-
-model DuelWitness {
-  id             String   @id @default(cuid())
-  duelId         String
-  userId         String
-  response       String   @default("pending") // pending | accepted | busy
-  challengerVote String   @default("pending") // pending | done | failed
-  opponentVote   String   @default("pending")
-  duel           Duel     @relation(fields: [duelId], references: [id], onDelete: Cascade)
-  user           User     @relation("DuelWitnessing", fields: [userId], references: [id])
-
-  @@unique([duelId, userId])
-  @@index([userId])
 }
