@@ -111,7 +111,7 @@ export function CwpEmployeeDashboard({ auth }: { auth: Auth }) {
 
   const role = auth.user?.role || "EMPLOYEE";
   const userLabel = auth.user?.name || "User";
-  const firstName = auth.user?.name.split(" ")[0] || "there";
+  const firstName = auth.user?.name?.split(" ")[0] || "there";
 
   if (loading) {
     return (

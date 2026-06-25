@@ -53,16 +53,16 @@ export function myRole(duel: Duel): MyRole {
   const me = getMeId();
   if (duel.challengerId === me) return "challenger";
   if (duel.opponentId === me) return "opponent";
-  if (duel.witnesses.some((w) => w.id === me)) return "witness";
+  if ((duel.witnesses ?? []).some((w) => w.id === me)) return "witness";
   return null;
 }
 
 export function myWitness(duel: Duel): DuelWitness | undefined {
-  return duel.witnesses.find((w) => w.id === getMeId());
+  return (duel.witnesses ?? []).find((w) => w.id === getMeId());
 }
 
 export function acceptedWitnesses(duel: Duel): DuelWitness[] {
-  return duel.witnesses.filter((w) => w.response === "accepted");
+  return (duel.witnesses ?? []).filter((w) => w.response === "accepted");
 }
 
 /** Time-based exercises run a shared countdown before results can be judged. */
@@ -174,8 +174,8 @@ export function ChallengeProvider({
     }
     try {
       const data = await fetchChallenges(token);
-      setDuels(data.duels);
-      setPoints(data.points);
+      setDuels(Array.isArray(data?.duels) ? data.duels : []);
+      setPoints(typeof data?.points === "number" ? data.points : 0);
     } catch {
       // Keep the last known state on transient errors.
     } finally {
@@ -193,7 +193,7 @@ export function ChallengeProvider({
     setLoading(true);
     refresh();
     fetchColleagues(token)
-      .then((data) => active && setColleagues(data.colleagues))
+      .then((data) => active && setColleagues(Array.isArray(data?.colleagues) ? data.colleagues : []))
       .catch(() => {});
     const id = window.setInterval(refresh, 6000);
     return () => {
@@ -256,8 +256,8 @@ export function ChallengeProvider({
     void run(() => dismissChallenge(token!, id));
   }, [token, run]);
 
-  const actionable = useMemo(() => duels.filter(duelNeedsMyAction), [duels]);
-  const visibleDuels = useMemo(() => duels.filter((d) => !d.dismissed), [duels]);
+  const actionable = useMemo(() => (duels ?? []).filter(duelNeedsMyAction), [duels]);
+  const visibleDuels = useMemo(() => (duels ?? []).filter((d) => !d.dismissed), [duels]);
 
   // Clang the swords when a new challenge needs your attention (after first load).
   const prevActionableRef = useRef<number | null>(null);

@@ -1,6 +1,7 @@
 import { Navigate, Route, Routes, useLocation } from "react-router-dom";
 import AdminApp from "./admin/AdminApp";
 import { MemberAuthProvider } from "./auth/MemberAuthContext";
+import { ErrorBoundary } from "./components/ErrorBoundary";
 import CorporatePortal from "./corporate/CorporatePortal";
 import MarketingSite from "./marketing/MarketingSite";
 import PlatformApp from "./platform/PlatformApp";
@@ -19,7 +20,8 @@ export default function App() {
   const { pathname } = useLocation();
 
   return (
-    <MemberAuthProvider>
+    <ErrorBoundary>
+      <MemberAuthProvider>
       {isPlatformPath(pathname) ? (
         <PlatformApp />
       ) : (
@@ -37,6 +39,7 @@ export default function App() {
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       )}
-    </MemberAuthProvider>
+      </MemberAuthProvider>
+    </ErrorBoundary>
   );
 }

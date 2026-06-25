@@ -452,8 +452,8 @@ function Nav({
             aria-label={isLoggedIn ? "My account" : "Sign in or create account"}
           >
             <User size={14} />
-            <span className="hidden sm:inline">{isLoggedIn ? (member?.name?.split(" ")[0] || "Account") : "Sign in / Join"}</span>
-            <span className="sm:hidden">{isLoggedIn ? "Account" : "Join"}</span>
+            <span className="hidden sm:inline">{isLoggedIn ? (member?.name?.split(" ")[0] || "Account") : "Sign in"}</span>
+            <span className="sm:hidden">{isLoggedIn ? "Account" : "Sign in"}</span>
           </button>
           <button
             onClick={onContact}

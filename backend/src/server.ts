@@ -897,7 +897,9 @@ app.get("/api/trainer/participants", auth, requireRole("TRAINER", "SUPER_ADMIN")
   }
 });
 
-app.get("/api/challenges", auth, async (req: AuthedRequest, res, next) => {
+// HR/company wellness challenges live under /api/company/challenges so they don't
+// shadow the buddy-duel routes registered at /api/challenges (challenge-routes.ts).
+app.get("/api/company/challenges", auth, async (req: AuthedRequest, res, next) => {
   try {
     const challenges = await prisma.challenge.findMany({
       where: req.user!.role === "SUPER_ADMIN" ? {} : { companyId: req.user!.companyId || undefined },
@@ -909,7 +911,7 @@ app.get("/api/challenges", auth, async (req: AuthedRequest, res, next) => {
   }
 });
 
-app.post("/api/challenges", auth, requireRole("HR_ADMIN", "CORPORATE_ADMIN", "SUPER_ADMIN"), async (req: AuthedRequest, res, next) => {
+app.post("/api/company/challenges", auth, requireRole("HR_ADMIN", "CORPORATE_ADMIN", "SUPER_ADMIN"), async (req: AuthedRequest, res, next) => {
   try {
     const challenge = await prisma.challenge.create({
       data: {
@@ -927,7 +929,7 @@ app.post("/api/challenges", auth, requireRole("HR_ADMIN", "CORPORATE_ADMIN", "SU
   }
 });
 
-app.put("/api/challenges/:id", auth, requireRole("HR_ADMIN", "CORPORATE_ADMIN", "SUPER_ADMIN"), async (req, res, next) => {
+app.put("/api/company/challenges/:id", auth, requireRole("HR_ADMIN", "CORPORATE_ADMIN", "SUPER_ADMIN"), async (req, res, next) => {
   try {
     const challenge = await prisma.challenge.update({ where: { id: req.params.id }, data: req.body });
     res.json({ challenge });
