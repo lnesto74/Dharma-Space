@@ -59,13 +59,10 @@ export function GoogleSignIn({ onCredential, onError, disabled, className }: Goo
 
 export function GoogleSignInDivider({ label = "Or continue with" }: { label?: string }) {
   return (
-    <div className="relative my-4">
-      <div className="absolute inset-0 flex items-center">
-        <span className="w-full border-t border-current opacity-20" />
-      </div>
-      <div className="relative flex justify-center text-[10px] uppercase tracking-[0.2em] opacity-60">
-        <span className="bg-inherit px-3">{label}</span>
-      </div>
+    <div className="my-4 flex items-center gap-3 text-[10px] uppercase tracking-[0.2em] text-[var(--cwp-text-muted)]">
+      <span className="h-px flex-1 bg-current opacity-20" />
+      <span className="whitespace-nowrap">{label}</span>
+      <span className="h-px flex-1 bg-current opacity-20" />
     </div>
   );
 }

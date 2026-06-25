@@ -83,6 +83,12 @@ function CorporateLoginShell({ children, subtitle }: { children: React.ReactNode
   return (
     <div className="cwp-page flex min-h-screen items-center justify-center p-6">
       <div className="w-full max-w-md">
+        <a
+          href="/"
+          className="mb-6 inline-flex items-center gap-1.5 text-sm text-[var(--cwp-text-muted)] transition-colors hover:text-[var(--cwp-army)]"
+        >
+          <span aria-hidden>←</span> Back to Dharma Space
+        </a>
         <div className="mb-8 flex flex-col items-center text-center">
           <BrandLogo
             className="mb-4 flex items-center gap-2"
