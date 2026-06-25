@@ -2,7 +2,7 @@
 
 > **Living document.** Update this file whenever auth, corporate platform, marketing site, or related backend/frontend behavior changes.
 >
-> **Last updated:** 2026-05-31 · **Latest commit:** (unpublished — CWP Phase 1–4)
+> **Last updated:** 2026-06-24 · **Latest commit:** (pending publish)
 
 ---
 
@@ -18,6 +18,7 @@
 
 | Date | Commit | Summary |
 |------|--------|---------|
+| 2026-06-24 | (local) | Google OAuth on all sign-in flows, pending user approval workflow, domain allowlist enforcement, admin email on new signups |
 | 2026-05-31 | (local) | CWP Phase 1–4: wellness schema, API routes, employee dashboard, CWP Platform → corporate.dharma-space.com |
 | 2026-05-31 | `a38a7b5` | Team building DB images, Corporate CWP nav submenu, specialists scroll UX, About as default on refresh |
 | 2026-05-31 | `cc621b5` | Events/Education nav submenus, bundled team-building photos |
@@ -233,8 +234,9 @@ Defined in `backend/src/google-auth.ts` (`CORPORATE_ROLES`) and enforced in `bac
 
 - Verifies ID token against `GOOGLE_CLIENT_ID`
 - Requires `email_verified`
-- Looks up `User` by email — **no auto-provision**
-- `corporateDomainAllowed(email)` exists but is **not yet enforced** on login
+- Looks up `User` by email — **no auto-provision** for disallowed domains; allowed domains create `PENDING` user
+- `corporateDomainAllowed(email)` enforced on **self-signup** (`POST /api/auth/register`, new Google accounts)
+- Admin notification email to `MAIL_CORPORATE_INBOX` (+ `MAIL_NOTIFY` CC) when a pending user is created
 
 #### Marketing members (`SiteMember`)
 
@@ -329,7 +331,7 @@ Bundled custom images (as of `a38a7b5`):
 | `PORT` | Backend port (7010 local) |
 | `FRONTEND_URL` | CORS + links |
 | `GOOGLE_CLIENT_ID` | Corporate Google OAuth |
-| `CORPORATE_ALLOWED_DOMAINS` | Domain allowlist (default `dharma-space.com`) — **not enforced yet** |
+| `CORPORATE_ALLOWED_DOMAINS` | Domain allowlist for self-signup (default `dharma-space.com`) — enforced on register + new Google signups |
 | `CORPORATE_URL` | Corporate portal URL |
 | `SITE_ADMIN_PASS` | Marketing header admin password |
 | `SMTP_*` | Education + corporate inquiry emails |
@@ -362,8 +364,8 @@ Bundled custom images (as of `a38a7b5`):
 
 | Priority | Gap | Recommended fix |
 |----------|-----|-----------------|
-| **P0** | Open `POST /api/auth/register` accepts arbitrary role | Disable in prod or restrict to invite token |
-| **P0** | `corporateDomainAllowed()` not used | Enforce per-company domains on Google login |
+| **P0** | Open `POST /api/auth/register` accepts arbitrary role | ~~Disable in prod or restrict to invite token~~ — register forces `EMPLOYEE` + `PENDING` + domain allowlist |
+| **P0** | `corporateDomainAllowed()` not used | ~~Enforce per-company domains on Google login~~ — enforced on self-signup |
 | **P1** | No employee invite flow | Add `EmployeeInvite` model + HR invite API |
 | **P1** | No per-company domain on `Company` | Add `allowedDomains String[]` to schema |
 | **P1** | Challenge/certificate IDOR | Verify `companyId` / ownership on mutations |
@@ -440,6 +442,7 @@ model EmployeeInvite {
 | `backend/prisma/seed-site.ts` | Marketing CMS + team activity restore |
 | `backend/src/server.ts` | Main API, auth, RBAC, dashboards |
 | `backend/src/google-auth.ts` | Google OAuth helpers |
+| `backend/src/pending-user-notifications.ts` | Pending signup admin email + domain helpers |
 | `backend/src/site-bookings.ts` | Member auth + bookings |
 | `backend/src/site-content.ts` | Public CMS API |
 | `backend/src/team-building.ts` | Team activity defaults + image restore |
@@ -454,6 +457,7 @@ model EmployeeInvite {
 | `frontend/src/main.tsx` | Corporate subdomain switch |
 | `frontend/src/App.tsx` | Router |
 | `frontend/src/corporate/CorporatePortal.tsx` | Google OAuth entry |
+| `frontend/src/components/GoogleSignIn.tsx` | Shared Google sign-in button |
 | `frontend/src/platform/PlatformApp.tsx` | CWP dashboards |
 | `frontend/src/marketing/MarketingSite.tsx` | Public marketing SPA |
 | `frontend/src/marketing/assets.ts` | Static marketing assets |

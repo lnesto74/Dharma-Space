@@ -48,6 +48,21 @@ async function grantAppUserPrivileges(adminUrl: string, appUser: string): Promis
   }
 }
 
+/** Regenerate Prisma client. For manual/build use only — do NOT call on dev server start (tsx watch loop). */
+export function ensurePrismaClientGenerated(): void {
+  try {
+    execSync("npx prisma generate", {
+      cwd: backendRoot,
+      stdio: "inherit",
+      env: process.env
+    });
+    console.log("[startup] Prisma client generated.");
+  } catch (error) {
+    console.warn("[startup] prisma generate failed — run `npm run prisma:generate` in backend/ locally.");
+    console.warn(error);
+  }
+}
+
 /** Returns true when schema is ready for queries. */
 export async function ensureDatabaseSchema(): Promise<boolean> {
   if (!usesPostgres()) return true;
@@ -67,7 +82,10 @@ export async function ensureDatabaseSchema(): Promise<boolean> {
     console.log("[startup] Using DATABASE_MIGRATION_URL for schema changes.");
   }
   try {
-    execSync("npx prisma db push --skip-generate --accept-data-loss", {
+    // --skip-generate: regenerating the client rewrites node_modules/.prisma, which
+    // tsx watch picks up and restarts on — causing an infinite dev restart loop.
+    // The client is generated at install/build time instead.
+    execSync("npx prisma db push --accept-data-loss --skip-generate", {
       cwd: backendRoot,
       stdio: "inherit",
       env: { ...process.env, DATABASE_URL: pushUrl }

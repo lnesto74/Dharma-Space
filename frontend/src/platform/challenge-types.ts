@@ -1,21 +1,24 @@
 // Shared data + helpers for the "Challenge a Buddy" gamification feature.
 // Used by the Buddy Challenge page and the floating Challenge notifications widget.
 
-export const ME_ID = "me";
-export const ME_NAME = "You";
+// The current user's identity, set once the authenticated session is known.
+// Helpers below resolve "me" against this so all role/result logic works for
+// the real logged-in employee instead of a hardcoded demo id.
+let _meId = "";
+let _meName = "You";
+
+export function setMe(id: string, name: string) {
+  _meId = id;
+  _meName = name || "You";
+}
+export function getMeId() {
+  return _meId;
+}
+export function getMeName() {
+  return _meName;
+}
 
 export type BuddyColleague = { id: string; name: string; department: string };
-
-export const buddyColleagues: BuddyColleague[] = [
-  { id: "u-ava", name: "Ava Morgan", department: "Product" },
-  { id: "u-theo", name: "Theo Malik", department: "Sales" },
-  { id: "u-priya", name: "Priya Shah", department: "Leadership" },
-  { id: "u-noah", name: "Noah Kim", department: "Engineering" },
-  { id: "u-lina", name: "Lina Cortez", department: "People" },
-  { id: "u-rowan", name: "Rowan Diaz", department: "Finance" },
-  { id: "u-iris", name: "Iris Wong", department: "Operations" },
-  { id: "u-felix", name: "Felix Grant", department: "Engineering" }
-];
 
 export type BuddyChallengeType = {
   id: string;

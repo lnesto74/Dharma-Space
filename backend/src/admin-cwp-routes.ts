@@ -2,6 +2,7 @@ import type { Express, NextFunction, Request, Response } from "express";
 import type { PrismaClient, User } from "@prisma/client";
 import bcrypt from "bcryptjs";
 import { z } from "zod";
+import { createUser } from "./user-auth.js";
 
 type AuthedRequest = Request & { user?: User };
 
@@ -73,7 +74,8 @@ export function registerAdminCwpRoutes(
         bookings,
         attendances,
         pendingScheduleRequests,
-        cwpInquiries
+        cwpInquiries,
+        pendingUsers
       ] = await Promise.all([
         prisma.company.count(),
         prisma.user.count({ where: { role: "EMPLOYEE" } }),
@@ -84,7 +86,8 @@ export function registerAdminCwpRoutes(
         prisma.wellnessBooking.count({ where: { cancelled: false } }),
         prisma.wellnessAttendance.count(),
         prisma.scheduleRequest.count({ where: { status: "pending" } }),
-        prisma.formSubmission.count({ where: { type: "CWP_DEMO" } })
+        prisma.formSubmission.count({ where: { type: "CWP_DEMO" } }),
+        prisma.user.count({ where: { accountStatus: "PENDING" } })
       ]);
 
       const recentCompanies = await prisma.company.findMany({
@@ -108,7 +111,8 @@ export function registerAdminCwpRoutes(
           activeBookings: bookings,
           totalAttendances: attendances,
           pendingScheduleRequests,
-          cwpInquiries
+          cwpInquiries,
+          pendingUsers
         },
         recentCompanies: recentCompanies.map(companySummary)
       });
@@ -187,6 +191,87 @@ export function registerAdminCwpRoutes(
           challenges: company.challenges,
           invoices: company.invoices
         }
+      });
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  // Company-scoped lists — manage each client in isolation
+  app.get("/api/admin/cwp/companies/:id/users", auth, superAdmin, async (req, res, next) => {
+    try {
+      const role = typeof req.query.role === "string" ? req.query.role : undefined;
+      const accountStatus = typeof req.query.accountStatus === "string" ? req.query.accountStatus : undefined;
+      const users = await prisma.user.findMany({
+        where: {
+          companyId: req.params.id,
+          ...(role ? { role } : {}),
+          ...(accountStatus ? { accountStatus } : {})
+        },
+        include: { company: true, department: true },
+        orderBy: { name: "asc" }
+      });
+      res.json({ users: users.map(sanitizeUser) });
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  app.get("/api/admin/cwp/companies/:id/events", auth, superAdmin, async (req, res, next) => {
+    try {
+      const status = typeof req.query.status === "string" ? req.query.status : undefined;
+      const upcoming = req.query.upcoming === "true";
+      const events = await prisma.wellnessEvent.findMany({
+        where: {
+          companyId: req.params.id,
+          ...(status ? { status } : {}),
+          ...(upcoming ? { dateTime: { gte: new Date() }, status: { in: ["scheduled", "draft"] } } : {})
+        },
+        include: {
+          company: { select: { id: true, name: true } },
+          category: true,
+          trainer: { select: { id: true, name: true } },
+          bookings: { where: { cancelled: false } },
+          attendances: true
+        },
+        orderBy: { dateTime: "desc" },
+        take: Math.min(Number(req.query.limit) || 100, 200)
+      });
+      res.json({
+        events: events.map((e) => ({
+          id: e.id,
+          title: e.title,
+          dateTime: e.dateTime,
+          status: e.status,
+          locationType: e.locationType,
+          company: e.company,
+          category: e.category.name,
+          trainer: e.trainer?.name || null,
+          bookedCount: e.bookings.length,
+          attendedCount: e.attendances.length,
+          maxSpots: e.maxSpots
+        }))
+      });
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  app.get("/api/admin/cwp/companies/:id/departments", auth, superAdmin, async (req, res, next) => {
+    try {
+      const departments = await prisma.department.findMany({
+        where: { companyId: req.params.id },
+        include: { users: { select: { role: true } } },
+        orderBy: { name: "asc" }
+      });
+      res.json({
+        departments: departments.map((d) => ({
+          id: d.id,
+          name: d.name,
+          companyId: d.companyId,
+          userCount: d.users.length,
+          employees: d.users.filter((u) => u.role === "EMPLOYEE").length
+        }))
       });
     } catch (error) {
       next(error);
@@ -284,10 +369,12 @@ export function registerAdminCwpRoutes(
     try {
       const companyId = typeof req.query.companyId === "string" ? req.query.companyId : undefined;
       const role = typeof req.query.role === "string" ? req.query.role : undefined;
+      const accountStatus = typeof req.query.accountStatus === "string" ? req.query.accountStatus : undefined;
       const users = await prisma.user.findMany({
         where: {
           ...(companyId ? { companyId } : {}),
-          ...(role ? { role } : {})
+          ...(role ? { role } : {}),
+          ...(accountStatus ? { accountStatus } : {})
         },
         include: { company: true, department: true },
         orderBy: { name: "asc" }
@@ -303,13 +390,21 @@ export function registerAdminCwpRoutes(
     name: z.string().min(1),
     industry: z.string().min(1).default("General"),
     plan: z.string().min(1).default("Starter"),
-    seats: z.number().int().positive().default(50)
+    seats: z.number().int().positive().default(50),
+    departments: z.array(z.string().min(1)).optional()
   });
 
   app.post("/api/admin/cwp/companies", auth, superAdmin, async (req, res, next) => {
     try {
       const body = companyCreateSchema.parse(req.body);
-      const created = await prisma.company.create({ data: body });
+      const { departments, ...companyData } = body;
+      const created = await prisma.company.create({ data: companyData });
+      if (departments?.length) {
+        await prisma.department.createMany({
+          data: departments.map((name) => ({ name: name.trim(), companyId: created.id })),
+          skipDuplicates: true
+        });
+      }
       const company = await prisma.company.findUniqueOrThrow({
         where: { id: created.id },
         include: COMPANY_SUMMARY_INCLUDE
@@ -339,7 +434,33 @@ export function registerAdminCwpRoutes(
     }
   });
 
-  // ---- Departments: create / rename / delete ---------------------------------------
+  // ---- Departments: list / create / rename / delete --------------------------------
+  app.get("/api/admin/cwp/departments", auth, superAdmin, async (req, res, next) => {
+    try {
+      const companyId = typeof req.query.companyId === "string" ? req.query.companyId : undefined;
+      const departments = await prisma.department.findMany({
+        where: companyId ? { companyId } : {},
+        include: {
+          company: { select: { id: true, name: true } },
+          users: { select: { role: true } }
+        },
+        orderBy: [{ company: { name: "asc" } }, { name: "asc" }]
+      });
+      res.json({
+        departments: departments.map((d) => ({
+          id: d.id,
+          name: d.name,
+          companyId: d.companyId,
+          company: d.company,
+          userCount: d.users.length,
+          employees: d.users.filter((u) => u.role === "EMPLOYEE").length
+        }))
+      });
+    } catch (error) {
+      next(error);
+    }
+  });
+
   const departmentSchema = z.object({ name: z.string().min(1) });
 
   app.post("/api/admin/cwp/companies/:id/departments", auth, superAdmin, async (req, res, next) => {
@@ -395,15 +516,15 @@ export function registerAdminCwpRoutes(
       const body = userCreateSchema.parse(req.body);
       const existing = await prisma.user.findUnique({ where: { email: body.email } });
       if (existing) return res.status(409).json({ message: "A user with that email already exists." });
-      const user = await prisma.user.create({
-        data: {
-          name: body.name,
-          email: body.email,
-          passwordHash: await bcrypt.hash(body.password, 12),
-          role: body.role,
-          companyId: body.companyId ?? null,
-          departmentId: body.departmentId ?? null
-        }
+      const user = await createUser(prisma, {
+        name: body.name,
+        email: body.email,
+        passwordHash: await bcrypt.hash(body.password, 12),
+        role: body.role,
+        accountStatus: "APPROVED",
+        onboardingCompleted: true,
+        companyId: body.companyId ?? null,
+        departmentId: body.departmentId ?? null
       });
       res.status(201).json({ user: sanitizeUser(user) });
     } catch (error) {
@@ -416,7 +537,9 @@ export function registerAdminCwpRoutes(
     role: z.enum(PLATFORM_ROLES).optional(),
     companyId: z.string().nullable().optional(),
     departmentId: z.string().nullable().optional(),
-    password: z.string().min(6).optional()
+    password: z.string().min(6).optional(),
+    accountStatus: z.enum(["PENDING", "APPROVED", "REJECTED"]).optional(),
+    position: z.string().nullable().optional()
   });
 
   app.patch("/api/admin/cwp/users/:id", auth, superAdmin, async (req, res, next) => {
@@ -427,6 +550,8 @@ export function registerAdminCwpRoutes(
       if (body.role !== undefined) data.role = body.role;
       if (body.companyId !== undefined) data.companyId = body.companyId;
       if (body.departmentId !== undefined) data.departmentId = body.departmentId;
+      if (body.accountStatus !== undefined) data.accountStatus = body.accountStatus;
+      if (body.position !== undefined) data.position = body.position;
       if (body.password) data.passwordHash = await bcrypt.hash(body.password, 12);
       const user = await prisma.user.update({ where: { id: req.params.id }, data });
       res.json({ user: sanitizeUser(user) });
@@ -535,12 +660,16 @@ export function registerAdminCwpRoutes(
   // ---- Form options (dropdowns) + cross-company analytics --------------------------
   app.get("/api/admin/cwp/form-options", auth, superAdmin, async (_req, res, next) => {
     try {
-      const [companies, categories, trainers] = await Promise.all([
+      const [companies, categories, trainers, departments] = await Promise.all([
         prisma.company.findMany({ select: { id: true, name: true }, orderBy: { name: "asc" } }),
         prisma.wellnessEventCategory.findMany({ select: { id: true, name: true, scoreValue: true }, orderBy: { name: "asc" } }),
-        prisma.user.findMany({ where: { role: "TRAINER" }, select: { id: true, name: true }, orderBy: { name: "asc" } })
+        prisma.user.findMany({ where: { role: "TRAINER" }, select: { id: true, name: true }, orderBy: { name: "asc" } }),
+        prisma.department.findMany({
+          select: { id: true, name: true, companyId: true },
+          orderBy: [{ company: { name: "asc" } }, { name: "asc" }]
+        })
       ]);
-      res.json({ companies, categories, trainers });
+      res.json({ companies, categories, trainers, departments });
     } catch (error) {
       next(error);
     }

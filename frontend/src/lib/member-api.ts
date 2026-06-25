@@ -87,6 +87,17 @@ export async function memberRegister(input: {
   return data as { token: string; member: SiteMember };
 }
 
+export async function memberGoogleLogin(idToken: string) {
+  const res = await fetch(`${API}/api/member/google`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ idToken })
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.message || "Google sign-in failed");
+  return data as { token: string; member: SiteMember };
+}
+
 export async function memberLogin(email: string, password: string) {
   const res = await fetch(`${API}/api/member/login`, {
     method: "POST",

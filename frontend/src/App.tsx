@@ -17,14 +17,10 @@ function isPlatformPath(pathname: string) {
 
 export default function App() {
   const { pathname } = useLocation();
-  const isPortal = pathname === "/portal" || pathname.startsWith("/portal/");
 
   return (
     <MemberAuthProvider>
-      {isPortal ? (
-        // Same-origin CWP login entry (employees, HR, trainers, Dharma Admin).
-        <CorporatePortal />
-      ) : isPlatformPath(pathname) ? (
+      {isPlatformPath(pathname) ? (
         <PlatformApp />
       ) : (
         <Routes>
@@ -34,8 +30,9 @@ export default function App() {
           <Route path="/education" element={<Navigate to="/" replace />} />
           <Route path="/events" element={<Navigate to="/" replace />} />
           <Route path="/booking/success" element={<MarketingSite initialPage="events" />} />
-          <Route path="/login" element={<Navigate to="/" replace />} />
-          <Route path="/register" element={<Navigate to="/" replace />} />
+          <Route path="/login" element={<MarketingSite initialPage="about" openAccountOnMount />} />
+          <Route path="/register" element={<MarketingSite initialPage="about" openAccountOnMount />} />
+          <Route path="/portal/*" element={<CorporatePortal />} />
           <Route path="/admin/*" element={<AdminApp />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>

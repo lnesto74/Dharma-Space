@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { Check, CheckCircle2, Clock, Play, X, XCircle } from "lucide-react";
-import { ME_ID, buddyChallengeTypeMap, targetLabel } from "../challenge-types";
+import { buddyChallengeTypeMap, getMeId, targetLabel } from "../challenge-types";
 import { playFinishSound, playStartSound } from "../sounds";
 import {
   acceptedWitnesses,
@@ -64,6 +64,7 @@ export function DuelCard({ duel }: { duel: Duel }) {
   const complete = duelComplete(duel);
   const accepted = acceptedWitnesses(duel);
   const isParticipant = role === "challenger" || role === "opponent";
+  const meId = getMeId();
 
   // Live countdown tick while a timed duel is running.
   const [now, setNow] = useState(() => Date.now());
@@ -78,8 +79,8 @@ export function DuelCard({ duel }: { duel: Duel }) {
         if (!finishFiredRef.current) {
           finishFiredRef.current = true;
           playFinishSound();
+          finishTimer(duel.id);
         }
-        finishTimer(duel.id);
       }
     };
     tick();
@@ -89,9 +90,9 @@ export function DuelCard({ duel }: { duel: Duel }) {
 
   const remaining = duel.timerEndsAt ? Math.ceil((duel.timerEndsAt - now) / 1000) : 0;
 
-  // I can log a witness's call if it's my own, or (demo) I'm a duelist collecting confirmations.
+  // Each witness logs their own call — only the witness themselves can vote.
   const canVote = (w: DuelWitness) =>
-    duel.status === "active" && ready && w.response === "accepted" && (w.id === ME_ID || isParticipant);
+    duel.status === "active" && ready && w.response === "accepted" && w.id === meId;
 
   const statusBadge = () => {
     if (duel.status === "rejected")
@@ -238,8 +239,8 @@ export function DuelCard({ duel }: { duel: Duel }) {
                       if (editable) {
                         return (
                           <span key={w.id} className="flex items-center gap-1 rounded-full bg-white px-2 py-0.5 text-[11px] shadow-sm">
-                            <span className={w.id === ME_ID ? "font-semibold text-navy" : "text-stone"}>
-                              {w.name.split(" ")[0]}{w.id === ME_ID ? " (you)" : ""}
+                            <span className={w.id === meId ? "font-semibold text-navy" : "text-stone"}>
+                              {w.name.split(" ")[0]}{w.id === meId ? " (you)" : ""}
                             </span>
                             <button
                               type="button"
