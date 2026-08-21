@@ -4,7 +4,8 @@ import {
   heroImg, yttImg, payNowQR,
   aerialSoundBathImg, glowYogaImg, handpanImg, cookingImg, yachtImg,
   natureWalkImg, creativeMovementImg, padelImg,
-  platformImg1, platformImg2, platformImg3
+  platformImg1, platformImg2, platformImg3,
+  specialistPhotoOverrides
 } from "./assets";
 import { BrandLogo } from "../components/BrandLogo";
 import { InstagramCommunityGallery } from "../components/InstagramCommunityGallery";
@@ -2737,8 +2738,16 @@ function Footer({
           </div>
           <div>
             <p className="text-[10px] tracking-[0.25em] text-[#C4785A] uppercase mb-6" style={{ fontFamily: "var(--font-body)" }}>Connect</p>
-            <p className="text-white/50 text-[14px] mb-2" style={{ fontFamily: "var(--font-body)" }}>hello@dharma-space.com</p>
-            <p className="text-white/50 text-[14px] mb-6" style={{ fontFamily: "var(--font-body)" }}>dharma-space.com</p>
+            {["education@dharma-space.com", "career@dharma-space.com", "vera@dharma-space.com"].map((email) => (
+              <a key={email} href={`mailto:${email}`} className="block text-white/50 hover:text-white text-[14px] mb-2 transition-colors" style={{ fontFamily: "var(--font-body)" }}>
+                {email}
+              </a>
+            ))}
+            <p className="text-white/50 text-[14px] mb-4 mt-2" style={{ fontFamily: "var(--font-body)" }}>dharma-space.com</p>
+            <address className="not-italic font-bold text-[14px] leading-[1.7] mb-6" style={{ fontFamily: "var(--font-body)", color: "#c4785a" }}>
+              13 Upper Circular Road #03-01<br />
+              Singapore 058411
+            </address>
             <div className="flex flex-col gap-3">
               <button onClick={onAccount} className="px-6 py-3 border border-white/25 text-white/80 text-[11px] tracking-[0.15em] uppercase hover:border-[#C4785A] hover:text-[#C4785A] transition-all duration-300" style={{ fontFamily: "var(--font-body)" }}>
                 Sign in / Create account
@@ -2924,11 +2933,15 @@ export default function MarketingSite({
           role: t.role,
           desc: t.description,
           cert: t.credentials,
-          img: t.imageUrl || fallback?.img || "",
+          // Local overrides win over the backend's cached/live photo for specific people.
+          img: specialistPhotoOverrides[t.name] || t.imageUrl || fallback?.img || "",
           portraitFocus: fallback?.portraitFocus
         };
       })
-    : LIVE_SITE_SPECIALISTS;
+    : LIVE_SITE_SPECIALISTS.map((s) => ({
+        ...s,
+        img: specialistPhotoOverrides[s.name] || s.img
+      }));
 
   const events = site?.programs?.events?.length
     ? sortProgramsForDisplay(site.programs.events).map((p) => ({

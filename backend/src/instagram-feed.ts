@@ -3,6 +3,9 @@ import { mediaProxyUrl } from "./trainer-media-cache.js";
 const IG_APP_ID = "936619743392459";
 const DEFAULT_USERNAME = "dharma_space_sg";
 const CACHE_MS = 60 * 60 * 1000;
+// When Instagram blocks the unauthenticated request, back off for a while before
+// retrying so we don't hammer it (or spam logs) on every page load.
+const NEG_CACHE_MS = 10 * 60 * 1000;
 
 export type InstagramFeedPost = {
   id: string;
@@ -129,13 +132,33 @@ async function fetchViaPublicProfile(handle: string): Promise<InstagramFeedPost[
 export async function getInstagramFeed(): Promise<InstagramFeedResponse> {
   const handle = username();
   const now = Date.now();
-  // Skip cache briefly after deploy so image URLs use the media proxy.
-  if (cache && cache.expiresAt > now && cache.data.posts[0]?.imageUrl.startsWith("/api/media/proxy")) {
-    return cache.data;
+  if (cache && cache.expiresAt > now) {
+    // Bust an old positive cache whose images predate the media proxy, but keep
+    // serving any fresh cache (including a short negative cache) otherwise.
+    const stale = cache.data.posts.length > 0 && !cache.data.posts[0].imageUrl.startsWith("/api/media/proxy");
+    if (!stale) return cache.data;
   }
 
-  const graphPosts = await fetchViaGraphApi();
-  const posts = graphPosts?.length ? graphPosts : await fetchViaPublicProfile(handle);
+  let posts: InstagramFeedPost[];
+  try {
+    const graphPosts = await fetchViaGraphApi();
+    posts = graphPosts?.length ? graphPosts : await fetchViaPublicProfile(handle);
+  } catch (error) {
+    // Instagram routinely blocks unauthenticated scraping (400/429). Degrade
+    // gracefully instead of surfacing a 500: serve the last good feed if we have
+    // one, otherwise an empty feed, and back off before trying again.
+    if (cache) return cache.data;
+    const message = error instanceof Error ? error.message : String(error);
+    console.warn(`[instagram] feed unavailable — serving empty feed (${message})`);
+    const empty: InstagramFeedResponse = {
+      username: handle,
+      profileUrl: `https://www.instagram.com/${handle}/`,
+      posts: [],
+      cachedAt: new Date().toISOString()
+    };
+    cache = { expiresAt: now + NEG_CACHE_MS, data: empty };
+    return empty;
+  }
 
   const data: InstagramFeedResponse = {
     username: handle,

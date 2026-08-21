@@ -20,10 +20,18 @@ export const founderImg = byName["Vera Pleshakova"];
 export const bolorImg = byName["Bolor Lorinet"];
 export const kristinaImg = byName["Kristina Gazi"];
 export const oxanaImg = byName["Oxana Shilina"];
-export const yanaImg = byName["Yana An"];
+export const yanaImg = u("/specialists/yana-an.jpg");
 export const kjImg = byName["Kanthan Jeganathan"];
 export const nirmalImg = byName["Dr. Nirmal Bhusal"];
 export const manjeetImg = byName["Manjeet Mathur"];
+
+/**
+ * Local, hand-cropped specialist photos that override whatever the backend/live
+ * bundle serves for a given name (used in the specialists scroller).
+ */
+export const specialistPhotoOverrides: Record<string, string> = {
+  "Yana An": u("/specialists/yana-an.jpg")
+};
 
 const teamBuilding = (file: string) => u(`/team-building/${file}`);
 

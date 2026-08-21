@@ -41,7 +41,7 @@ export const LIVE_SITE_TRAINERS = [
     role: "Handpan Teacher & Art Therapist",
     description:
       "Guiding students into the meditative world of handpan — from first touch to expressive play — while weaving art therapy for deep emotional healing.",
-    credentials: "Sound Healer",
+    credentials: "Sound Healer · Singapore Handpans",
     imageUrl: `${LIVE_COMPONENT_BASE}/IMG_7720_2.506eacb6.JPG`,
     sortOrder: 4
   },

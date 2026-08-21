@@ -34,3 +34,6 @@ frontend/node_modules/.vite/
 # Prisma local DB (regenerate with npm run db:push && npm run seed)
 backend/prisma/dev.db
 backend/prisma/dev.db-journal
+
+# Runtime-generated team building media cache (regenerated from backend/data/team-building-images on startup)
+backend/data/team-building-media/

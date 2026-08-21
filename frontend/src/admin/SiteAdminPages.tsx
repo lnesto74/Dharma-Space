@@ -1,4 +1,4 @@
-import { FormEvent, ReactNode, useEffect, useState } from "react";
+import { FormEvent, ReactNode, useEffect, useMemo, useState } from "react";
 import { Link, NavLink } from "react-router-dom";
 import { PendingApprovalsWidget } from "./PendingApprovalsWidget";
 import {
@@ -7,12 +7,15 @@ import {
   CalendarDays,
   ExternalLink,
   GraduationCap,
+  Info,
   LayoutGrid,
   List,
   Mail,
   Plus,
   RefreshCw,
+  Repeat,
   Shield,
+  Sparkles,
   Ticket,
   Type
 } from "lucide-react";
@@ -31,6 +34,15 @@ type Auth = {
 };
 
 type PageIcon = typeof Shield;
+
+function initialsOf(name?: string | null): string {
+  if (!name) return "D";
+  const parts = name.trim().split(/\s+/).filter(Boolean);
+  if (!parts.length) return "D";
+  const first = parts[0][0];
+  const last = parts.length > 1 ? parts[parts.length - 1][0] : "";
+  return (first + last).toUpperCase();
+}
 
 function StatusPill({ variant, label }: { variant: "green" | "blue" | "gray" | "orange" | "purple"; label: string }) {
   return (
@@ -183,12 +195,18 @@ export function AdminShell({
 
       <div className="admin-main">
         <div className="admin-topbar">
-          <span className="admin-topbar-meta">{auth.user?.name}</span>
+          <span className="admin-topbar-meta">Admin workspace</span>
+          <div className="admin-topbar-user">
+            <span className="admin-topbar-avatar">{initialsOf(auth.user?.name)}</span>
+            <span className="admin-topbar-name">{auth.user?.name}</span>
+          </div>
         </div>
 
         <div className="admin-page">
           <div className="admin-page-title">
-            <Icon className="admin-page-title-icon" style={{ width: 28, height: 28, opacity: 0.85 }} strokeWidth={1.75} />
+            <span className="admin-page-title-badge">
+              <Icon style={{ width: 22, height: 22 }} strokeWidth={1.9} />
+            </span>
             <h1>{title}</h1>
           </div>
           {subtitle && <p className="admin-page-desc">{subtitle}</p>}
@@ -235,8 +253,19 @@ export function AdminOverviewPage({ auth }: { auth: Auth }) {
   ] as const;
 
   return (
-    <AdminShell auth={auth} title="Overview" icon={Shield}>
+    <AdminShell
+      auth={auth}
+      title="Overview"
+      subtitle="Welcome to the Dharma Space admin. Everything you manage on the website lives in the menu on the left — pick a section below to get started."
+      icon={Shield}
+    >
       {error && <div className="admin-alert">{error}</div>}
+      <div className="admin-help-banner">
+        <Info />
+        <span>
+          New here? The numbers below are live counts from your website. Click any card to jump straight to that section.
+        </span>
+      </div>
       <div className="admin-stat-row">
         {stats.map((s) => (
           <Link key={s.label} to={s.to} className="admin-stat">
@@ -709,14 +738,18 @@ export function AdminInquiriesPage({ auth }: { auth: Auth }) {
       {mailTest && <div className="admin-alert">{mailTest}</div>}
       {error && <div className="admin-alert">{error}</div>}
 
-      <div className="admin-alert" style={{ marginBottom: 16, background: "var(--admin-gray-bg)", border: "none", color: "var(--admin-text-secondary)" }}>
-        <strong style={{ color: "var(--admin-text)" }}>Payment tags:</strong>{" "}
-        <strong>Waitlist</strong> = Reserve Spot (coming soon, no payment yet).{" "}
-        <strong>Not paid</strong> = Stripe checkout started (<strong>BOOKING INTENT</strong>) or PayNow submitted (<strong>BOOKING PAYMENT</strong>) — awaiting verification.{" "}
-        <strong>Paid</strong> = confirmed booking.
-        {unpaidBookingCount > 0 && (
-          <> Use <strong>Mark as paid</strong> after you verify payment ({unpaidBookingCount} pending).</>
-        )}
+      <div className="admin-help-banner">
+        <Info />
+        <span>
+          This is every message and booking from the website. Unread ones have a blue dot.{" "}
+          {unpaidBookingCount > 0 ? (
+            <>
+              <strong>{unpaidBookingCount} booking{unpaidBookingCount === 1 ? "" : "s"}</strong> {unpaidBookingCount === 1 ? "is" : "are"} waiting for you to confirm payment — look for the orange <strong>Not paid</strong> tag and press <strong>Mark as paid</strong>.
+            </>
+          ) : (
+            <>New submissions appear at the top. A full guide to the tags is at the bottom of this page.</>
+          )}
+        </span>
       </div>
 
       <div className="admin-db-toolbar">
@@ -804,6 +837,64 @@ export function AdminInquiriesPage({ auth }: { auth: Auth }) {
           })}
         </div>
       )}
+
+      <div className="admin-legend">
+        <h3 className="admin-legend-title">
+          <Info />
+          Guide: what the payment tags mean
+        </h3>
+        <p className="admin-legend-lead">
+          Every booking or reservation shows one of these tags so you can see, at a glance, who still owes payment.
+        </p>
+
+        <div className="admin-legend-grid">
+          <div className="admin-legend-item">
+            {paymentTagPill("waitlist")}
+            <span className="admin-legend-item-desc">
+              <strong>Reserve Spot</strong> for an offering that is coming soon. The person registered interest — <strong>no payment is due yet</strong>.
+            </span>
+          </div>
+          <div className="admin-legend-item">
+            {paymentTagPill("not paid")}
+            <span className="admin-legend-item-desc">
+              Payment was <strong>started but not confirmed</strong>. Either a Stripe checkout began (tagged <em>Booking Intent</em>) or a PayNow transfer was submitted (tagged <em>Booking Payment</em>). Check that the money arrived, then press <strong>Mark as paid</strong>.
+            </span>
+          </div>
+          <div className="admin-legend-item">
+            {paymentTagPill("paid")}
+            <span className="admin-legend-item-desc">
+              Payment is <strong>confirmed</strong> and the spot is secured. Nothing more to do here.
+            </span>
+          </div>
+        </div>
+
+        <div className="admin-legend-flow">
+          <div className="admin-legend-step">
+            <span className="admin-legend-step-num">1</span>
+            <strong>Booking arrives</strong>
+            Customer books on the website and lands in this inbox.
+          </div>
+          <div className="admin-legend-step">
+            <span className="admin-legend-step-num">2</span>
+            <strong>Not paid</strong>
+            Waiting for the payment to land (Stripe or PayNow).
+          </div>
+          <div className="admin-legend-step">
+            <span className="admin-legend-step-num">3</span>
+            <strong>You verify</strong>
+            Confirm the money arrived, then click <em>Mark as paid</em>.
+          </div>
+          <div className="admin-legend-step">
+            <span className="admin-legend-step-num">4</span>
+            <strong>Paid</strong>
+            The booking is confirmed and the customer gets their email.
+          </div>
+        </div>
+
+        <p className="admin-legend-note">
+          Tip: use the <strong>payment filters</strong> above (All payments · Waitlist · Not paid · Paid) to focus on just the bookings that need action.
+        </p>
+      </div>
     </AdminShell>
   );
 }
@@ -835,6 +926,65 @@ type OfferingGroup = {
   bookings: BookingRow[];
 };
 
+// Booking categories rolled up into the sections shown on the page.
+const BOOKING_GROUPS: {
+  key: string;
+  label: string;
+  blurb: string;
+  icon: PageIcon;
+  match: (category: string) => boolean;
+}[] = [
+  {
+    key: "TRAINING",
+    label: "Teacher Training Courses",
+    blurb: "Multi-week trainings & yoga teacher certifications",
+    icon: GraduationCap,
+    match: (c) => ["FLAGSHIP", "YTT"].includes(c)
+  },
+  {
+    key: "COURSE",
+    label: "Courses & Certifications",
+    blurb: "Structured multi-session courses",
+    icon: BookOpen,
+    match: (c) => ["COURSE", "CERTIFICATION"].includes(c)
+  },
+  {
+    key: "WORKSHOP",
+    label: "Workshops",
+    blurb: "One-off deep-dive sessions",
+    icon: Sparkles,
+    match: (c) => c === "WORKSHOP"
+  },
+  {
+    key: "EVENT",
+    label: "Events",
+    blurb: "Special events & gatherings",
+    icon: CalendarDays,
+    match: (c) => c === "EVENT"
+  },
+  {
+    key: "REGULAR_CLASS",
+    label: "Regular Classes",
+    blurb: "Weekly drop-in class timetable",
+    icon: Repeat,
+    match: (c) => c === "REGULAR_CLASS"
+  }
+];
+
+const OTHER_GROUP = {
+  key: "OTHER",
+  label: "Other bookings",
+  blurb: "Bookings that don't match a known category",
+  icon: Ticket,
+  match: () => true
+};
+
+type BookingSection = (typeof BOOKING_GROUPS)[number] & {
+  offerings: OfferingGroup[];
+  paid: number;
+  unpaid: number;
+};
+
 export function AdminBookingsPage({ auth }: { auth: Auth }) {
   const [data, setData] = useState<{ totals: { bookings: number; paid: number; awaitingPayment: number }; offerings: OfferingGroup[] } | null>(null);
   const [error, setError] = useState("");
@@ -843,6 +993,51 @@ export function AdminBookingsPage({ auth }: { auth: Auth }) {
   const [expanded, setExpanded] = useState<string | null>(null);
   const [markingPaidId, setMarkingPaidId] = useState<string | null>(null);
   const [actingId, setActingId] = useState<string | null>(null);
+  const [activeGroup, setActiveGroup] = useState<string>("ALL");
+
+  const sections = useMemo<BookingSection[]>(() => {
+    const offerings = data?.offerings ?? [];
+    const claimed = new Set<string>();
+    const built: BookingSection[] = [];
+    for (const group of BOOKING_GROUPS) {
+      const list = offerings.filter((o) => group.match(o.category));
+      list.forEach((o) => claimed.add(o.key));
+      if (list.length) {
+        built.push({
+          ...group,
+          offerings: list,
+          paid: list.reduce((sum, o) => sum + o.paidCount, 0),
+          unpaid: list.reduce((sum, o) => sum + o.unpaidCount, 0)
+        });
+      }
+    }
+    const leftovers = offerings.filter((o) => !claimed.has(o.key));
+    if (leftovers.length) {
+      built.push({
+        ...OTHER_GROUP,
+        offerings: leftovers,
+        paid: leftovers.reduce((sum, o) => sum + o.paidCount, 0),
+        unpaid: leftovers.reduce((sum, o) => sum + o.unpaidCount, 0)
+      });
+    }
+    return built;
+  }, [data]);
+
+  const visibleSections = activeGroup === "ALL" ? sections : sections.filter((s) => s.key === activeGroup);
+
+  // Every category tab is always shown (even with 0 bookings) so the structure is visible.
+  const tabGroups = useMemo(() => {
+    const offerings = data?.offerings ?? [];
+    const groups = BOOKING_GROUPS.map((g) => ({
+      ...g,
+      count: offerings.filter((o) => g.match(o.category)).length
+    }));
+    const otherCount = offerings.filter((o) => !BOOKING_GROUPS.some((g) => g.match(o.category))).length;
+    if (otherCount) groups.push({ ...OTHER_GROUP, count: otherCount });
+    return groups;
+  }, [data]);
+
+  const activeSectionMeta = activeGroup === "ALL" ? null : tabGroups.find((g) => g.key === activeGroup) ?? null;
 
   const load = () => {
     setLoading(true);
@@ -913,11 +1108,95 @@ export function AdminBookingsPage({ auth }: { auth: Auth }) {
     return <StatusPill variant="orange" label="Not paid" />;
   };
 
+  const renderOffering = (offering: OfferingGroup) => (
+    <div key={offering.key} className="admin-card">
+      <button
+        type="button"
+        className="admin-card-header admin-card-header-btn"
+        onClick={() => setExpanded(expanded === offering.key ? null : offering.key)}
+      >
+        <div>
+          <div className="admin-card-title">{offering.offeringTitle}</div>
+          <div className="admin-card-subtitle">
+            {offering.scheduledLabel || "Schedule TBC"}
+          </div>
+        </div>
+        <div className="admin-card-meta">
+          <StatusPill variant="green" label={`${offering.paidCount} paid`} />
+          <StatusPill variant="orange" label={`${offering.unpaidCount} unpaid`} />
+          <StatusPill variant="gray" label={`${offering.guestTotal} guests`} />
+        </div>
+      </button>
+
+      {expanded === offering.key && (
+        <div className="admin-table-wrap">
+          <table className="admin-table">
+            <thead>
+              <tr>
+                <th>Name</th>
+                <th>Email</th>
+                <th>Guests</th>
+                <th>Status</th>
+                <th>Reference</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {offering.bookings.map((booking) => (
+                <tr key={booking.id}>
+                  <td>{booking.customerName}</td>
+                  <td>{booking.customerEmail}</td>
+                  <td>{booking.guests}</td>
+                  <td>{bookingStatusPill(booking)}</td>
+                  <td>{booking.reference}</td>
+                  <td>
+                    <div className="admin-action-row">
+                      {booking.status === "AWAITING_PAYMENT" && (
+                        <>
+                          <button
+                            type="button"
+                            className="admin-btn admin-btn-primary"
+                            disabled={markingPaidId === booking.id || actingId === booking.id}
+                            onClick={() => markPaid(booking.id)}
+                          >
+                            {markingPaidId === booking.id ? "Saving…" : "Mark paid"}
+                          </button>
+                          <button
+                            type="button"
+                            className="admin-btn admin-btn-danger"
+                            disabled={actingId === booking.id}
+                            onClick={() => cancelBooking(booking)}
+                          >
+                            {actingId === booking.id ? "…" : "Cancel"}
+                          </button>
+                        </>
+                      )}
+                      {booking.refundable && (
+                        <button
+                          type="button"
+                          className="admin-btn admin-btn-danger"
+                          disabled={actingId === booking.id}
+                          onClick={() => refundBooking(booking)}
+                        >
+                          {actingId === booking.id ? "Refunding…" : "Refund"}
+                        </button>
+                      )}
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  );
+
   return (
     <AdminShell
       auth={auth}
       title="Bookings"
-      subtitle="Roster by offering — names, guest count, paid / not paid"
+      subtitle="Guest rosters grouped by type — teacher trainings, courses, workshops, events, and regular classes."
       icon={Ticket}
       toolbar={
         <button type="button" className="admin-btn" onClick={load}>
@@ -928,6 +1207,12 @@ export function AdminBookingsPage({ auth }: { auth: Auth }) {
     >
       {error && <div className="admin-alert">{error}</div>}
       {notice && <div className="admin-alert admin-alert-success">{notice}</div>}
+      <div className="admin-help-banner">
+        <Info />
+        <span>
+          Each row below is one class, workshop, or event. Click it to open the guest list. A <strong>green Paid</strong> tag means payment is confirmed; an <strong>orange Not paid</strong> tag means you still need to verify the money and press <strong>Mark paid</strong>.
+        </span>
+      </div>
       {loading ? (
         <p className="admin-muted">Loading bookings…</p>
       ) : !data?.offerings.length ? (
@@ -940,90 +1225,75 @@ export function AdminBookingsPage({ auth }: { auth: Auth }) {
             <div className="admin-stat"><div className="admin-stat-label">Awaiting payment</div><div className="admin-stat-value">{data.totals.awaitingPayment}</div></div>
           </div>
 
-          <div className="admin-list">
-            {data.offerings.map((offering) => (
-              <div key={offering.key} className="admin-card">
+          <div className="admin-view-tabs">
+            <button
+              type="button"
+              className={`admin-view-tab${activeGroup === "ALL" ? " active" : ""}`}
+              onClick={() => setActiveGroup("ALL")}
+            >
+              <LayoutGrid style={{ width: 14, height: 14 }} />
+              All ({data.offerings.length})
+            </button>
+            {tabGroups.map((group) => {
+              const GroupIcon = group.icon;
+              return (
                 <button
+                  key={group.key}
                   type="button"
-                  className="admin-card-header admin-card-header-btn"
-                  onClick={() => setExpanded(expanded === offering.key ? null : offering.key)}
+                  className={`admin-view-tab${activeGroup === group.key ? " active" : ""}${group.count === 0 ? " is-empty" : ""}`}
+                  onClick={() => setActiveGroup(group.key)}
                 >
-                  <div>
-                    <div className="admin-card-title">{offering.offeringTitle}</div>
-                    <div className="admin-card-subtitle">
-                      {offering.category.replace(/_/g, " ")} · {offering.scheduledLabel || "Schedule TBC"}
-                    </div>
-                  </div>
-                  <div className="admin-card-meta">
-                    <StatusPill variant="green" label={`${offering.paidCount} paid`} />
-                    <StatusPill variant="orange" label={`${offering.unpaidCount} unpaid`} />
-                    <StatusPill variant="gray" label={`${offering.guestTotal} guests`} />
-                  </div>
+                  <GroupIcon style={{ width: 14, height: 14 }} />
+                  {group.label} ({group.count})
                 </button>
+              );
+            })}
+          </div>
 
-                {expanded === offering.key && (
-                  <div className="admin-table-wrap">
-                    <table className="admin-table">
-                      <thead>
-                        <tr>
-                          <th>Name</th>
-                          <th>Email</th>
-                          <th>Guests</th>
-                          <th>Status</th>
-                          <th>Reference</th>
-                          <th>Actions</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {offering.bookings.map((booking) => (
-                          <tr key={booking.id}>
-                            <td>{booking.customerName}</td>
-                            <td>{booking.customerEmail}</td>
-                            <td>{booking.guests}</td>
-                            <td>{bookingStatusPill(booking)}</td>
-                            <td>{booking.reference}</td>
-                            <td>
-                              <div className="admin-action-row">
-                                {booking.status === "AWAITING_PAYMENT" && (
-                                  <>
-                                    <button
-                                      type="button"
-                                      className="admin-btn admin-btn-primary"
-                                      disabled={markingPaidId === booking.id || actingId === booking.id}
-                                      onClick={() => markPaid(booking.id)}
-                                    >
-                                      {markingPaidId === booking.id ? "Saving…" : "Mark paid"}
-                                    </button>
-                                    <button
-                                      type="button"
-                                      className="admin-btn admin-btn-danger"
-                                      disabled={actingId === booking.id}
-                                      onClick={() => cancelBooking(booking)}
-                                    >
-                                      {actingId === booking.id ? "…" : "Cancel"}
-                                    </button>
-                                  </>
-                                )}
-                                {booking.refundable && (
-                                  <button
-                                    type="button"
-                                    className="admin-btn admin-btn-danger"
-                                    disabled={actingId === booking.id}
-                                    onClick={() => refundBooking(booking)}
-                                  >
-                                    {actingId === booking.id ? "Refunding…" : "Refund"}
-                                  </button>
-                                )}
-                              </div>
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
+          <div className="admin-booking-groups">
+            {visibleSections.length === 0 && activeSectionMeta ? (
+              <section className="admin-booking-group">
+                <header className="admin-booking-group-head">
+                  <span className="admin-booking-group-icon">
+                    <activeSectionMeta.icon style={{ width: 18, height: 18 }} strokeWidth={1.9} />
+                  </span>
+                  <div className="admin-booking-group-heading">
+                    <h2>{activeSectionMeta.label}</h2>
+                    <p>{activeSectionMeta.blurb}</p>
                   </div>
-                )}
-              </div>
-            ))}
+                </header>
+                <div className="admin-empty">
+                  No {activeSectionMeta.label.toLowerCase()} bookings yet. They'll appear here automatically once a customer books one.
+                </div>
+              </section>
+            ) : (
+              visibleSections.map((section) => {
+                const SectionIcon = section.icon;
+                return (
+                  <section key={section.key} className="admin-booking-group">
+                    <header className="admin-booking-group-head">
+                      <span className="admin-booking-group-icon">
+                        <SectionIcon style={{ width: 18, height: 18 }} strokeWidth={1.9} />
+                      </span>
+                      <div className="admin-booking-group-heading">
+                        <h2>
+                          {section.label}
+                          <span className="admin-booking-group-count">{section.offerings.length}</span>
+                        </h2>
+                        <p>{section.blurb}</p>
+                      </div>
+                      <div className="admin-booking-group-rollup">
+                        <StatusPill variant="green" label={`${section.paid} paid`} />
+                        <StatusPill variant="orange" label={`${section.unpaid} unpaid`} />
+                      </div>
+                    </header>
+                    <div className="admin-list">
+                      {section.offerings.map(renderOffering)}
+                    </div>
+                  </section>
+                );
+              })
+            )}
           </div>
         </>
       )}

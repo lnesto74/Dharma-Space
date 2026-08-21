@@ -49,8 +49,8 @@ export const LIVE_SITE_SPECIALISTS: LiveSpecialist[] = [
     name: "Yana An",
     role: "Handpan Teacher & Art Therapist",
     desc: "Guiding students into the meditative world of handpan — from first touch to expressive play — while weaving art therapy for deep emotional healing.",
-    cert: "Sound Healer",
-    img: `${LIVE_COMPONENT_BASE}/IMG_7720_2.506eacb6.JPG`
+    cert: "Sound Healer · Singapore Handpans",
+    img: "/specialists/yana-an.jpg"
   },
   {
     name: "Kanthan Jeganathan",
