@@ -336,9 +336,14 @@ export function registerAdminCwpRoutes(
           dateTime: e.dateTime,
           status: e.status,
           locationType: e.locationType,
+          locationDetail: e.locationDetail,
           company: e.company,
           category: e.category.name,
+          categoryId: e.categoryId,
+          categoryGroup: e.category.group,
+          categoryIcon: e.category.icon,
           trainer: e.trainer?.name || null,
+          trainerId: e.trainerId,
           bookedCount: e.bookings.length,
           attendedCount: e.attendances.length,
           maxSpots: e.maxSpots
@@ -681,13 +686,204 @@ export function registerAdminCwpRoutes(
     }
   });
 
+  // ---- Offering types / categories (Regular / Signature / Experience) --------------
+  const CATEGORY_GROUPS = ["REGULAR", "SIGNATURE", "EXPERIENCE"] as const;
+
+  app.get("/api/admin/cwp/categories", auth, superAdmin, async (_req, res, next) => {
+    try {
+      const categories = await prisma.wellnessEventCategory.findMany({
+        include: { _count: { select: { events: true } } },
+        orderBy: [{ group: "asc" }, { name: "asc" }]
+      });
+      res.json({
+        categories: categories.map((c) => ({
+          id: c.id,
+          name: c.name,
+          scoreValue: c.scoreValue,
+          icon: c.icon,
+          group: c.group,
+          eventCount: c._count.events
+        }))
+      });
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  const categoryCreateSchema = z.object({
+    name: z.string().min(1),
+    group: z.enum(CATEGORY_GROUPS),
+    scoreValue: z.number().int().positive().default(40),
+    icon: z.string().nullable().optional()
+  });
+
+  app.post("/api/admin/cwp/categories", auth, superAdmin, async (req, res, next) => {
+    try {
+      const body = categoryCreateSchema.parse(req.body);
+      const existing = await prisma.wellnessEventCategory.findUnique({ where: { name: body.name } });
+      if (existing) return res.status(409).json({ message: "An offering type with that name already exists." });
+      const category = await prisma.wellnessEventCategory.create({
+        data: {
+          name: body.name,
+          group: body.group,
+          scoreValue: body.scoreValue,
+          icon: body.icon ?? null
+        }
+      });
+      res.status(201).json({ category });
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  const categoryPatchSchema = z.object({
+    name: z.string().min(1).optional(),
+    group: z.enum(CATEGORY_GROUPS).optional(),
+    scoreValue: z.number().int().positive().optional(),
+    icon: z.string().nullable().optional()
+  });
+
+  app.patch("/api/admin/cwp/categories/:id", auth, superAdmin, async (req, res, next) => {
+    try {
+      const body = categoryPatchSchema.parse(req.body);
+      const category = await prisma.wellnessEventCategory.update({
+        where: { id: req.params.id },
+        data: body
+      });
+      res.json({ category });
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  app.delete("/api/admin/cwp/categories/:id", auth, superAdmin, async (req, res, next) => {
+    try {
+      const count = await prisma.wellnessEvent.count({ where: { categoryId: req.params.id } });
+      if (count > 0) {
+        return res.status(409).json({
+          message: `Cannot delete: ${count} session(s) use this offering type. Reassign or remove them first.`
+        });
+      }
+      await prisma.wellnessEventCategory.delete({ where: { id: req.params.id } });
+      res.json({ ok: true });
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  // ---- Trainers & specialists (global roster + assignments) -------------------------
+  app.get("/api/admin/cwp/trainers", auth, superAdmin, async (_req, res, next) => {
+    try {
+      const now = new Date();
+      const trainers = await prisma.user.findMany({
+        where: { role: "TRAINER" },
+        include: {
+          company: { select: { id: true, name: true } },
+          trainerWellnessEvents: {
+            include: { company: { select: { id: true, name: true } }, category: { select: { name: true, group: true } } },
+            orderBy: { dateTime: "desc" }
+          }
+        },
+        orderBy: { name: "asc" }
+      });
+      res.json({
+        trainers: trainers.map((t) => {
+          const upcoming = t.trainerWellnessEvents.filter(
+            (e) => e.dateTime >= now && e.status !== "cancelled" && e.status !== "completed"
+          );
+          return {
+            id: t.id,
+            name: t.name,
+            email: t.email,
+            avatar: t.avatar,
+            specialty: t.position,
+            accountStatus: t.accountStatus,
+            company: t.company,
+            sessionCount: t.trainerWellnessEvents.length,
+            upcomingCount: upcoming.length,
+            upcoming: upcoming.slice(0, 5).map((e) => ({
+              id: e.id,
+              title: e.title,
+              dateTime: e.dateTime,
+              company: e.company?.name || null,
+              category: e.category.name,
+              categoryGroup: e.category.group
+            }))
+          };
+        })
+      });
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  const trainerCreateSchema = z.object({
+    name: z.string().min(1),
+    email: z.string().email(),
+    password: z.string().min(6),
+    specialty: z.string().nullable().optional()
+  });
+
+  app.post("/api/admin/cwp/trainers", auth, superAdmin, async (req, res, next) => {
+    try {
+      const body = trainerCreateSchema.parse(req.body);
+      const existing = await prisma.user.findUnique({ where: { email: body.email } });
+      if (existing) return res.status(409).json({ message: "A user with that email already exists." });
+      const user = await createUser(prisma, {
+        name: body.name,
+        email: body.email,
+        passwordHash: await bcrypt.hash(body.password, 12),
+        role: "TRAINER",
+        accountStatus: "APPROVED",
+        onboardingCompleted: true,
+        position: body.specialty ?? null
+      });
+      res.status(201).json({ trainer: sanitizeUser(user) });
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  const trainerPatchSchema = z.object({
+    name: z.string().min(1).optional(),
+    specialty: z.string().nullable().optional(),
+    password: z.string().min(6).optional(),
+    accountStatus: z.enum(["PENDING", "APPROVED", "REJECTED"]).optional()
+  });
+
+  app.patch("/api/admin/cwp/trainers/:id", auth, superAdmin, async (req, res, next) => {
+    try {
+      const body = trainerPatchSchema.parse(req.body);
+      const data: Record<string, unknown> = {};
+      if (body.name !== undefined) data.name = body.name;
+      if (body.specialty !== undefined) data.position = body.specialty;
+      if (body.accountStatus !== undefined) data.accountStatus = body.accountStatus;
+      if (body.password) data.passwordHash = await bcrypt.hash(body.password, 12);
+      const user = await prisma.user.update({
+        where: { id: req.params.id },
+        data,
+        include: USER_PROFILE_INCLUDE
+      });
+      res.json({ trainer: sanitizeUser(user) });
+    } catch (error) {
+      next(error);
+    }
+  });
+
   // ---- Form options (dropdowns) + cross-company analytics --------------------------
   app.get("/api/admin/cwp/form-options", auth, superAdmin, async (_req, res, next) => {
     try {
       const [companies, categories, trainers, departments] = await Promise.all([
         prisma.company.findMany({ select: { id: true, name: true }, orderBy: { name: "asc" } }),
-        prisma.wellnessEventCategory.findMany({ select: { id: true, name: true, scoreValue: true }, orderBy: { name: "asc" } }),
-        prisma.user.findMany({ where: { role: "TRAINER" }, select: { id: true, name: true }, orderBy: { name: "asc" } }),
+        prisma.wellnessEventCategory.findMany({
+          select: { id: true, name: true, scoreValue: true, icon: true, group: true },
+          orderBy: { name: "asc" }
+        }),
+        prisma.user.findMany({
+          where: { role: "TRAINER" },
+          select: { id: true, name: true, position: true },
+          orderBy: { name: "asc" }
+        }),
         prisma.department.findMany({
           select: { id: true, name: true, companyId: true },
           orderBy: [{ company: { name: "asc" } }, { name: "asc" }]

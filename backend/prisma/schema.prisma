@@ -378,6 +378,7 @@ model WellnessEventCategory {
   name       String          @unique
   scoreValue Int
   icon       String?
+  group      String          @default("SIGNATURE")
   events     WellnessEvent[]
 }
 

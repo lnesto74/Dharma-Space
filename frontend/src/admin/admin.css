@@ -109,6 +109,12 @@
   gap: 2px;
 }
 
+.admin-nav-divider {
+  height: 1px;
+  background: var(--admin-border);
+  margin: 14px 8px 2px;
+}
+
 .admin-nav-link {
   position: relative;
   display: flex;
@@ -954,11 +960,25 @@
   min-width: 0;
 }
 
+/* Standalone panel = full-width card (used on CWP / company pages, stacked above tables) */
 .admin-panel {
+  padding: 20px;
+  background: var(--admin-surface);
+  border: 1px solid var(--admin-border);
+  border-radius: var(--admin-radius);
+  box-shadow: var(--admin-shadow-sm);
+}
+
+/* Inside a two-column editor, the panel becomes a sticky right rail */
+.admin-layout-split .admin-panel {
   width: 320px;
   flex-shrink: 0;
   padding: 0 0 0 24px;
+  background: none;
+  border: none;
   border-left: 1px solid var(--admin-border);
+  border-radius: 0;
+  box-shadow: none;
   margin-left: 24px;
   position: sticky;
   top: 16px;
@@ -1308,7 +1328,7 @@
     flex-direction: column;
   }
 
-  .admin-panel {
+  .admin-layout-split .admin-panel {
     width: 100%;
     margin-left: 0;
     padding: 24px 0 0;

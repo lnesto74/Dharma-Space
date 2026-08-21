@@ -59,6 +59,7 @@ export async function applySchemaPatches(): Promise<void> {
         await applyUserColumns(client);
       }
       await ensureDuelTables(client);
+      await ensureCategoryGroups(client);
 
       const after = await missingUserColumns(client);
       if (after.length === 0) {
@@ -82,6 +83,38 @@ export async function applySchemaPatches(): Promise<void> {
       "database 'dharma') and redeploy, or run the ALTER TABLE statements manually.",
     lastError
   );
+}
+
+/**
+ * Adds the WellnessEventCategory.group column and backfills known categories into
+ * their Regular / Signature / Experience family so the CWP admin can group bookings
+ * without needing a manual re-seed in production.
+ */
+async function ensureCategoryGroups(client: PrismaClient) {
+  await client.$executeRawUnsafe(
+    `ALTER TABLE "WellnessEventCategory" ADD COLUMN IF NOT EXISTS "group" TEXT NOT NULL DEFAULT 'SIGNATURE'`
+  );
+
+  const groupsByName: Record<string, string[]> = {
+    REGULAR: ["Yoga Class", "Meditation Class", "Pilates"],
+    EXPERIENCE: ["Team Building Activity"],
+    SIGNATURE: [
+      "Breathwork",
+      "Sound Healing Session",
+      "Wellness Talk & Workshop",
+      "Wellness Lecture",
+      "Ayurveda Talk",
+      "Leadership Talk"
+    ]
+  };
+
+  for (const [group, names] of Object.entries(groupsByName)) {
+    await client.$executeRawUnsafe(
+      `UPDATE "WellnessEventCategory" SET "group" = $1 WHERE "name" = ANY($2::text[])`,
+      group,
+      names
+    );
+  }
 }
 
 async function ensureDuelTables(client: PrismaClient) {

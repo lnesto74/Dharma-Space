@@ -150,15 +150,29 @@ export function AdminShell({
     checkAdminApiHealth().then(({ ok, message }) => setApiDown(ok ? null : message || "Backend offline"));
   }, []);
 
-  const nav = [
+  const websiteNav = [
     ["Overview", "/admin", Shield],
-    ["CWP Platform", "/admin/cwp", Building2],
     ["Bookings", "/admin/bookings", Ticket],
     ["Inquiries", "/admin/inquiries", Mail],
     ["Trainers", "/admin/site/trainers", GraduationCap],
     ["Regular Class Schedule", "/admin/site/classes", CalendarDays],
     ["Education & Events", "/admin/site/programs", BookOpen]
   ] as const;
+  const cwpNav = [
+    ["CWP Platform", "/admin/cwp", Building2]
+  ] as const;
+
+  const renderNavLink = ([label, to, NavIcon]: readonly [string, string, PageIcon]) => (
+    <NavLink
+      key={to}
+      to={to}
+      end={to === "/admin"}
+      className={({ isActive }) => `admin-nav-link${isActive ? " active" : ""}`}
+    >
+      <NavIcon />
+      {label}
+    </NavLink>
+  );
 
   return (
     <div className="admin-app">
@@ -170,17 +184,13 @@ export function AdminShell({
 
         <div className="admin-nav-section">Website</div>
         <nav className="admin-nav">
-          {nav.map(([label, to, NavIcon]) => (
-            <NavLink
-              key={to}
-              to={to}
-              end={to === "/admin"}
-              className={({ isActive }) => `admin-nav-link${isActive ? " active" : ""}`}
-            >
-              <NavIcon />
-              {label}
-            </NavLink>
-          ))}
+          {websiteNav.map(renderNavLink)}
+        </nav>
+
+        <div className="admin-nav-divider" />
+        <div className="admin-nav-section">Corporate Wellness</div>
+        <nav className="admin-nav">
+          {cwpNav.map(renderNavLink)}
         </nav>
 
         <div className="admin-sidebar-spacer" />

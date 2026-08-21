@@ -280,16 +280,16 @@ async function main() {
   }
 
   const categoryDefs = [
-    { name: "Wellness Talk & Workshop", scoreValue: 30, icon: "🎤" },
-    { name: "Wellness Lecture", scoreValue: 30, icon: "📚" },
-    { name: "Ayurveda Talk", scoreValue: 30, icon: "🌿" },
-    { name: "Leadership Talk", scoreValue: 35, icon: "🎯" },
-    { name: "Yoga Class", scoreValue: 50, icon: "🧘" },
-    { name: "Breathwork", scoreValue: 45, icon: "🌬️" },
-    { name: "Meditation Class", scoreValue: 40, icon: "🕯️" },
-    { name: "Pilates", scoreValue: 50, icon: "🤸" },
-    { name: "Sound Healing Session", scoreValue: 40, icon: "🎵" },
-    { name: "Team Building Activity", scoreValue: 60, icon: "🤝" }
+    { name: "Wellness Talk & Workshop", scoreValue: 30, icon: "🎤", group: "SIGNATURE" },
+    { name: "Wellness Lecture", scoreValue: 30, icon: "📚", group: "SIGNATURE" },
+    { name: "Ayurveda Talk", scoreValue: 30, icon: "🌿", group: "SIGNATURE" },
+    { name: "Leadership Talk", scoreValue: 35, icon: "🎯", group: "SIGNATURE" },
+    { name: "Breathwork", scoreValue: 45, icon: "🌬️", group: "SIGNATURE" },
+    { name: "Sound Healing Session", scoreValue: 40, icon: "🎵", group: "SIGNATURE" },
+    { name: "Yoga Class", scoreValue: 50, icon: "🧘", group: "REGULAR" },
+    { name: "Meditation Class", scoreValue: 40, icon: "🕯️", group: "REGULAR" },
+    { name: "Pilates", scoreValue: 50, icon: "🤸", group: "REGULAR" },
+    { name: "Team Building Activity", scoreValue: 60, icon: "🤝", group: "EXPERIENCE" }
   ];
   for (const cat of categoryDefs) {
     await prisma.wellnessEventCategory.upsert({
