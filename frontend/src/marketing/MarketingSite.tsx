@@ -28,18 +28,12 @@ import {
   type PendingStripeBooking
 } from "../lib/stripe-booking";
 
-type Page = "about" | "corporate" | "education" | "events";
-type EventsSection = "upcoming-events" | "regular-classes";
+type Page = "about" | "corporate" | "education" | "events" | "classes";
 type EducationSection = "flagship-program" | "courses-certifications" | "workshops-intensives";
 
 // The CWP portal is served same-origin under /portal (employees, HR, trainers,
 // and the Dharma Admin sign in here).
 const CORPORATE_PORTAL_URL = "/portal";
-
-const EVENTS_SUBMENU: { label: string; section: EventsSection }[] = [
-  { label: "Upcoming Events", section: "upcoming-events" },
-  { label: "Regular Classes", section: "regular-classes" },
-];
 
 const EDUCATION_SUBMENU: { label: string; section: EducationSection }[] = [
   { label: "Flagship Program", section: "flagship-program" },
@@ -150,14 +144,12 @@ function Nav({
   setPage,
   onContact,
   onAccount,
-  onEventsSection,
   onEducationSection
 }: {
   page: Page;
   setPage: (p: Page) => void;
   onContact: () => void;
   onAccount: () => void;
-  onEventsSection: (section: EventsSection) => void;
   onEducationSection: (section: EducationSection) => void;
 }) {
   const { isLoggedIn, member } = useMemberAuth();
@@ -165,9 +157,8 @@ function Nav({
   const [scrolled, setScrolled] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const [mobileCorporateOpen, setMobileCorporateOpen] = useState(false);
-  const [mobileEventsOpen, setMobileEventsOpen] = useState(false);
   const [mobileEducationOpen, setMobileEducationOpen] = useState(false);
-  const [openMenu, setOpenMenu] = useState<null | "corporate" | "education" | "events">(null);
+  const [openMenu, setOpenMenu] = useState<null | "corporate" | "education">(null);
   const [adminOpen, setAdminOpen] = useState(false);
   const [isAdmin, setIsAdmin] = useState(false);
   const headerRef = useRef<HTMLElement | null>(null);
@@ -176,7 +167,6 @@ function Nav({
     setMenuOpen(false);
     setMobileCorporateOpen(false);
     setMobileEducationOpen(false);
-    setMobileEventsOpen(false);
   };
 
   useEffect(() => {
@@ -253,7 +243,6 @@ function Nav({
     setPage(p);
     setMenuOpen(false);
     setMobileCorporateOpen(false);
-    setMobileEventsOpen(false);
     setMobileEducationOpen(false);
     setOpenMenu(null);
     window.scrollTo({ top: 0, behavior: "smooth" });
@@ -266,20 +255,10 @@ function Nav({
     navigate("/portal");
   };
 
-  const goEventsSection = (section: EventsSection) => {
-    onEventsSection(section);
-    setMobileCorporateOpen(false);
-    setMobileEventsOpen(false);
-    setMobileEducationOpen(false);
-    setMenuOpen(false);
-    setOpenMenu(null);
-  };
-
   const goEducationSection = (section: EducationSection) => {
     onEducationSection(section);
     setMobileCorporateOpen(false);
     setMobileEducationOpen(false);
-    setMobileEventsOpen(false);
     setMenuOpen(false);
     setOpenMenu(null);
   };
@@ -386,42 +365,26 @@ function Nav({
               </div>
             )}
           </div>
-          <div
-            className="nav-submenu-menu relative"
-            onMouseEnter={() => setOpenMenu("events")}
-            onMouseLeave={() => setOpenMenu(null)}
+          <button
+            type="button"
+            onClick={() => nav("events")}
+            className={`text-[13px] tracking-[0.08em] uppercase transition-all duration-200 relative after:absolute after:bottom-[-4px] after:left-0 after:h-px after:bg-[#C4785A] after:transition-all after:duration-300 ${
+              page === "events" ? "text-[#C4785A] after:w-full" : "text-[#2A2825]/70 hover:text-[#2A2825] after:w-0 hover:after:w-full"
+            }`}
+            style={{ fontFamily: "var(--font-body)" }}
           >
-            <button
-              type="button"
-              onClick={() => nav("events")}
-              className={`flex items-center gap-1.5 text-[13px] tracking-[0.08em] uppercase transition-all duration-200 relative after:absolute after:bottom-[-4px] after:left-0 after:h-px after:bg-[#C4785A] after:transition-all after:duration-300 ${
-                page === "events" ? "text-[#C4785A] after:w-full" : "text-[#2A2825]/70 hover:text-[#2A2825] after:w-0 hover:after:w-full"
-              }`}
-              style={{ fontFamily: "var(--font-body)" }}
-              aria-haspopup="true"
-              aria-expanded={openMenu === "events"}
-            >
-              Events
-              <ChevronDown size={14} className={`shrink-0 transition-transform duration-200 ${openMenu === "events" ? "rotate-180" : ""}`} />
-            </button>
-            {openMenu === "events" && (
-              <div className="absolute left-1/2 top-full z-[100] w-[240px] -translate-x-1/2 pt-2">
-                <div className="border border-[#2A2825]/10 bg-[#FAF8F3] py-2 shadow-xl">
-                  {EVENTS_SUBMENU.map(({ label, section }) => (
-                    <button
-                      key={section}
-                      type="button"
-                      onClick={() => goEventsSection(section)}
-                      className="block w-full px-5 py-2.5 text-left text-[12px] tracking-[0.08em] uppercase text-[#2A2825]/75 transition-colors hover:bg-[#F2EBE0] hover:text-[#C4785A]"
-                      style={{ fontFamily: "var(--font-body)" }}
-                    >
-                      {label}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            )}
-          </div>
+            Events
+          </button>
+          <button
+            type="button"
+            onClick={() => nav("classes")}
+            className={`text-[13px] tracking-[0.08em] uppercase transition-all duration-200 relative after:absolute after:bottom-[-4px] after:left-0 after:h-px after:bg-[#C4785A] after:transition-all after:duration-300 ${
+              page === "classes" ? "text-[#C4785A] after:w-full" : "text-[#2A2825]/70 hover:text-[#2A2825] after:w-0 hover:after:w-full"
+            }`}
+            style={{ fontFamily: "var(--font-body)" }}
+          >
+            Classes
+          </button>
         </nav>
 
         <div className="flex items-center gap-3 md:gap-4">
@@ -561,42 +524,22 @@ function Nav({
               </div>
             )}
           </div>
-          <div>
-            <div className="flex w-full items-center justify-between">
-              <button
-                type="button"
-                onClick={() => nav("events")}
-                className={`flex-1 text-left text-[14px] tracking-[0.1em] uppercase ${page === "events" ? "text-[#C4785A]" : "text-[#2A2825]/70"}`}
-                style={{ fontFamily: "var(--font-body)" }}
-              >
-                Events
-              </button>
-              <button
-                type="button"
-                onClick={() => setMobileEventsOpen((open) => !open)}
-                className="ml-2 p-1 text-[#2A2825]/50"
-                aria-label="Toggle events submenu"
-                aria-expanded={mobileEventsOpen}
-              >
-                <ChevronDown size={16} className={`transition-transform duration-200 ${mobileEventsOpen ? "rotate-180" : ""}`} />
-              </button>
-            </div>
-            {mobileEventsOpen && (
-              <div className="mt-3 flex flex-col gap-3 border-l border-[#C4785A]/30 pl-4">
-                {EVENTS_SUBMENU.map(({ label, section }) => (
-                  <button
-                    key={section}
-                    type="button"
-                    onClick={() => goEventsSection(section)}
-                    className="text-left text-[13px] tracking-[0.08em] uppercase text-[#2A2825]/65 hover:text-[#C4785A]"
-                    style={{ fontFamily: "var(--font-body)" }}
-                  >
-                    {label}
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
+          <button
+            type="button"
+            onClick={() => nav("events")}
+            className={`text-left text-[14px] tracking-[0.1em] uppercase ${page === "events" ? "text-[#C4785A]" : "text-[#2A2825]/70"}`}
+            style={{ fontFamily: "var(--font-body)" }}
+          >
+            Events
+          </button>
+          <button
+            type="button"
+            onClick={() => nav("classes")}
+            className={`text-left text-[14px] tracking-[0.1em] uppercase ${page === "classes" ? "text-[#C4785A]" : "text-[#2A2825]/70"}`}
+            style={{ fontFamily: "var(--font-body)" }}
+          >
+            Classes
+          </button>
           <button type="button" onClick={() => { onAccount(); setMenuOpen(false); }} className="text-left text-[14px] tracking-[0.1em] uppercase text-[#2A2825]/70 flex items-center gap-2" style={{ fontFamily: "var(--font-body)" }}>
             <User size={14} /> {isLoggedIn ? "My account" : "Sign in"}
           </button>
@@ -1489,36 +1432,11 @@ interface BookingInfo {
 
 function EventsPage({
   events,
-  classSchedule,
-  onReserve,
-  onBookClass,
-  scrollTarget,
-  onScrollTargetHandled
+  onReserve
 }: {
   events: Array<ReserveInfo & { desc: string; img: string }>;
-  classSchedule: Array<{ id?: string; day: string; date?: string; time: string; type: string; instructor: string; level: string; location: string; price?: string; stripeLink?: string | null; comingSoon?: boolean }>;
   onReserve: (info: ReserveInfo) => void;
-  onBookClass: (info: BookingInfo) => void;
-  scrollTarget?: EventsSection | null;
-  onScrollTargetHandled?: () => void;
 }) {
-  const [activeDay, setActiveDay] = useState<string | null>(null);
-  const [notifyOpen, setNotifyOpen] = useState(false);
-  const dayKey = (c: (typeof classSchedule)[number]) => c.date || c.day;
-  const days = [...new Set(classSchedule.map(dayKey))];
-  const filtered = activeDay ? classSchedule.filter((c) => dayKey(c) === activeDay) : classSchedule;
-  const schedulePublished = classSchedule.some((c) => !c.comingSoon);
-  const showSchedulePreview = classSchedule.length > 0 && !schedulePublished;
-
-  useEffect(() => {
-    if (!scrollTarget) return;
-    const scroll = () => {
-      document.getElementById(scrollTarget)?.scrollIntoView({ behavior: "smooth", block: "start" });
-      onScrollTargetHandled?.();
-    };
-    requestAnimationFrame(() => requestAnimationFrame(scroll));
-  }, [scrollTarget, onScrollTargetHandled]);
-
   return (
     <div>
       {/* Hero */}
@@ -1526,12 +1444,12 @@ function EventsPage({
         <img src={IMAGES.raisingHands} alt="Community wellness event" className="absolute inset-0 w-full h-full object-cover opacity-40" />
         <div className="absolute inset-0 bg-gradient-to-b from-[#1A1815]/60 via-transparent to-[#1A1815]/40" />
         <div className="relative z-10 max-w-7xl mx-auto px-6 lg:px-12 text-center w-full">
-          <p className="text-[#D4B896] text-[11px] tracking-[0.3em] uppercase mb-6" style={{ fontFamily: "var(--font-body)" }}>Events & Classes</p>
+          <p className="text-[#D4B896] text-[11px] tracking-[0.3em] uppercase mb-6" style={{ fontFamily: "var(--font-body)" }}>Events</p>
           <h1 className="text-4xl md:text-6xl font-normal text-white leading-[1.1] mb-6" style={{ fontFamily: "var(--font-display)" }}>
             Experiences That Bring People Together.
           </h1>
           <p className="text-white/70 text-lg max-w-xl mx-auto" style={{ fontFamily: "var(--font-body)" }}>
-            Immersive events, ceremonies, and weekly classes to nourish your practice and grow your community.
+            Immersive events, ceremonies, and gatherings to nourish your practice and grow your community.
           </p>
         </div>
       </section>
@@ -1572,6 +1490,54 @@ function EventsPage({
               </div>
             </div>
           ))}
+        </div>
+      </section>
+
+      {/* Community Gallery */}
+      <section className="py-28 max-w-7xl mx-auto px-6 lg:px-12">
+        <div className="text-center mb-16">
+          <p className="text-[#C4785A] text-[11px] tracking-[0.3em] uppercase mb-5" style={{ fontFamily: "var(--font-body)" }}>Our Community</p>
+          <h2 className="text-3xl md:text-4xl font-normal text-[#2A2825] leading-[1.15]" style={{ fontFamily: "var(--font-display)" }}>
+            Life at Dharma Space
+          </h2>
+        </div>
+        <InstagramCommunityGallery />
+      </section>
+    </div>
+  );
+}
+
+// ── Classes Page ──────────────────────────────────────────────────────────────
+
+function ClassesPage({
+  classSchedule,
+  onBookClass
+}: {
+  classSchedule: Array<{ id?: string; day: string; date?: string; time: string; type: string; instructor: string; level: string; location: string; price?: string; stripeLink?: string | null; comingSoon?: boolean }>;
+  onBookClass: (info: BookingInfo) => void;
+}) {
+  const [activeDay, setActiveDay] = useState<string | null>(null);
+  const [notifyOpen, setNotifyOpen] = useState(false);
+  const dayKey = (c: (typeof classSchedule)[number]) => c.date || c.day;
+  const days = [...new Set(classSchedule.map(dayKey))];
+  const filtered = activeDay ? classSchedule.filter((c) => dayKey(c) === activeDay) : classSchedule;
+  const schedulePublished = classSchedule.some((c) => !c.comingSoon);
+  const showSchedulePreview = classSchedule.length > 0 && !schedulePublished;
+
+  return (
+    <div>
+      {/* Hero — a dedicated header image will be added here later. */}
+      <section className="relative h-[70vh] min-h-[480px] flex items-center overflow-hidden bg-[#2A2825]">
+        <img src={IMAGES.yogaClass} alt="Weekly yoga classes at Dharma Space" className="absolute inset-0 w-full h-full object-cover opacity-40" />
+        <div className="absolute inset-0 bg-gradient-to-b from-[#1A1815]/60 via-transparent to-[#1A1815]/40" />
+        <div className="relative z-10 max-w-7xl mx-auto px-6 lg:px-12 text-center w-full">
+          <p className="text-[#D4B896] text-[11px] tracking-[0.3em] uppercase mb-6" style={{ fontFamily: "var(--font-body)" }}>Classes</p>
+          <h1 className="text-4xl md:text-6xl font-normal text-white leading-[1.1] mb-6" style={{ fontFamily: "var(--font-display)" }}>
+            Find Your Flow, Weekly.
+          </h1>
+          <p className="text-white/70 text-lg max-w-xl mx-auto" style={{ fontFamily: "var(--font-body)" }}>
+            Weekly hatha, vinyasa, yin, aerial, and breathwork classes to keep your practice grounded and consistent.
+          </p>
         </div>
       </section>
 
@@ -1656,17 +1622,6 @@ function EventsPage({
             )}
           </div>
         </div>
-      </section>
-
-      {/* Community Gallery */}
-      <section className="py-28 max-w-7xl mx-auto px-6 lg:px-12">
-        <div className="text-center mb-16">
-          <p className="text-[#C4785A] text-[11px] tracking-[0.3em] uppercase mb-5" style={{ fontFamily: "var(--font-body)" }}>Our Community</p>
-          <h2 className="text-3xl md:text-4xl font-normal text-[#2A2825] leading-[1.15]" style={{ fontFamily: "var(--font-display)" }}>
-            Life at Dharma Space
-          </h2>
-        </div>
-        <InstagramCommunityGallery />
       </section>
 
       {notifyOpen && <ClassScheduleNotifyModal onClose={() => setNotifyOpen(false)} />}
@@ -2740,7 +2695,7 @@ function Footer({
           </div>
           <div>
             <p className="text-[10px] tracking-[0.25em] text-[#C4785A] uppercase mb-6" style={{ fontFamily: "var(--font-body)" }}>Navigate</p>
-            {(["about", "corporate", "education", "events"] as Page[]).map(p => (
+            {(["about", "corporate", "education", "events", "classes"] as Page[]).map(p => (
               <button key={p} onClick={() => { setPage(p); window.scrollTo({ top: 0, behavior: "smooth" }); }} className="block text-white/50 hover:text-white text-[14px] mb-3 capitalize transition-colors" style={{ fontFamily: "var(--font-body)" }}>
                 {p}
               </button>
@@ -2903,7 +2858,6 @@ export default function MarketingSite({
   const [reserve, setReserve] = useState<ReserveInfo | null>(null);
   const [booking, setBooking] = useState<BookingInfo | null>(null);
   const [stripeBooking, setStripeBooking] = useState<PendingStripeBooking | null>(null);
-  const [eventsScrollTarget, setEventsScrollTarget] = useState<EventsSection | null>(null);
   const [educationScrollTarget, setEducationScrollTarget] = useState<EducationSection | null>(null);
   const site = useSiteContent();
 
@@ -2924,11 +2878,6 @@ export default function MarketingSite({
 
   const openContact = () => setContactOpen(true);
   const openCwpDemo = () => setCwpDemoOpen(true);
-
-  const handleEventsSection = (section: EventsSection) => {
-    setPage("events");
-    setEventsScrollTarget(section);
-  };
 
   const handleEducationSection = (section: EducationSection) => {
     setPage("education");
@@ -3048,7 +2997,6 @@ export default function MarketingSite({
         setPage={setPage}
         onContact={openContact}
         onAccount={() => setAccountOpen(true)}
-        onEventsSection={handleEventsSection}
         onEducationSection={handleEducationSection}
       />
       <main>
@@ -3068,11 +3016,13 @@ export default function MarketingSite({
         {page === "events" && (
           <EventsPage
             events={events}
-            classSchedule={classSchedule}
             onReserve={setReserve}
+          />
+        )}
+        {page === "classes" && (
+          <ClassesPage
+            classSchedule={classSchedule}
             onBookClass={setBooking}
-            scrollTarget={eventsScrollTarget}
-            onScrollTargetHandled={() => setEventsScrollTarget(null)}
           />
         )}
       </main>
