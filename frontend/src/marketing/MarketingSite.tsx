@@ -113,13 +113,21 @@ const WORKSHOPS = [
   { title: "Yoga Alignments Workshop", date: "September 24, 2026", instructor: "Vera Pleshakova", price: "SGD 5", location: "Dharma Space Studio" },
 ];
 
+// Upcoming events currently show an internal studio room (Studio 1 / Studio 2),
+// assigned stably per event title. Teacher/facilitator is intentionally hidden for now.
+function studioForEventTitle(title: string): string {
+  let sum = 0;
+  for (let i = 0; i < title.length; i++) sum += title.charCodeAt(i);
+  return `Dharma Space Studio ${(sum % 2) + 1}`;
+}
+
 const EVENTS = [
-  { title: "Cacao Ceremony", date: "Coming Soon", time: "", location: "Dharma Space Studio", facilitator: "Sarah Chen", desc: "A sacred circle of heart-opening cacao, breath, movement, and intention setting for the new season.", img: IMAGES.soundBowl, price: "SGD 88" },
-  { title: "Ecstatic Dance", date: "Coming Soon", time: "", location: "Junction Studios, Singapore", facilitator: "Community DJ Collective", desc: "Free-form conscious dance journey — no steps, just pure movement and authentic expression.", img: IMAGES.raisingHands, price: "SGD 35" },
-  { title: "Sound Healing Journey", date: "Coming Soon", time: "", location: "Dharma Space Studio", facilitator: "Yana An", desc: "Deep vibrational healing with Tibetan and crystal bowls, gongs, and guided relaxation.", img: IMAGES.outdoorMed, price: "SGD 75" },
-  { title: "Breathwork Circle", date: "Coming Soon", time: "", location: "Dharma Space Studio", facilitator: "Oxana Shilina", desc: "Transformational connected breathwork for emotional release, clarity, and nervous system reset.", img: IMAGES.yogaClass, price: "SGD 85" },
-  { title: "Full Moon Ceremony", date: "Coming Soon", time: "", location: "Labrador Nature Reserve", facilitator: "Vera Pleshakova", desc: "Outdoor full moon ritual with meditation, singing, sharing circles, and intention weaving.", img: IMAGES.womenGroup, price: "SGD 55" },
-  { title: "Glow Yoga", date: "Coming Soon", time: "", location: "Dharma Space Studio", facilitator: "Dharma Space Team", desc: "Yoga in a UV-lit studio with neon body paint — under the lamps, every move glows. A playful, high-energy night you won't forget.", img: glowYogaImg, price: "SGD 45" },
+  { title: "Cacao Ceremony", date: "Coming Soon", time: "", location: "Dharma Space Studio 1", facilitator: "", desc: "A sacred circle of heart-opening cacao, breath, movement, and intention setting for the new season.", img: IMAGES.soundBowl, price: "SGD 88" },
+  { title: "Ecstatic Dance", date: "Coming Soon", time: "", location: "Dharma Space Studio 2", facilitator: "", desc: "Free-form conscious dance journey — no steps, just pure movement and authentic expression.", img: IMAGES.raisingHands, price: "SGD 35" },
+  { title: "Sound Healing Journey", date: "Coming Soon", time: "", location: "Dharma Space Studio 2", facilitator: "", desc: "Deep vibrational healing with Tibetan and crystal bowls, gongs, and guided relaxation.", img: IMAGES.outdoorMed, price: "SGD 75" },
+  { title: "Breathwork Circle", date: "Coming Soon", time: "", location: "Dharma Space Studio 1", facilitator: "", desc: "Transformational connected breathwork for emotional release, clarity, and nervous system reset.", img: IMAGES.yogaClass, price: "SGD 85" },
+  { title: "Full Moon Ceremony", date: "Coming Soon", time: "", location: "Dharma Space Studio 2", facilitator: "", desc: "Outdoor full moon ritual with meditation, singing, sharing circles, and intention weaving.", img: IMAGES.womenGroup, price: "SGD 55" },
+  { title: "Glow Yoga", date: "Coming Soon", time: "", location: "Dharma Space Studio 1", facilitator: "", desc: "Yoga in a UV-lit studio with neon body paint — under the lamps, every move glows. A playful, high-energy night you won't forget.", img: glowYogaImg, price: "SGD 45" },
 ];
 
 const CLASS_SCHEDULE = [
@@ -1177,7 +1185,7 @@ function EducationPage({
             </div>
             <div className="bg-[#F2EBE0] p-8 mb-8">
               <div className="grid grid-cols-2 gap-y-5">
-                {[["Next Intake", flagship?.dates || "Sep 11 – Oct 6, 2026"], ["Duration", flagship?.duration || "8 Weeks"], ["Schedule", flagship?.time || "Thu 7–9PM (Online) · Fri 6:30–9:30PM · Sat & Sun 2–9PM"], ["Investment", flagship?.price || "SGD 3,600"], ["Certification", flagship?.certificationLabel || "Yoga Alliance RYT-200"], ["Class Size", flagship?.classSize || "Maximum 25 Students"]].map(([label, val]) => (
+                {[["Next Intake", flagship?.dates || "Oct 16 – Nov 10, 2026"], ["Duration", flagship?.duration || "8 Weeks"], ["Schedule", flagship?.time || "Thu 7–9PM (Online) · Fri 6:30–9:30PM · Sat & Sun 2–9PM"], ["Investment", flagship?.price || "SGD 3,600"], ["Certification", flagship?.certificationLabel || "Yoga Alliance RYT-200"], ["Class Size", flagship?.classSize || "Maximum 18 Students"]].map(([label, val]) => (
                   <div key={label}>
                     <p className="text-[10px] tracking-[0.2em] text-[#C4785A] uppercase mb-1" style={{ fontFamily: "var(--font-body)" }}>{label}</p>
                     <p className="text-[#2A2825] text-sm font-medium" style={{ fontFamily: "var(--font-body)" }}>{val}</p>
@@ -1551,11 +1559,13 @@ function EventsPage({
                 </p>
                 <h3 className="text-[#2A2825] text-xl font-normal mb-3" style={{ fontFamily: "var(--font-display)" }}>{event.title}</h3>
                 <p className="text-[#7A7468] text-[13px] leading-[1.8] mb-5 flex-1" style={{ fontFamily: "var(--font-body)" }}>{event.desc}</p>
-                <div className="flex items-center gap-1.5 mb-1">
+                <div className={`flex items-center gap-1.5 ${event.facilitator ? "mb-1" : "mb-6"}`}>
                   <MapPin size={11} className="text-[#C4785A]" />
                   <span className="text-[12px] text-[#7A7468]" style={{ fontFamily: "var(--font-body)" }}>{event.location}</span>
                 </div>
-                <p className="text-[12px] text-[#7A7468] mb-6" style={{ fontFamily: "var(--font-body)" }}>with {event.facilitator}</p>
+                {event.facilitator && (
+                  <p className="text-[12px] text-[#7A7468] mb-6" style={{ fontFamily: "var(--font-body)" }}>with {event.facilitator}</p>
+                )}
                 <button onClick={() => onReserve(event)} disabled={event.soldOut || event.finished} className={`w-full py-3 text-[11px] tracking-[0.15em] uppercase transition-colors duration-300 ${event.soldOut || event.finished ? "bg-[#7A7468] text-white cursor-not-allowed" : "bg-[#2A2825] text-white hover:bg-[#C4785A]"}`} style={{ fontFamily: "var(--font-body)" }}>
                   {programActionLabel(event)}
                 </button>
@@ -2077,7 +2087,7 @@ function ReserveModal({ info, onClose }: { info: ReserveInfo; onClose: () => voi
 
   const sessionDetails = (
     <div className="px-8 pt-6 pb-5 grid grid-cols-2 gap-4 bg-[#F2EBE0]">
-      {[{ label: "Date", val: info.date }, { label: "Time", val: info.time }, { label: "Location", val: info.location }, { label: "Facilitator", val: info.facilitator }, { label: "Investment", val: info.price }].map(({ label, val }) => (
+      {[{ label: "Date", val: info.date }, { label: "Time", val: info.time }, { label: "Location", val: info.location }, { label: "Facilitator", val: info.facilitator }, { label: "Investment", val: info.price }].filter(({ val }) => val).map(({ label, val }) => (
         <div key={label}>
           <p className="text-[9px] tracking-[0.2em] text-[#C4785A] uppercase mb-0.5" style={{ fontFamily: "var(--font-body)" }}>{label}</p>
           <p className="text-[#2A2825] text-[13px]" style={{ fontFamily: "var(--font-body)" }}>{val}</p>
@@ -2943,7 +2953,7 @@ export default function MarketingSite({
         img: specialistPhotoOverrides[s.name] || s.img
       }));
 
-  const events = site?.programs?.events?.length
+  const events = (site?.programs?.events?.length
     ? sortProgramsForDisplay(site.programs.events).map((p) => ({
         ...programToReserveInfo(p),
         desc: p.description,
@@ -2970,7 +2980,13 @@ export default function MarketingSite({
         ...programToReserveInfo(p),
         desc: p.description,
         img: EVENTS.find((e) => e.title === p.title)?.img || IMAGES.soundBowl
-      }));
+      }))
+  ).map((ev) => ({
+    // Show an internal studio room and hide the teacher for now (added later).
+    ...ev,
+    location: studioForEventTitle(ev.title),
+    facilitator: ""
+  }));
 
   const classSchedule = sortClassesForDisplay(
     site?.classes?.length
