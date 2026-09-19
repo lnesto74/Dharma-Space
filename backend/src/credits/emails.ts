@@ -5,6 +5,7 @@
 
 import { inboxFor, isMailConfigured, notifyInbox, sendMail } from "../mail.js";
 import { formatCents } from "../payments/money.js";
+import { renderCustomerEmail } from "../email-template.js";
 import { CREDIT_COSTS } from "./packs.js";
 
 const CATEGORY = "education" as const;
@@ -26,14 +27,20 @@ const CATEGORY_LABELS: Record<string, string> = {
 };
 
 /** What the balance buys, so the receipt answers the obvious next question. */
+function worthLines(credits: number): string[] {
+  return [
+    ...Object.entries(CREDIT_COSTS)
+      .filter(([, cost]) => cost > 0)
+      .map(([category, cost]) => {
+        const label = CATEGORY_LABELS[category] ?? category;
+        return `${label}: ${cost} credits per class — ${Math.floor(credits / cost)} classes`;
+      }),
+    "Meditation: free with a credit pack"
+  ];
+}
+
 function worthBlock(credits: number) {
-  const lines = Object.entries(CREDIT_COSTS)
-    .filter(([, cost]) => cost > 0)
-    .map(([category, cost]) => {
-      const label = CATEGORY_LABELS[category] ?? category;
-      return `  ${label}: ${cost} credits per class (${Math.floor(credits / cost)} classes)`;
-    });
-  return ["What your credits cover:", ...lines, "  Meditation: free with a credit pack"].join("\n");
+  return ["What your credits cover:", ...worthLines(credits).map((l) => `  ${l}`)].join("\n");
 }
 
 export type PackPurchaseMail = {
@@ -110,13 +117,54 @@ export async function sendCreditPackPurchasedEmails(purchase: PackPurchaseMail) 
       to: purchase.owner.email,
       replyTo: inbox,
       subject: `Your credits are ready — ${purchase.packName}`,
-      text: buyerBody
+      text: buyerBody,
+      html: renderCustomerEmail({
+        eyebrow: "Credits added",
+        heading: "Your credits are ready",
+        preheader: `${purchase.credits} credits, yours until ${expiry}.`,
+        greeting: `Hi ${purchase.owner.name},`,
+        paragraphs: [
+          "Thank you for choosing Dharma Space. Your credits are in your account and come off automatically when you book."
+        ],
+        highlight: { value: String(purchase.credits), label: "credits available" },
+        details: [
+          { label: "Pack", value: purchase.packName },
+          { label: "Paid", value: formatCents(purchase.amountCents) },
+          { label: "Valid until", value: expiry },
+          { label: "Reference", value: purchase.reference },
+          ...(sharedNames.length ? [{ label: "Shared with", value: sharedNames.join("\n") }] : [])
+        ],
+        detailsTitle: "Your purchase",
+        note: { title: "What your credits cover", lines: worthLines(purchase.credits) },
+        cta: { label: "Book a class", url: "https://dharma-space.com/classes" },
+        closing: [
+          sharedNames.length
+            ? "Everyone on the pack draws from the same balance, and you can see who used what in My account."
+            : "You can share this pack with family or a friend any time from My account → My credits.",
+          "This email is your receipt."
+        ]
+      })
     }),
     ...purchase.sharedWith.map((person) =>
       sendMail(CATEGORY, {
         to: person.email,
         replyTo: inbox,
         subject: `${purchase.owner.name} shared class credits with you`,
+        html: renderCustomerEmail({
+          eyebrow: "A gift of practice",
+          heading: `${purchase.owner.name} shared credits with you`,
+          preheader: `Book classes on a shared balance until ${expiry}.`,
+          greeting: `Hi ${person.name},`,
+          paragraphs: [
+            `${purchase.owner.name} bought a ${purchase.packName} pack at Dharma Space and added you to it. You can book classes on the shared balance until ${expiry}.`
+          ],
+          highlight: { value: String(purchase.credits), label: "shared credits" },
+          note: { title: "What the credits cover", lines: worthLines(purchase.credits) },
+          cta: { label: "Book a class", url: "https://dharma-space.com/classes" },
+          closing: [
+            `Sign in with ${person.email} to book. If you haven't set a password, use "Continue with Google".`
+          ]
+        }),
         text: [
           `Hi ${person.name},`,
           "",
@@ -156,6 +204,22 @@ export async function sendCreditShareInviteEmail(input: {
     to: input.person.email,
     replyTo: inbox,
     subject: `${input.owner.name} shared class credits with you`,
+    html: renderCustomerEmail({
+      eyebrow: "A gift of practice",
+      heading: `${input.owner.name} shared credits with you`,
+      preheader: `${input.creditsLeft} credits to use until ${longDate(input.expiresAt)}.`,
+      greeting: `Hi ${input.person.name},`,
+      paragraphs: [
+        `${input.owner.name} added you to their ${input.packName} pack at Dharma Space. The balance is shared, so book whenever it suits you.`
+      ],
+      highlight: { value: String(input.creditsLeft), label: "credits left" },
+      details: [{ label: "Usable until", value: longDate(input.expiresAt) }],
+      note: { title: "What the credits cover", lines: worthLines(input.creditsLeft) },
+      cta: { label: "Book a class", url: "https://dharma-space.com/classes" },
+      closing: [
+        `Sign in with ${input.person.email} to book. If you haven't set a password, use "Continue with Google".`
+      ]
+    }),
     text: [
       `Hi ${input.person.name},`,
       "",

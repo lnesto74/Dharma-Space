@@ -4,6 +4,7 @@ import { inboxFor, isMailConfigured, notifyInbox, sendMail } from "./mail.js";
 import { providerFromLegacyMethod, settlePayment } from "./payments/ledger.js";
 import { parsePriceToCents } from "./payments/money.js";
 import { STUDIO_ADDRESS, buildIcs, icsFilename, singaporeInstant } from "./calendar-invite.js";
+import { humaniseDates, renderCustomerEmail, type EmailDetail } from "./email-template.js";
 
 type BookingMail = Pick<
   Booking,
@@ -66,12 +67,29 @@ function bookingDetailsBlock(booking: BookingMail) {
     .join("\n");
 }
 
+/** The same facts as the text block, as rows for the designed email. */
+function bookingDetailRows(booking: BookingMail): EmailDetail[] {
+  const payment = paymentLabel(booking.paymentMethod);
+  return [
+    { label: "Class", value: booking.offeringTitle },
+    booking.scheduledLabel ? { label: "Date", value: humaniseDates(booking.scheduledLabel) } : null,
+    booking.time ? { label: "Time", value: booking.time } : null,
+    booking.location ? { label: "Where", value: `${booking.location}\n${STUDIO_ADDRESS}` } : null,
+    booking.facilitator ? { label: "With", value: booking.facilitator } : null,
+    booking.price ? { label: "Price", value: booking.price } : null,
+    booking.guests > 1 ? { label: "Guests", value: String(booking.guests) } : null,
+    payment ? { label: "Payment", value: payment } : null,
+    { label: "Reference", value: booking.reference }
+  ].filter((row): row is EmailDetail => row !== null);
+}
+
 async function sendTeamAndCustomer(
   booking: BookingMail,
   teamSubject: string,
   teamIntro: string,
   customerSubject: string,
-  customerBody: string
+  customerBody: string,
+  customerHtml?: string
 ) {
   const category = "education" as const;
   if (!isMailConfigured(category)) {
@@ -110,7 +128,8 @@ async function sendTeamAndCustomer(
     to: booking.customerEmail,
     replyTo: inbox,
     subject: customerSubject,
-    text: customerBody
+    text: customerBody,
+    html: customerHtml
   });
 
   if (teamSent && customerSent) {
@@ -142,12 +161,30 @@ export async function sendBookingConfirmedEmails(booking: BookingMail) {
     "Dharma Space Team"
   ].join("\n");
 
+  const html = renderCustomerEmail({
+    eyebrow: "Booking confirmed",
+    heading: booking.offeringTitle,
+    preheader: `${booking.scheduledLabel}${booking.time ? ` at ${booking.time}` : ""} — you're booked in.`,
+    greeting: `Hi ${booking.customerName},`,
+    paragraphs: [
+      "Thank you for choosing Dharma Space. Your place is confirmed and we're looking forward to practising with you."
+    ],
+    details: bookingDetailRows(booking),
+    detailsTitle: "Your booking",
+    cta: { label: "View my bookings", url: "https://dharma-space.com/login" },
+    closing: [
+      "This email is your confirmation and receipt. A separate email follows with a calendar invitation.",
+      "Need to change anything? Reply to this email, or message us on WhatsApp using the link below."
+    ]
+  });
+
   return sendTeamAndCustomer(
     booking,
     `Booking confirmed & paid: ${booking.offeringTitle}`,
     "A new booking has been paid and confirmed.",
     `Booking confirmed — ${booking.offeringTitle}`,
-    customerBody
+    customerBody,
+    html
   );
 }
 
@@ -171,12 +208,35 @@ export async function sendBookingPayNowPendingEmails(booking: BookingMail) {
     "Dharma Space Team"
   ].join("\n");
 
+  const html = renderCustomerEmail({
+    eyebrow: "Awaiting payment",
+    heading: booking.offeringTitle,
+    preheader: `Send your PayNow transfer with reference ${booking.reference} to confirm your place.`,
+    greeting: `Hi ${booking.customerName},`,
+    paragraphs: [
+      "Thank you for choosing Dharma Space. We've held your place — it's confirmed as soon as your PayNow transfer arrives."
+    ],
+    details: bookingDetailRows(booking),
+    detailsTitle: "Your booking",
+    note: {
+      title: "To complete your booking",
+      lines: [
+        uen ? `PayNow to UEN ${uen}` : "PayNow to Dharma Space",
+        `Amount: ${booking.price}`,
+        `Include the reference: ${booking.reference}`,
+        "We'll confirm within a few hours."
+      ]
+    },
+    closing: ["Any trouble with the transfer, message us on WhatsApp using the link below."]
+  });
+
   return sendTeamAndCustomer(
     booking,
     `PayNow booking (awaiting payment): ${booking.offeringTitle}`,
     "A new PayNow booking is awaiting payment.",
     `Booking received — ${booking.offeringTitle}`,
-    customerBody
+    customerBody,
+    html
   );
 }
 
@@ -261,6 +321,27 @@ export async function sendBookingCalendarInvite(prisma: PrismaClient, booking: B
       "",
       "Dharma Space Team"
     ].join("\n"),
+    html: renderCustomerEmail({
+      eyebrow: "Save the date",
+      heading: "Add it to your calendar",
+      preheader: `${booking.offeringTitle} — ${booking.scheduledLabel}${booking.time ? ` at ${booking.time}` : ""}`,
+      greeting: `Hi ${booking.customerName},`,
+      paragraphs: [
+        "Open the attachment to drop this class straight into your calendar. We've set a reminder for an hour before, which is about enough time to get across town."
+      ],
+      details: [
+        { label: "Class", value: booking.offeringTitle },
+        { label: "Date", value: humaniseDates(booking.scheduledLabel) },
+        ...(booking.time ? [{ label: "Time", value: booking.time }] : []),
+        { label: "Where", value: location.replace(" · ", "\n") },
+        ...(booking.facilitator ? [{ label: "With", value: booking.facilitator }] : []),
+        { label: "Reference", value: booking.reference }
+      ],
+      closing: [
+        "If the attachment doesn't open on your phone, the details above are everything you need.",
+        "See you on the mat."
+      ]
+    }),
     attachments: [
       {
         filename: icsFilename(booking.reference),

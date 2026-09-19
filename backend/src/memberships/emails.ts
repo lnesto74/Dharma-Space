@@ -6,6 +6,7 @@
 
 import { inboxFor, isMailConfigured, notifyInbox, sendMail } from "../mail.js";
 import { formatCents } from "../payments/money.js";
+import { renderCustomerEmail } from "../email-template.js";
 import {
   CANCELLATION_NOTICE_DAYS,
   FREE_CATEGORY,
@@ -117,7 +118,55 @@ export async function sendMembershipWelcomeEmail(input: MembershipWelcome) {
       to: input.member.email,
       replyTo: inbox,
       subject: `Welcome to Dharma Space — your ${input.tier.name} membership`,
-      text: body
+      text: body,
+      html: renderCustomerEmail({
+        eyebrow: "Membership active",
+        heading: `Welcome to ${input.tier.name}`,
+        preheader: `${allowance}${covered ? ` across ${covered}` : ""}, starting today.`,
+        greeting: `Hi ${input.member.name},`,
+        paragraphs: [
+          "Welcome to Dharma Space. Your membership is active from today — book any class it covers and your allowance is applied automatically, with nothing to pay at the door."
+        ],
+        highlight: {
+          value:
+            input.tier.includedSessionsPerMonth === null
+              ? "Unlimited"
+              : String(input.tier.includedSessionsPerMonth),
+          label:
+            input.tier.includedSessionsPerMonth === null ? "classes each month" : "classes each month"
+        },
+        details: [
+          { label: "Plan", value: input.tier.name },
+          {
+            label: "Price",
+            value: `${formatCents(input.priceCents)} per month${input.rateHeld ? " — rate held" : ""}`
+          },
+          ...(covered ? [{ label: "Covers", value: covered }] : []),
+          { label: "Meditation", value: "Free, and never counts against your allowance" },
+          ...(input.tier.guestPassesPerMonth > 0
+            ? [{ label: "Guest passes", value: `${input.tier.guestPassesPerMonth} a month` }]
+            : []),
+          { label: "Started", value: longDate(input.startedAt) },
+          { label: "Renews", value: longDate(input.currentPeriodEnd) }
+        ],
+        detailsTitle: "Your membership",
+        ...(input.isNewAccount
+          ? {
+              note: {
+                title: "Your account",
+                lines: [
+                  `We've set one up for you under ${input.member.email}.`,
+                  'Sign in with "Continue with Google" if that\'s your Google address, or ask us and we\'ll help you set a password.'
+                ]
+              }
+            }
+          : {}),
+        cta: { label: "Book your first class", url: "https://dharma-space.com/classes" },
+        closing: [
+          `The first ${MINIMUM_TERM_MONTHS} months are a minimum term, after which it runs month to month. Cancelling needs ${CANCELLATION_NOTICE_DAYS} days' notice and you keep access to the end of the period you've paid for.`,
+          "Classes your plan doesn't cover are always open to you at the member rate."
+        ]
+      })
     }),
     sendMail(CATEGORY, {
       to: inbox,

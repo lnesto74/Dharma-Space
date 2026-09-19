@@ -8,6 +8,7 @@ import {
   resolveInquirySegment
 } from "./inquiry-meta.js";
 import { inboxFor, isMailConfigured, notifyInbox, sendMail, sourceFromInbox } from "./mail.js";
+import { renderCustomerEmail, type EmailDetail } from "./email-template.js";
 
 const contextSchema = z
   .object({
@@ -221,6 +222,134 @@ function customerSubject(input: InquiryInput) {
   }
 }
 
+/** The booking facts as rows, for the designed version of the auto-reply. */
+function customerDetailRows(ctx: InquiryPayload, input: InquiryInput): EmailDetail[] {
+  return [
+    ctx.title ? { label: "Session", value: String(ctx.title) } : null,
+    ctx.date ? { label: "Date", value: String(ctx.date) } : null,
+    ctx.time ? { label: "Time", value: String(ctx.time) } : null,
+    ctx.location ? { label: "Where", value: String(ctx.location) } : null,
+    ctx.facilitator ? { label: "With", value: String(ctx.facilitator) } : null,
+    ctx.price ? { label: "Price", value: String(ctx.price) } : null,
+    ctx.amount ? { label: "Amount", value: String(ctx.amount) } : null,
+    ctx.guests ? { label: "Guests", value: String(ctx.guests) } : null,
+    ctx.companyName ? { label: "Company", value: String(ctx.companyName) } : null,
+    ctx.employeeCount ? { label: "Team size", value: String(ctx.employeeCount) } : null,
+    ctx.reference ? { label: "Reference", value: String(ctx.reference) } : null,
+    ctx.notes ? { label: "Notes", value: String(ctx.notes) } : null,
+    input.message && input.message !== ctx.notes
+      ? { label: "Your message", value: input.message }
+      : null
+  ].filter((row): row is EmailDetail => row !== null);
+}
+
+/** The designed twin of customerBody — same words, in the website's clothes. */
+function customerHtml(input: InquiryInput): string {
+  const ctx = inquiryContext(input);
+  const details = customerDetailRows(ctx, input);
+  const title = String(ctx.title || "");
+  const closing = ["Any questions, reply to this email or message us on WhatsApp using the link below."];
+
+  const common = {
+    greeting: `Hi ${input.name},`,
+    details,
+    detailsTitle: details.length ? "Details" : undefined,
+    closing
+  };
+
+  switch (input.type) {
+    case "contact":
+      return renderCustomerEmail({
+        ...common,
+        eyebrow: "Message received",
+        heading: "Thank you for getting in touch",
+        preheader: "We'll reply within one business day.",
+        paragraphs: [
+          "Thank you for choosing Dharma Space. We've received your enquiry and will reply within one business day."
+        ]
+      });
+    case "cwp_demo":
+      return renderCustomerEmail({
+        ...common,
+        eyebrow: "Demo requested",
+        heading: "Your platform walkthrough",
+        preheader: "Our team will be in touch within one business day.",
+        paragraphs: [
+          "Thank you for your interest in the Dharma Space Corporate Wellness Platform. Our team will reach out within one business day to arrange a walkthrough."
+        ]
+      });
+    case "waitlist":
+    case "class_waitlist":
+      return renderCustomerEmail({
+        ...common,
+        eyebrow: "Spot reserved",
+        heading: title || "Your spot is reserved",
+        preheader: "We'll email you as soon as dates are confirmed.",
+        paragraphs: [
+          `We've reserved your spot for ${title || "your selected session"} and will email you as soon as dates are confirmed.`
+        ]
+      });
+    case "class_schedule_notify":
+      return renderCustomerEmail({
+        ...common,
+        eyebrow: "You're on the list",
+        heading: "We'll let you know",
+        preheader: "We'll email you as soon as class booking opens.",
+        paragraphs: [
+          "You're on our list for the weekly class schedule. We'll email you the moment booking opens."
+        ]
+      });
+    case "booking_intent":
+      return renderCustomerEmail({
+        ...common,
+        eyebrow: "Almost there",
+        heading: "Complete your payment",
+        preheader: `Finish checkout to confirm your place at ${title || "Dharma Space"}.`,
+        paragraphs: [
+          `You're almost booked for ${title || "your session"}. Complete payment on the secure checkout page to confirm your place.`
+        ],
+        closing: ["If checkout didn't open, message us on WhatsApp using the link below."]
+      });
+    case "booking_confirmed":
+      return renderCustomerEmail({
+        ...common,
+        eyebrow: "Booking confirmed",
+        heading: title || "Your booking is confirmed",
+        preheader: "We look forward to seeing you.",
+        paragraphs: [
+          "Thank you for choosing Dharma Space. Your booking is confirmed and we look forward to seeing you."
+        ],
+        closing: ["This email is your confirmation and receipt.", ...closing]
+      });
+    case "booking_payment":
+      return renderCustomerEmail({
+        ...common,
+        eyebrow: "Awaiting payment",
+        heading: title || "Booking received",
+        preheader: `Send your PayNow transfer with reference ${ctx.reference || ""} to confirm.`,
+        paragraphs: [`Your booking for ${title} is recorded and confirmed once payment arrives.`],
+        note: {
+          title: "To complete your booking",
+          lines: [
+            ctx.uen ? `PayNow to UEN ${ctx.uen}` : "PayNow to Dharma Space",
+            ctx.amount || ctx.price ? `Amount: ${ctx.amount || ctx.price}` : "",
+            ctx.reference ? `Include the reference: ${ctx.reference}` : "",
+            "We'll confirm within a few hours."
+          ].filter(Boolean)
+        }
+      });
+    default:
+      return renderCustomerEmail({
+        ...common,
+        eyebrow: "Received",
+        heading: title || "Thank you",
+        paragraphs: [
+          `We've saved your interest in ${title || "the selected session"}. Our team will follow up shortly.`
+        ]
+      });
+  }
+}
+
 function customerBody(input: InquiryInput) {
   const ctx = inquiryContext(input);
   const whatsapp = process.env.WHATSAPP_URL || "https://wa.me/6598664331";
@@ -280,7 +409,8 @@ async function sendInquiryEmails(
     to: input.email,
     replyTo: inbox,
     subject: customerSubject(input),
-    text: customerBody(input)
+    text: customerBody(input),
+    html: customerHtml(input)
   });
   return teamSent && customerSent;
 }
