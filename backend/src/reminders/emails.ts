@@ -11,6 +11,7 @@ import { inboxFor, isMailConfigured, sendMail } from "../mail.js";
 import { renderCustomerEmail, type EmailDetail } from "../email-template.js";
 import { formatCents } from "../payments/money.js";
 import { CREDIT_COSTS } from "../credits/packs.js";
+import { FREEZE_FEE_CENTS, MAX_FREEZE_MONTHS_PER_YEAR } from "../memberships/tiers.js";
 import type { Milestone } from "./milestones.js";
 
 const CATEGORY = "education" as const;
@@ -221,6 +222,113 @@ export async function sendMembershipEndingReminder(input: MembershipEndMail) {
     to: input.to,
     replyTo: inboxFor(CATEGORY),
     ...membershipEndingMessage(input)
+  });
+}
+
+export type MembershipRenewalMail = {
+  to: string;
+  name: string;
+  tierName: string;
+  renewsAt: Date;
+  priceCents: number;
+  sessionsLeft: number | null;
+  /** Within the three-month commitment, this is the date it runs to. */
+  minimumTermEndsAt: Date | null;
+  /** True when a card is on file and Stripe will take it by itself. */
+  autoRenews: boolean;
+};
+
+/**
+ * Three days before the month turns over.
+ *
+ * A membership renews itself, which is the convenience people sign up for and
+ * also the thing that annoys them when it arrives unannounced. So this says the
+ * date and the amount plainly, and offers the pause — freezing for
+ * SGD 15 a month — as a real alternative rather than burying it.
+ */
+export function membershipRenewalMessage(input: MembershipRenewalMail) {
+  const when = longDate(input.renewsAt);
+  const price = formatCents(input.priceCents);
+  const inTerm =
+    input.minimumTermEndsAt !== null &&
+    input.minimumTermEndsAt.getTime() > input.renewsAt.getTime();
+
+  const opening = input.autoRenews
+    ? `Hi ${input.name}, your ${input.tierName} membership renews on ${when} and we'll charge your card ${price}. Nothing for you to do — your classes carry straight on into the new month.`
+    : `Hi ${input.name}, your ${input.tierName} membership rolls into its next month on ${when} at ${price}. Nothing for you to do — your classes carry straight on.`;
+
+  const terms = inTerm
+    ? `You're partway through the three-month commitment, which runs to ${longDate(
+        input.minimumTermEndsAt as Date
+      )}. After that it's month to month, and you can stop any time with fourteen days' notice.`
+    : `You're past the three-month commitment now, so it's month to month — stop any time with fourteen days' notice.`;
+
+  const freezeLines = [
+    `Freeze your membership for ${formatCents(
+      FREEZE_FEE_CENTS
+    )} a month, up to ${MAX_FREEZE_MONTHS_PER_YEAR} months a year.`,
+    "Billing pauses, your place is held, and your classes are waiting when you come back.",
+    "Just reply to this email and we'll set it up before the renewal date."
+  ];
+
+  const details: EmailDetail[] = [
+    { label: "Plan", value: input.tierName },
+    { label: "Renews on", value: when },
+    { label: "Amount", value: price },
+    {
+      label: "Classes left this month",
+      value: input.sessionsLeft === null ? "Unlimited" : String(input.sessionsLeft)
+    },
+    ...(inTerm
+      ? [{ label: "Commitment until", value: longDate(input.minimumTermEndsAt as Date) }]
+      : [])
+  ];
+
+  const text = [
+    opening,
+    "",
+    terms,
+    "",
+    `Plan: ${input.tierName}`,
+    `Renews on: ${when}`,
+    `Amount: ${price}`,
+    "",
+    "Need a month off?",
+    ...freezeLines,
+    "",
+    `Book a class: ${CLASSES_URL}`,
+    "",
+    "Warm regards,",
+    "Dharma Space Team"
+  ].join("\n");
+
+  return {
+    subject: `Your ${input.tierName} renews on ${when}`,
+    text,
+    html: renderCustomerEmail({
+      eyebrow: "Renewing in three days",
+      heading: "Your membership renews soon",
+      preheader: `${input.tierName} renews ${when} at ${price}.`,
+      paragraphs: [opening, terms],
+      details,
+      detailsTitle: "Your membership",
+      note: { title: "Need a month off?", lines: freezeLines },
+      cta: { label: "Book a class", url: CLASSES_URL },
+      closing: [
+        input.sessionsLeft !== null && input.sessionsLeft > 0
+          ? "You've still got classes in this month — unused ones roll forward one month, so there's time."
+          : "Anything you'd like to change before the date, just reply and we'll take care of it."
+      ]
+    })
+  };
+}
+
+export async function sendMembershipRenewalReminder(input: MembershipRenewalMail) {
+  if (!isMailConfigured(CATEGORY)) return false;
+  return sendMail(CATEGORY, {
+    to: input.to,
+    replyTo: inboxFor(CATEGORY),
+    ...membershipRenewalMessage(input)
   });
 }
 

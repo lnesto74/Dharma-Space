@@ -3,31 +3,49 @@
  *
  * Three things can run out at Dharma Space: the credits in a pack, the access
  * on a membership somebody has cancelled, and a founding member's held rate.
- * Each gets a warning three, two and one month ahead, and each warning is
- * written to ExpiryReminder the moment it is sent. That table — not a flag on
- * the wallet, not a timestamp on the member — is what makes the sweep safe to
- * run on every boot and every day after, in any order, twice if it likes.
+ * Each gets a warning three, two and one month ahead. A fourth thing doesn't
+ * run out at all but arrives all the same — a membership renewing itself — and
+ * that gets three days' notice.
+ *
+ * Every warning is written to ExpiryReminder the moment it is sent. That table
+ * — not a flag on the wallet, not a timestamp on the member — is what makes the
+ * sweep safe to run on every boot and every day after, in any order, twice if
+ * it likes.
  */
 
 import type { PrismaClient } from "@prisma/client";
-import { addMonths, nextMilestone, type Milestone } from "./milestones.js";
+import { addMonths, nextMilestone } from "./milestones.js";
 import {
   sendCreditExpiryReminder,
   sendMembershipEndingReminder,
+  sendMembershipRenewalReminder,
   sendRateEndingReminder
 } from "./emails.js";
-import { sessionsRemaining } from "../memberships/lifecycle.js";
+import { addDays, effectivePriceCents, sessionsRemaining } from "../memberships/lifecycle.js";
 import { isMailConfigured } from "../mail.js";
 
-export const REMINDER_KINDS = ["CREDIT_PACK", "MEMBERSHIP_END", "MEMBERSHIP_RATE"] as const;
+/** One notice per renewal date, so next month's notice is a different row. */
+function renewalKey(membershipId: string, periodEnd: Date) {
+  return `${membershipId}:${periodEnd.toISOString().slice(0, 10)}`;
+}
+
+export const REMINDER_KINDS = [
+  "CREDIT_PACK",
+  "MEMBERSHIP_END",
+  "MEMBERSHIP_RATE",
+  "MEMBERSHIP_RENEWAL"
+] as const;
 export type ReminderKind = (typeof REMINDER_KINDS)[number];
+
+/** Days of warning before a membership bills itself again. */
+export const RENEWAL_NOTICE_DAYS = 3;
 
 export type SweepResult = {
   sent: number;
   skipped: number;
   failed: number;
   /** Populated in dry-run mode so the sweep can be inspected before it mails. */
-  planned: { kind: ReminderKind; to: string; months: Milestone; subject: string }[];
+  planned: { kind: ReminderKind; to: string; months: number; subject: string }[];
 };
 
 type Options = {
@@ -60,7 +78,8 @@ async function record(
   prisma: PrismaClient,
   kind: ReminderKind,
   targetId: string,
-  months: Milestone,
+  /** Months of notice, or 0 for the renewal notice, which is counted in days. */
+  months: number,
   memberId: string | null,
   email: string,
   expiresAt: Date
@@ -185,6 +204,85 @@ export async function sweepExpiryReminders(
       continue;
     }
     (await sendMembershipEndingReminder(payload)) ? (result.sent += 1) : (result.failed += 1);
+  }
+
+  // ── Memberships about to bill themselves again ─────────────────────────────
+  //
+  // Keyed on the renewal date rather than the membership, so every month gets
+  // its own notice while a replayed sweep still gets nothing. PENDING_CANCEL
+  // and FROZEN are left alone: neither is about to charge anyone.
+  const renewing = await prisma.membership.findMany({
+    where: {
+      status: "ACTIVE",
+      currentPeriodEnd: { gt: now, lte: addDays(now, RENEWAL_NOTICE_DAYS) }
+    },
+    include: {
+      member: { select: { id: true, name: true, email: true } },
+      tier: { select: { name: true, monthlyPriceCents: true } },
+      periods: { orderBy: { periodStart: "desc" }, take: 1 }
+    }
+  });
+
+  const renewalKeys = renewing.map((m) => renewalKey(m.id, m.currentPeriodEnd));
+  const renewalSent = new Set(
+    (
+      await prisma.expiryReminder.findMany({
+        where: { kind: "MEMBERSHIP_RENEWAL", targetId: { in: renewalKeys } },
+        select: { targetId: true }
+      })
+    ).map((r) => r.targetId)
+  );
+
+  for (const membership of renewing) {
+    if (!membership.member?.email) continue;
+    const key = renewalKey(membership.id, membership.currentPeriodEnd);
+    if (renewalSent.has(key)) {
+      result.skipped += 1;
+      continue;
+    }
+
+    const period = membership.periods[0];
+    const payload = {
+      to: membership.member.email,
+      name: membership.member.name?.split(" ")[0] || "there",
+      tierName: membership.tier?.name || "Membership",
+      renewsAt: membership.currentPeriodEnd,
+      priceCents: effectivePriceCents(
+        membership.tier?.monthlyPriceCents ?? 0,
+        membership.priceCentsOverride,
+        membership.rateHeldUntil,
+        membership.currentPeriodEnd
+      ),
+      sessionsLeft: period ? sessionsRemaining(period) : null,
+      minimumTermEndsAt: membership.minimumTermEndsAt,
+      autoRenews: Boolean(membership.stripeSubscriptionId)
+    };
+
+    if (dryRun) {
+      result.planned.push({
+        kind: "MEMBERSHIP_RENEWAL",
+        to: payload.to,
+        months: 0,
+        subject: `${payload.tierName} renews ${membership.currentPeriodEnd.toISOString().slice(0, 10)}`
+      });
+      continue;
+    }
+
+    if (
+      !(await record(
+        prisma,
+        "MEMBERSHIP_RENEWAL",
+        key,
+        0,
+        membership.member.id,
+        payload.to,
+        membership.currentPeriodEnd
+      ))
+    ) {
+      result.skipped += 1;
+      continue;
+    }
+    (await sendMembershipRenewalReminder(payload)) ? (result.sent += 1) : (result.failed += 1);
   }
 
   // ── Founding rates about to return to standard price ───────────────────────
