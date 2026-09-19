@@ -109,7 +109,7 @@ export async function sendMail(
     return false;
   }
   try {
-    await transport.sendMail({
+    const info = await transport.sendMail({
       from: mailFrom(category),
       to: options.to,
       cc: options.cc,
@@ -119,6 +119,12 @@ export async function sendMail(
       html: options.html,
       attachments: options.attachments
     });
+    // The relay's queue id is the only evidence we have that a message left the
+    // building. Without it, "the customer says it never arrived" is unanswerable.
+    const rejected = info.rejected?.length ? ` rejected=${info.rejected.join(",")}` : "";
+    console.log(
+      `[mail] ${category} accepted=${(info.accepted || []).join(",")}${rejected} id=${info.messageId} ${info.response || ""}`
+    );
     return true;
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
