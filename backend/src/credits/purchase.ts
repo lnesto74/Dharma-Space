@@ -126,6 +126,7 @@ export async function startPackPurchase(
 
     await openPayment(tx, {
       bookingId: null,
+      kind: "CREDIT_PACK",
       memberId: member.id,
       reference,
       provider: "STRIPE",

@@ -51,6 +51,7 @@ import { registerAdminMembershipRoutes } from "./admin-membership-routes.js";
 import { ensureMembershipTiers } from "./memberships/seed.js";
 import { ensureCreditPacks } from "./credits/seed.js";
 import { registerCreditRoutes } from "./credit-routes.js";
+import { registerMembershipRoutes } from "./membership-routes.js";
 import { registerAdminCreditRoutes } from "./admin-credit-routes.js";
 import { expireLapsedWallets } from "./credits/purchase.js";
 import { scheduleExpiryReminders } from "./reminders/expiry.js";
@@ -1119,6 +1120,7 @@ async function startServer() {
   registerAdminMembershipRoutes(app, prisma, auth, requireRole);
   registerAdminCreditRoutes(app, prisma, auth, requireRole);
   registerCreditRoutes(app, prisma, jwtSecret);
+  registerMembershipRoutes(app, prisma, jwtSecret);
   registerOnboardingRoutes(app, prisma, auth);
   registerMessagingRoutes(app, prisma, auth);
   registerChallengeRoutes(app, prisma, auth);

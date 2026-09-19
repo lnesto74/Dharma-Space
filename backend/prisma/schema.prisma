@@ -608,6 +608,11 @@ model Payment {
   memberId  String?
   member    SiteMember? @relation(fields: [memberId], references: [id], onDelete: SetNull)
 
+  // What the money was for: BOOKING | CREDIT_PACK | MEMBERSHIP. Without this,
+  // everything that isn't a booking looks alike in the ledger and the revenue
+  // figures for packs and memberships run into each other.
+  kind     String @default("BOOKING")
+
   // STRIPE | QASHIER | PAYNOW | CASH | MEMBERSHIP | MANUAL
   provider String
   // CARD | PAYNOW | CASH | MEMBERSHIP | OTHER

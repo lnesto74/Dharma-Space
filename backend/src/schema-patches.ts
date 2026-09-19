@@ -66,6 +66,7 @@ export async function applySchemaPatches(): Promise<void> {
       await repriceClassesByCategory(client);
       await backfillPaymentLedger(client);
       await ensureExpiryReminderTable(client);
+      await ensurePaymentKind(client);
 
       const after = await missingUserColumns(client);
       if (after.length === 0) {
@@ -290,6 +291,20 @@ async function ensureCategoryGroups(client: PrismaClient) {
       names
     );
   }
+}
+
+/**
+ * Labels what each payment was for. Existing rows are classified by what they
+ * point at: a payment with a booking is a booking, and everything else that
+ * predates memberships being sellable online was a credit pack.
+ */
+async function ensurePaymentKind(client: PrismaClient) {
+  await client.$executeRawUnsafe(
+    `ALTER TABLE "Payment" ADD COLUMN IF NOT EXISTS "kind" TEXT NOT NULL DEFAULT 'BOOKING'`
+  );
+  await client.$executeRawUnsafe(
+    `UPDATE "Payment" SET "kind" = 'CREDIT_PACK' WHERE "bookingId" IS NULL AND "kind" = 'BOOKING'`
+  );
 }
 
 /**

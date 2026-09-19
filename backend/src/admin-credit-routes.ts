@@ -100,10 +100,8 @@ export function registerAdminCreditRoutes(
         (w) => w.expiresAt.getTime() - now.getTime() < 1000 * 60 * 60 * 24 * 60
       );
 
-      // A pack payment is the one with no booking attached — that's what
-      // separates "bought credits" from "paid for a class" in the ledger.
       const sold = await prisma.payment.aggregate({
-        where: { bookingId: null, status: "PAID" },
+        where: { kind: "CREDIT_PACK", status: "PAID" },
         _sum: { amountCents: true },
         _count: true
       });

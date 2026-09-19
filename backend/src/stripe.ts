@@ -10,6 +10,14 @@ import {
   failPackPurchase,
   voidPackPurchase
 } from "./credits/purchase.js";
+import {
+  MEMBERSHIP_PURCHASE,
+  completeMembershipPurchase,
+  recordRenewalPayment,
+  voidMembershipPurchase
+} from "./memberships/purchase.js";
+import { addMonths } from "./memberships/lifecycle.js";
+import { renewMembershipPeriod } from "./memberships/signup.js";
 
 let stripeClient: Stripe | null = null;
 
@@ -145,6 +153,77 @@ export async function createCreditPackCheckoutSession(input: {
     success_url: `${base}/credits/success?session_id={CHECKOUT_SESSION_ID}`,
     cancel_url: `${base}/classes`,
     payment_method_types: ["paynow", "card"]
+  });
+
+  if (!session.url) {
+    throw Object.assign(new Error("Could not start Stripe checkout."), { status: 502 });
+  }
+
+  return { url: session.url, sessionId: session.id };
+}
+
+/**
+ * Memberships bill themselves every month, which PayNow cannot do — it is a
+ * one-off push payment with nothing to charge against next month. So this is a
+ * card-only Stripe subscription, and the studio's PayNow option stays where it
+ * works: drop-ins and credit packs.
+ */
+export async function createMembershipCheckoutSession(input: {
+  reference: string;
+  email: string;
+  tierId: string;
+  tierName: string;
+  amountCents: number;
+  includedSessions: number | null;
+  rateHeldMonths: number | null;
+}) {
+  const stripe = getStripe();
+  if (!stripe) return null;
+
+  const base = frontendBaseUrl();
+  const included =
+    input.includedSessions === null
+      ? "Unlimited classes"
+      : `${input.includedSessions} classes a month`;
+  const held = input.rateHeldMonths
+    ? `, rate held for ${input.rateHeldMonths} months`
+    : "";
+
+  const session = await stripe.checkout.sessions.create({
+    mode: "subscription",
+    customer_email: input.email,
+    client_reference_id: input.reference,
+    line_items: [
+      {
+        quantity: 1,
+        price_data: {
+          currency: "sgd",
+          unit_amount: input.amountCents,
+          recurring: { interval: "month" },
+          product_data: {
+            name: `${input.tierName} — Dharma Space`,
+            description: `${included}${held}`
+          }
+        }
+      }
+    ],
+    metadata: {
+      purchaseType: MEMBERSHIP_PURCHASE,
+      purchaseReference: input.reference,
+      membershipTierId: input.tierId
+    },
+    // Copied onto the subscription so renewal invoices, which carry no session,
+    // can still be traced back to the plan that was bought.
+    subscription_data: {
+      metadata: {
+        purchaseType: MEMBERSHIP_PURCHASE,
+        purchaseReference: input.reference,
+        membershipTierId: input.tierId
+      }
+    },
+    success_url: `${base}/memberships/success?session_id={CHECKOUT_SESSION_ID}`,
+    cancel_url: `${base}/classes`,
+    payment_method_types: ["card"]
   });
 
   if (!session.url) {
@@ -321,6 +400,97 @@ async function handleCreditPackEvent(
   }
 }
 
+function subscriptionIdFromSession(session: Stripe.Checkout.Session): string | null {
+  const sub = session.subscription;
+  if (!sub) return null;
+  return typeof sub === "string" ? sub : sub.id;
+}
+
+async function handleMembershipEvent(
+  prisma: PrismaClient,
+  eventType: string,
+  reference: string,
+  session: Stripe.Checkout.Session
+) {
+  switch (eventType) {
+    case "checkout.session.completed": {
+      // Subscriptions report `paid` on the first invoice; anything else means
+      // the card did not go through and no membership should exist yet.
+      if (session.payment_status !== "paid") return;
+      await completeMembershipPurchase(prisma, reference, {
+        tierId: session.metadata?.membershipTierId ?? null,
+        providerRef: session.id,
+        providerPaymentRef: paymentIntentIdFromSession(session),
+        subscriptionId: subscriptionIdFromSession(session)
+      });
+      break;
+    }
+    case "checkout.session.async_payment_failed": {
+      await voidMembershipPurchase(prisma, reference, "FAILED");
+      break;
+    }
+    case "checkout.session.expired": {
+      await voidMembershipPurchase(prisma, reference, "CANCELLED");
+      break;
+    }
+  }
+}
+
+/**
+ * Renewals, and the two ways a subscription stops.
+ *
+ * These arrive without a checkout session, so the subscription id is the only
+ * thread back to the membership. The first invoice of a subscription is skipped
+ * — the signup path has already accounted for that month.
+ */
+async function handleSubscriptionEvent(prisma: PrismaClient, event: Stripe.Event) {
+  if (event.type === "customer.subscription.deleted") {
+    const subscription = event.data.object as Stripe.Subscription;
+    await prisma.membership.updateMany({
+      where: { stripeSubscriptionId: subscription.id, status: { not: "CANCELLED" } },
+      data: { status: "CANCELLED", cancelEffectiveAt: new Date() }
+    });
+    return;
+  }
+
+  const invoice = event.data.object as Stripe.Invoice & {
+    subscription?: string | Stripe.Subscription | null;
+    billing_reason?: string | null;
+  };
+  const subscriptionId =
+    typeof invoice.subscription === "string" ? invoice.subscription : invoice.subscription?.id;
+  if (!subscriptionId) return;
+
+  const membership = await prisma.membership.findFirst({
+    where: { stripeSubscriptionId: subscriptionId }
+  });
+  if (!membership) return;
+
+  if (event.type === "invoice.payment_failed") {
+    await prisma.membership.update({
+      where: { id: membership.id },
+      data: { status: "PAYMENT_FAILED" }
+    });
+    return;
+  }
+
+  // invoice.paid
+  if (invoice.billing_reason === "subscription_create") return;
+
+  const line = invoice.lines?.data?.[0];
+  const start = line?.period?.start ? new Date(line.period.start * 1000) : new Date();
+  const end = line?.period?.end
+    ? new Date(line.period.end * 1000)
+    : addMonths(start, 1);
+
+  await renewMembershipPeriod(prisma, membership.id, start, end);
+  await recordRenewalPayment(prisma, membership.id, {
+    memberId: membership.memberId,
+    amountCents: invoice.amount_paid ?? 0,
+    invoiceId: invoice.id ?? `${subscriptionId}-${start.getTime()}`
+  });
+}
+
 export function registerStripeWebhook(app: Express, getPrisma: () => PrismaClient) {
   app.post(
     "/api/webhooks/stripe",
@@ -346,6 +516,17 @@ export function registerStripeWebhook(app: Express, getPrisma: () => PrismaClien
       }
 
       try {
+        // Renewals and cancellations arrive as invoice and subscription events,
+        // which carry no checkout session at all.
+        if (
+          event.type === "invoice.paid" ||
+          event.type === "invoice.payment_failed" ||
+          event.type === "customer.subscription.deleted"
+        ) {
+          await handleSubscriptionEvent(getPrisma(), event);
+          return res.json({ received: true });
+        }
+
         const session = event.data.object as Stripe.Checkout.Session;
         const reference = session.client_reference_id || session.metadata?.bookingReference;
 
@@ -354,6 +535,12 @@ export function registerStripeWebhook(app: Express, getPrisma: () => PrismaClien
         if (session.metadata?.purchaseType === CREDIT_PACK_PURCHASE) {
           const packRef = session.metadata.purchaseReference || reference;
           if (packRef) await handleCreditPackEvent(getPrisma(), event.type, packRef, session);
+          return res.json({ received: true });
+        }
+
+        if (session.metadata?.purchaseType === MEMBERSHIP_PURCHASE) {
+          const memberRef = session.metadata.purchaseReference || reference;
+          if (memberRef) await handleMembershipEvent(getPrisma(), event.type, memberRef, session);
           return res.json({ received: true });
         }
 

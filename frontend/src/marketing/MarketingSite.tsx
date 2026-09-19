@@ -35,6 +35,16 @@ import {
   type CreditPack,
   type CreditSummary
 } from "../lib/credits-api";
+import { MembershipModal, MembershipSuccessModal } from "../components/MembershipModal";
+import {
+  categoriesLabel,
+  fetchMembershipTiers,
+  fetchMyMembership,
+  isMembershipPurchaseReturn,
+  sessionsLabel,
+  type MembershipTier,
+  type MyMembership
+} from "../lib/memberships-api";
 
 type Page = "about" | "corporate" | "education" | "events" | "classes";
 type EducationSection = "flagship-program" | "courses-certifications" | "workshops-intensives";
@@ -1715,73 +1725,205 @@ function ScheduleLegend() {
  * Prepaid credits, sold below the schedule. Shareable and cheaper per class
  * than walking up, without the monthly commitment of a membership.
  */
-function CreditPacksSection({ onBuy }: { onBuy: (packId?: string) => void }) {
+/**
+ * Membership & Packs — the two ways to pay for a practice, side by side.
+ *
+ * A plan is the cheaper way to come every week; a pack is the way to come when
+ * it suits, shareable and with nothing to renew. Putting them next to each
+ * other lets someone pick on the difference rather than hunting for the other
+ * option on another page.
+ */
+function MembershipPacksSection({
+  onJoinPlan,
+  onBuy
+}: {
+  onJoinPlan: (tierId?: string) => void;
+  onBuy: (packId?: string) => void;
+}) {
   const [packs, setPacks] = useState<CreditPack[]>([]);
+  const [tiers, setTiers] = useState<MembershipTier[]>([]);
+  const { isLoggedIn, token } = useMemberAuth();
+  const [mine, setMine] = useState<MyMembership | null>(null);
 
   useEffect(() => {
     fetchCreditPacks()
       .then(({ packs: list }) => setPacks(list))
       .catch(() => setPacks([]));
+    fetchMembershipTiers()
+      .then(({ tiers: list }) => setTiers(list))
+      .catch(() => setTiers([]));
   }, []);
 
-  if (!packs.length) return null;
+  // Someone already on a plan shouldn't be sold it again — show them what they
+  // have instead.
+  useEffect(() => {
+    if (!isLoggedIn || !token) {
+      setMine(null);
+      return;
+    }
+    fetchMyMembership(token)
+      .then(({ membership }) => setMine(membership))
+      .catch(() => setMine(null));
+  }, [isLoggedIn, token]);
+
+  if (!packs.length && !tiers.length) return null;
 
   return (
-    <section className="bg-[#FAF8F3] py-24">
+    <section id="membership-packs" className="scroll-mt-24 bg-[#FAF8F3] py-24">
       <div className="max-w-7xl mx-auto px-6 lg:px-12">
-        <div className="text-center mb-12">
-          <p className="text-[#C4785A] text-[11px] tracking-[0.3em] uppercase mb-5" style={{ fontFamily: "var(--font-body)" }}>Class credits</p>
+        <div className="text-center mb-14">
+          <p className="text-[#C4785A] text-[11px] tracking-[0.3em] uppercase mb-5" style={{ fontFamily: "var(--font-body)" }}>Pricing</p>
           <h2 className="text-3xl md:text-4xl font-normal text-[#2A2825] leading-[1.15] mb-5" style={{ fontFamily: "var(--font-display)" }}>
-            Practise on your own terms
+            Membership &amp; Packs
           </h2>
           <p className="text-[#7A7468] text-[15px] max-w-xl mx-auto leading-relaxed" style={{ fontFamily: "var(--font-body)" }}>
-            Buy credits once and spend them on any class — yours to share with family or a friend. No monthly commitment,
-            valid {packs[0].validMonths} months.
+            Come every week on a monthly plan, or buy credits once and use them whenever you like. Both cover the same
+            timetable — it's only a question of rhythm.
           </p>
         </div>
 
-        <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-5 mb-10">
-          {packs.map((pack) => (
-            <button
-              key={pack.id}
-              type="button"
-              onClick={() => onBuy(pack.id)}
-              className="group bg-white border border-[#2A2825]/8 p-7 text-left hover:border-[#C4785A]/50 hover:shadow-[0_10px_30px_rgba(42,40,37,0.08)] transition-all duration-300"
-            >
-              <p className="text-[#2A2825] text-3xl font-normal mb-1" style={{ fontFamily: "var(--font-display)" }}>
-                {pack.credits}
+        <div className="grid lg:grid-cols-2 gap-8 lg:gap-10 items-start">
+          {/* Monthly plans */}
+          <div className="bg-white border border-[#2A2825]/8 p-8 lg:p-10 h-full">
+            <div className="mb-7">
+              <p className="text-[10px] tracking-[0.25em] text-[#C4785A] uppercase mb-3" style={{ fontFamily: "var(--font-body)" }}>
+                Monthly membership
               </p>
-              <p className="text-[10px] tracking-[0.25em] text-[#C4785A] uppercase mb-5" style={{ fontFamily: "var(--font-body)" }}>
-                Credits
+              <h3 className="text-2xl font-normal text-[#2A2825] mb-3" style={{ fontFamily: "var(--font-display)" }}>
+                For a steady practice
+              </h3>
+              <p className="text-[13px] text-[#7A7468] leading-relaxed" style={{ fontFamily: "var(--font-body)" }}>
+                Classes included every month, priority booking, and member rates on everything your plan doesn't cover.
               </p>
-              <p className="text-[#2A2825] text-[17px] mb-1" style={{ fontFamily: "var(--font-body)" }}>{pack.price}</p>
-              <p className="text-[12px] text-[#7A7468] mb-6" style={{ fontFamily: "var(--font-body)" }}>
-                {pack.perCredit} per credit
-              </p>
-              <span className="text-[11px] tracking-[0.12em] uppercase text-[#C4785A] inline-flex items-center gap-1 group-hover:gap-2 transition-all duration-300" style={{ fontFamily: "var(--font-body)" }}>
-                Buy credits <ChevronRight size={12} />
-              </span>
-            </button>
-          ))}
-        </div>
+            </div>
 
-        <div className="bg-[#F2EBE0] px-7 py-6 flex flex-col sm:flex-row sm:items-center justify-between gap-5">
-          <div>
-            <p className="text-[10px] tracking-[0.25em] text-[#C4785A] uppercase mb-2" style={{ fontFamily: "var(--font-body)" }}>
-              Credits per class
-            </p>
-            <p className="text-[13px] text-[#2A2825]/80" style={{ fontFamily: "var(--font-body)" }}>
-              Yoga 2 · Aerial 3 · Dance 3 · Sound healing 4 · Ceremony 5 · Meditation free
+            {mine ? (
+              <div className="bg-[#F2EBE0] p-6 text-center">
+                <p className="text-[10px] tracking-[0.25em] text-[#C4785A] uppercase mb-2" style={{ fontFamily: "var(--font-body)" }}>
+                  Your plan
+                </p>
+                <p className="text-[#2A2825] text-lg mb-1" style={{ fontFamily: "var(--font-display)" }}>
+                  {mine.tierName}
+                </p>
+                <p className="text-[12px] text-[#7A7468]" style={{ fontFamily: "var(--font-body)" }}>
+                  {mine.unlimited
+                    ? "Unlimited classes"
+                    : `${mine.sessionsRemaining ?? 0} classes left this month`}{" "}
+                  · renews {new Date(mine.currentPeriodEnd).toLocaleDateString(undefined, { day: "numeric", month: "long" })}
+                </p>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {tiers.map((tier) => (
+                  <button
+                    key={tier.id}
+                    type="button"
+                    disabled={tier.soldOut}
+                    onClick={() => onJoinPlan(tier.id)}
+                    className={`group w-full text-left p-5 border flex items-start justify-between gap-4 transition-all duration-300 ${
+                      tier.soldOut
+                        ? "border-[#2A2825]/8 opacity-50 cursor-not-allowed"
+                        : "border-[#2A2825]/10 hover:border-[#C4785A]/50 hover:shadow-[0_8px_24px_rgba(42,40,37,0.06)]"
+                    }`}
+                  >
+                    <div>
+                      <p className="text-[#2A2825] text-[17px] mb-1" style={{ fontFamily: "var(--font-display)" }}>
+                        {tier.name}
+                      </p>
+                      <p className="text-[12px] text-[#7A7468] leading-relaxed" style={{ fontFamily: "var(--font-body)" }}>
+                        {sessionsLabel(tier.includedSessionsPerMonth)} · {categoriesLabel(tier.allowedCategories)}
+                      </p>
+                      {tier.soldOut ? (
+                        <p className="text-[11px] text-[#C4785A] mt-1.5" style={{ fontFamily: "var(--font-body)" }}>
+                          Fully subscribed
+                        </p>
+                      ) : tier.placesLeft !== null ? (
+                        <p className="text-[11px] text-[#C4785A] mt-1.5" style={{ fontFamily: "var(--font-body)" }}>
+                          Only {tier.placesLeft} places left
+                        </p>
+                      ) : null}
+                    </div>
+                    <div className="text-right shrink-0">
+                      <p className="text-[#2A2825] text-[17px]" style={{ fontFamily: "var(--font-body)" }}>
+                        {tier.monthlyPrice}
+                      </p>
+                      <p className="text-[11px] text-[#7A7468] mb-2" style={{ fontFamily: "var(--font-body)" }}>
+                        a month
+                      </p>
+                      {!tier.soldOut && (
+                        <span className="text-[10px] tracking-[0.12em] uppercase text-[#C4785A] inline-flex items-center gap-1 group-hover:gap-2 transition-all duration-300" style={{ fontFamily: "var(--font-body)" }}>
+                          Join <ChevronRight size={11} />
+                        </span>
+                      )}
+                    </div>
+                  </button>
+                ))}
+              </div>
+            )}
+
+            <p className="text-[11px] text-[#7A7468] mt-6 leading-relaxed" style={{ fontFamily: "var(--font-body)" }}>
+              Renews monthly by card · three-month minimum term · cancel any time after with 14 days' notice.
             </p>
           </div>
-          <button
-            type="button"
-            onClick={() => onBuy()}
-            className="shrink-0 px-8 py-3.5 bg-[#C4785A] text-white text-[11px] tracking-[0.15em] uppercase hover:bg-[#B86848] transition-colors duration-300"
-            style={{ fontFamily: "var(--font-body)" }}
-          >
-            Buy credits
-          </button>
+
+          {/* Credit packs */}
+          <div className="bg-white border border-[#2A2825]/8 p-8 lg:p-10 h-full">
+            <div className="mb-7">
+              <p className="text-[10px] tracking-[0.25em] text-[#C4785A] uppercase mb-3" style={{ fontFamily: "var(--font-body)" }}>
+                Class credits
+              </p>
+              <h3 className="text-2xl font-normal text-[#2A2825] mb-3" style={{ fontFamily: "var(--font-display)" }}>
+                For practising on your own terms
+              </h3>
+              <p className="text-[13px] text-[#7A7468] leading-relaxed" style={{ fontFamily: "var(--font-body)" }}>
+                Buy credits once and spend them on any class — yours to share with family or a friend. No monthly
+                commitment{packs.length ? `, valid ${packs[0].validMonths} months` : ""}.
+              </p>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              {packs.map((pack) => (
+                <button
+                  key={pack.id}
+                  type="button"
+                  onClick={() => onBuy(pack.id)}
+                  className="group border border-[#2A2825]/10 p-5 text-left hover:border-[#C4785A]/50 hover:shadow-[0_8px_24px_rgba(42,40,37,0.06)] transition-all duration-300"
+                >
+                  <p className="text-[#2A2825] text-2xl font-normal" style={{ fontFamily: "var(--font-display)" }}>
+                    {pack.credits}
+                  </p>
+                  <p className="text-[10px] tracking-[0.25em] text-[#C4785A] uppercase mb-4" style={{ fontFamily: "var(--font-body)" }}>
+                    Credits
+                  </p>
+                  <p className="text-[#2A2825] text-[16px]" style={{ fontFamily: "var(--font-body)" }}>{pack.price}</p>
+                  <p className="text-[11px] text-[#7A7468] mb-4" style={{ fontFamily: "var(--font-body)" }}>
+                    {pack.perCredit} per credit
+                  </p>
+                  <span className="text-[10px] tracking-[0.12em] uppercase text-[#C4785A] inline-flex items-center gap-1 group-hover:gap-2 transition-all duration-300" style={{ fontFamily: "var(--font-body)" }}>
+                    Buy <ChevronRight size={11} />
+                  </span>
+                </button>
+              ))}
+            </div>
+
+            <div className="bg-[#F2EBE0] px-6 py-5 mt-6">
+              <p className="text-[10px] tracking-[0.25em] text-[#C4785A] uppercase mb-2" style={{ fontFamily: "var(--font-body)" }}>
+                Credits per class
+              </p>
+              <p className="text-[12px] text-[#2A2825]/80 leading-relaxed" style={{ fontFamily: "var(--font-body)" }}>
+                Yoga 2 · Aerial 3 · Dance 3 · Sound healing 4 · Ceremony 5 · Meditation free
+              </p>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => onBuy()}
+              className="w-full mt-4 px-8 py-3.5 bg-[#C4785A] text-white text-[11px] tracking-[0.15em] uppercase hover:bg-[#B86848] transition-colors duration-300"
+              style={{ fontFamily: "var(--font-body)" }}
+            >
+              Buy credits
+            </button>
+          </div>
         </div>
       </div>
     </section>
@@ -1791,11 +1933,13 @@ function CreditPacksSection({ onBuy }: { onBuy: (packId?: string) => void }) {
 function ClassesPage({
   classSchedule,
   onBookClass,
-  onBuyCredits
+  onBuyCredits,
+  onJoinPlan
 }: {
   classSchedule: ScheduleEntry[];
   onBookClass: (info: BookingInfo) => void;
   onBuyCredits: (packId?: string) => void;
+  onJoinPlan: (tierId?: string) => void;
 }) {
   const [notifyOpen, setNotifyOpen] = useState(false);
   const [pickerOpen, setPickerOpen] = useState(false);
@@ -1912,7 +2056,7 @@ function ClassesPage({
         </div>
       </section>
 
-      <CreditPacksSection onBuy={onBuyCredits} />
+      <MembershipPacksSection onJoinPlan={onJoinPlan} onBuy={onBuyCredits} />
 
       {notifyOpen && <ClassScheduleNotifyModal onClose={() => setNotifyOpen(false)} />}
       {pickerOpen && (
@@ -3453,6 +3597,8 @@ export default function MarketingSite({
   const [stripeBooking, setStripeBooking] = useState<PendingStripeBooking | null>(null);
   const [creditPack, setCreditPack] = useState<{ packId?: string } | null>(null);
   const [creditSuccess, setCreditSuccess] = useState(false);
+  const [membershipJoin, setMembershipJoin] = useState<{ tierId?: string } | null>(null);
+  const [membershipSuccess, setMembershipSuccess] = useState(false);
   const [educationScrollTarget, setEducationScrollTarget] = useState<EducationSection | null>(null);
   const site = useSiteContent();
 
@@ -3464,6 +3610,10 @@ export default function MarketingSite({
   useEffect(() => {
     if (isCreditPurchaseReturn()) {
       setCreditSuccess(true);
+      return;
+    }
+    if (isMembershipPurchaseReturn()) {
+      setMembershipSuccess(true);
       return;
     }
     if (!isStripeBookingReturn()) return;
@@ -3631,6 +3781,7 @@ export default function MarketingSite({
             classSchedule={classSchedule}
             onBookClass={setBooking}
             onBuyCredits={(packId) => setCreditPack({ packId })}
+            onJoinPlan={(tierId) => setMembershipJoin({ tierId })}
           />
         )}
       </main>
@@ -3661,6 +3812,17 @@ export default function MarketingSite({
         <CreditPurchaseSuccessModal
           onClose={() => {
             setCreditSuccess(false);
+            setPage("classes");
+          }}
+        />
+      )}
+      {membershipJoin && (
+        <MembershipModal initialTierId={membershipJoin.tierId} onClose={() => setMembershipJoin(null)} />
+      )}
+      {membershipSuccess && (
+        <MembershipSuccessModal
+          onClose={() => {
+            setMembershipSuccess(false);
             setPage("classes");
           }}
         />

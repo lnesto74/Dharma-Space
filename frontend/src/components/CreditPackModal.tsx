@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Check, ChevronRight, Plus, X } from "lucide-react";
 import { useMemberAuth } from "../auth/MemberAuthContext";
 import { MemberAuthPanel } from "./MemberAuthPanel";
+import { BODY, DISPLAY, ModalShell } from "./ModalShell";
 import {
   confirmCreditPurchase,
   creditsExpiryLabel,
@@ -12,48 +13,6 @@ import {
   startCreditPackCheckout,
   type CreditPack
 } from "../lib/credits-api";
-
-const PANEL = "bg-[#FAF8F3] w-full sm:max-w-lg max-h-[95vh] overflow-y-auto";
-const BODY = { fontFamily: "var(--font-body)" } as const;
-const DISPLAY = { fontFamily: "var(--font-display)" } as const;
-
-function ModalShell({
-  eyebrow,
-  title,
-  onClose,
-  children
-}: {
-  eyebrow: string;
-  title: string;
-  onClose: () => void;
-  children: React.ReactNode;
-}) {
-  return (
-    <div
-      className="fixed inset-0 z-[100] flex items-end sm:items-center justify-center bg-[#1A1815]/70 backdrop-blur-sm p-0 sm:p-6"
-      onClick={(e) => {
-        if (e.target === e.currentTarget) onClose();
-      }}
-    >
-      <div className={PANEL}>
-        <div className="flex items-start justify-between p-8 border-b border-[#2A2825]/8">
-          <div>
-            <p className="text-[10px] tracking-[0.25em] text-[#C4785A] uppercase mb-1" style={BODY}>
-              {eyebrow}
-            </p>
-            <h2 className="text-2xl font-normal text-[#2A2825]" style={DISPLAY}>
-              {title}
-            </h2>
-          </div>
-          <button type="button" onClick={onClose} className="text-[#2A2825]/40 hover:text-[#2A2825] transition-colors p-1 mt-1">
-            <X size={20} />
-          </button>
-        </div>
-        {children}
-      </div>
-    </div>
-  );
-}
 
 /**
  * Buying a pack: sign in, pick a size, optionally name the people who may spend

@@ -14,10 +14,9 @@ import {
   canFreeze,
   cancellationEffectiveAt,
   effectivePriceCents,
-  newMembershipDates,
   sessionsRemaining
 } from "./memberships/lifecycle.js";
-import { sendMembershipWelcomeEmail } from "./memberships/emails.js";
+import { canJoinTier, startMembership } from "./memberships/signup.js";
 
 type AuthedRequest = Request & { user?: User };
 
@@ -391,74 +390,16 @@ export function registerAdminMembershipRoutes(
         }
       }
 
-      const existing = await prisma.membership.findFirst({
-        where: { memberId: member.id, status: { notIn: ["CANCELLED"] } }
-      });
-      if (existing) {
-        return res
-          .status(409)
-          .json({ message: `${member.name} already has an active membership.` });
-      }
+      const check = await canJoinTier(prisma, member.id, tier);
+      if (!check.ok) return res.status(check.status).json({ message: check.message });
 
-      // Founding 50 (and any capped plan) stops being sellable at its cap.
-      if (tier.maxMembers !== null) {
-        const used = await prisma.membership.count({
-          where: { tierId: tier.id, status: { not: "CANCELLED" } }
-        });
-        if (used >= tier.maxMembers) {
-          return res.status(409).json({
-            message: `${tier.name} is sold out — all ${tier.maxMembers} places are taken.`
-          });
-        }
-      }
-
-      const startedAt = body.startedAt ? new Date(body.startedAt) : new Date();
-      const dates = newMembershipDates(startedAt, tier.rateHeldMonths);
-      // A capped, rate-held plan (Founding 50) holds its own price.
-      const priceCentsOverride =
-        body.priceCentsOverride ?? (tier.rateHeldMonths ? tier.monthlyPriceCents : null);
-
-      const membership = await prisma.membership.create({
-        data: {
-          memberId: member.id,
-          tierId: tier.id,
-          status: "ACTIVE",
-          startedAt: dates.startedAt,
-          currentPeriodStart: dates.currentPeriodStart,
-          currentPeriodEnd: dates.currentPeriodEnd,
-          minimumTermEndsAt: dates.minimumTermEndsAt,
-          rateHeldUntil: dates.rateHeldUntil,
-          priceCentsOverride,
-          notes: body.notes ?? "",
-          periods: {
-            create: {
-              periodStart: dates.currentPeriodStart,
-              periodEnd: dates.currentPeriodEnd,
-              sessionsIncluded: tier.includedSessionsPerMonth
-            }
-          }
-        },
-        include: MEMBERSHIP_INCLUDE
-      });
-
-      // Nothing else tells the member their membership exists — memberships are
-      // only ever started from this screen.
-      await sendMembershipWelcomeEmail({
-        member: { name: member.name, email: member.email },
-        tier: {
-          name: tier.name,
-          includedSessionsPerMonth: tier.includedSessionsPerMonth,
-          allowedCategories: tier.allowedCategories,
-          guestPassesPerMonth: tier.guestPassesPerMonth
-        },
-        priceCents: priceCentsOverride ?? tier.monthlyPriceCents,
-        startedAt: dates.startedAt,
-        currentPeriodEnd: dates.currentPeriodEnd,
-        minimumTermEndsAt: dates.minimumTermEndsAt,
-        rateHeld: priceCentsOverride !== null,
+      const membership = await startMembership(prisma, {
+        member,
+        tier,
+        startedAt: body.startedAt ? new Date(body.startedAt) : undefined,
+        priceCentsOverride: body.priceCentsOverride,
+        notes: body.notes,
         isNewAccount
-      }).catch((error) => {
-        console.error("[membership-mail] welcome failed:", error);
       });
 
       res.status(201).json({ membership });

@@ -37,6 +37,10 @@ export type PaymentMethod = (typeof PAYMENT_METHODS)[number];
 export const PAYMENT_STATUSES = ["PENDING", "PAID", "FAILED", "REFUNDED", "CANCELLED"] as const;
 export type PaymentStatus = (typeof PAYMENT_STATUSES)[number];
 
+/** What the money bought. Bookings are the default and by far the most common. */
+export const PAYMENT_KINDS = ["BOOKING", "CREDIT_PACK", "MEMBERSHIP"] as const;
+export type PaymentKind = (typeof PAYMENT_KINDS)[number];
+
 /** Accepts a transaction client so callers can keep payments in their own transaction. */
 type Db = PrismaClient | Prisma.TransactionClient;
 
@@ -67,6 +71,7 @@ export function providerFromLegacyMethod(
 export type OpenPaymentInput = {
   /** Null for money that isn't a booking — a credit pack, or a counter sale. */
   bookingId: string | null;
+  kind?: PaymentKind;
   memberId?: string | null;
   reference: string;
   provider: PaymentProvider;
@@ -91,6 +96,7 @@ export async function openPayment(db: Db, input: OpenPaymentInput) {
 
   const data = {
     bookingId: input.bookingId,
+    kind: input.kind ?? (input.bookingId ? "BOOKING" : "CREDIT_PACK"),
     memberId: input.memberId ?? null,
     reference: input.reference,
     provider: input.provider,
