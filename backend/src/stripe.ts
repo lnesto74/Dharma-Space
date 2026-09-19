@@ -4,6 +4,12 @@ import Stripe from "stripe";
 import type { PrismaClient } from "@prisma/client";
 import { completeBookingPayment } from "./booking-emails.js";
 import { cancelPayments, failPayment } from "./payments/ledger.js";
+import {
+  CREDIT_PACK_PURCHASE,
+  completePackPurchase,
+  failPackPurchase,
+  voidPackPurchase
+} from "./credits/purchase.js";
 
 let stripeClient: Stripe | null = null;
 
@@ -81,6 +87,63 @@ export async function createStripeCheckoutSession(input: {
     // avoids the fixed per-card fee that bites hardest on a SGD 35 drop-in, and
     // it's the method most Singapore customers expect. Card stays available for
     // anyone without a participating bank app, and for overseas visitors.
+    payment_method_types: ["paynow", "card"]
+  });
+
+  if (!session.url) {
+    throw Object.assign(new Error("Could not start Stripe checkout."), { status: 502 });
+  }
+
+  return { url: session.url, sessionId: session.id };
+}
+
+/**
+ * Checkout for a credit pack. Unlike a booking there is no session to attend —
+ * the metadata carries the wallet reserved for the purchase so the webhook can
+ * release it without looking anything up by guesswork.
+ */
+export async function createCreditPackCheckoutSession(input: {
+  reference: string;
+  email: string;
+  packName: string;
+  credits: number;
+  amountCents: number;
+  validMonths: number;
+  walletId: string;
+  sharedCount?: number;
+}) {
+  const stripe = getStripe();
+  if (!stripe) return null;
+
+  const base = frontendBaseUrl();
+  const shared = input.sharedCount
+    ? `, shared with ${input.sharedCount} ${input.sharedCount === 1 ? "person" : "people"}`
+    : "";
+
+  const session = await stripe.checkout.sessions.create({
+    mode: "payment",
+    customer_email: input.email,
+    client_reference_id: input.reference,
+    line_items: [
+      {
+        quantity: 1,
+        price_data: {
+          currency: "sgd",
+          unit_amount: input.amountCents,
+          product_data: {
+            name: `${input.packName} — Dharma Space`,
+            description: `${input.credits} class credits, valid ${input.validMonths} months${shared}`
+          }
+        }
+      }
+    ],
+    metadata: {
+      purchaseType: CREDIT_PACK_PURCHASE,
+      purchaseReference: input.reference,
+      creditWalletId: input.walletId
+    },
+    success_url: `${base}/credits/success?session_id={CHECKOUT_SESSION_ID}`,
+    cancel_url: `${base}/classes`,
     payment_method_types: ["paynow", "card"]
   });
 
@@ -231,6 +294,33 @@ export async function retrieveCheckoutSession(sessionId: string) {
   return stripe.checkout.sessions.retrieve(sessionId);
 }
 
+async function handleCreditPackEvent(
+  prisma: PrismaClient,
+  eventType: string,
+  reference: string,
+  session: Stripe.Checkout.Session
+) {
+  switch (eventType) {
+    case "checkout.session.completed":
+    case "checkout.session.async_payment_succeeded": {
+      if (session.payment_status !== "paid") return;
+      await completePackPurchase(prisma, reference, {
+        providerRef: session.id,
+        providerPaymentRef: paymentIntentIdFromSession(session)
+      });
+      break;
+    }
+    case "checkout.session.async_payment_failed": {
+      await failPackPurchase(prisma, reference, "Payment failed at Stripe.");
+      break;
+    }
+    case "checkout.session.expired": {
+      await voidPackPurchase(prisma, reference);
+      break;
+    }
+  }
+}
+
 export function registerStripeWebhook(app: Express, getPrisma: () => PrismaClient) {
   app.post(
     "/api/webhooks/stripe",
@@ -258,6 +348,14 @@ export function registerStripeWebhook(app: Express, getPrisma: () => PrismaClien
       try {
         const session = event.data.object as Stripe.Checkout.Session;
         const reference = session.client_reference_id || session.metadata?.bookingReference;
+
+        // Credits are bought without a booking, so they settle down their own
+        // path rather than through the booking lifecycle.
+        if (session.metadata?.purchaseType === CREDIT_PACK_PURCHASE) {
+          const packRef = session.metadata.purchaseReference || reference;
+          if (packRef) await handleCreditPackEvent(getPrisma(), event.type, packRef, session);
+          return res.json({ received: true });
+        }
 
         switch (event.type) {
           // PayNow can settle after the customer has closed the tab, so the

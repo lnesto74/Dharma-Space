@@ -6,7 +6,9 @@
 
 import { CREDIT_VALID_MONTHS, creditCost, isCreditEligible } from "./packs.js";
 
-export const WALLET_STATUSES = ["ACTIVE", "EXPIRED", "CANCELLED"] as const;
+// PENDING covers a pack bought online whose payment hasn't settled yet. Only
+// ACTIVE wallets are spendable, so unpaid credits are unusable by construction.
+export const WALLET_STATUSES = ["PENDING", "ACTIVE", "EXPIRED", "CANCELLED"] as const;
 export type WalletStatus = (typeof WALLET_STATUSES)[number];
 
 export type WalletLedger = {

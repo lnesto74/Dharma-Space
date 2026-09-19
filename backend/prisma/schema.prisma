@@ -464,8 +464,11 @@ model CreditWallet {
   creditsUsed  Int                  @default(0)
   purchasedAt  DateTime             @default(now())
   expiresAt    DateTime
-  // ACTIVE | EXPIRED | CANCELLED
+  // PENDING | ACTIVE | EXPIRED | CANCELLED. A wallet bought online is PENDING
+  // until the payment settles, so unpaid credits can never be spent.
   status       String               @default("ACTIVE")
+  // Ties the wallet to the Payment row that bought it, for online purchases.
+  purchaseRef  String?              @unique
   notes        String               @default("")
   createdAt    DateTime             @default(now())
   updatedAt    DateTime             @updatedAt

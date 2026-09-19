@@ -31,7 +31,9 @@ export default function App() {
           <Route path="/corporate" element={<Navigate to="/" replace />} />
           <Route path="/education" element={<Navigate to="/" replace />} />
           <Route path="/events" element={<Navigate to="/" replace />} />
+          <Route path="/classes" element={<MarketingSite initialPage="classes" />} />
           <Route path="/booking/success" element={<MarketingSite initialPage="events" />} />
+          <Route path="/credits/success" element={<MarketingSite initialPage="classes" />} />
           <Route path="/login" element={<MarketingSite initialPage="about" openAccountOnMount />} />
           <Route path="/register" element={<MarketingSite initialPage="about" openAccountOnMount />} />
           <Route path="/portal/*" element={<CorporatePortal />} />

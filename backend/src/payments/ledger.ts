@@ -65,7 +65,8 @@ export function providerFromLegacyMethod(
 }
 
 export type OpenPaymentInput = {
-  bookingId: string;
+  /** Null for money that isn't a booking — a credit pack, or a counter sale. */
+  bookingId: string | null;
   memberId?: string | null;
   reference: string;
   provider: PaymentProvider;

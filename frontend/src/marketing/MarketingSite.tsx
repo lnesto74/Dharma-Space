@@ -27,6 +27,8 @@ import {
   savePendingStripeBooking,
   type PendingStripeBooking
 } from "../lib/stripe-booking";
+import { CreditPackModal, CreditPurchaseSuccessModal } from "../components/CreditPackModal";
+import { fetchCreditPacks, isCreditPurchaseReturn, type CreditPack } from "../lib/credits-api";
 
 type Page = "about" | "corporate" | "education" | "events" | "classes";
 type EducationSection = "flagship-program" | "courses-certifications" | "workshops-intensives";
@@ -1700,12 +1702,91 @@ function ScheduleLegend() {
   );
 }
 
+/**
+ * Prepaid credits, sold below the schedule. Shareable and cheaper per class
+ * than walking up, without the monthly commitment of a membership.
+ */
+function CreditPacksSection({ onBuy }: { onBuy: (packId?: string) => void }) {
+  const [packs, setPacks] = useState<CreditPack[]>([]);
+
+  useEffect(() => {
+    fetchCreditPacks()
+      .then(({ packs: list }) => setPacks(list))
+      .catch(() => setPacks([]));
+  }, []);
+
+  if (!packs.length) return null;
+
+  return (
+    <section className="bg-[#FAF8F3] py-24">
+      <div className="max-w-7xl mx-auto px-6 lg:px-12">
+        <div className="text-center mb-12">
+          <p className="text-[#C4785A] text-[11px] tracking-[0.3em] uppercase mb-5" style={{ fontFamily: "var(--font-body)" }}>Class credits</p>
+          <h2 className="text-3xl md:text-4xl font-normal text-[#2A2825] leading-[1.15] mb-5" style={{ fontFamily: "var(--font-display)" }}>
+            Practise on your own terms
+          </h2>
+          <p className="text-[#7A7468] text-[15px] max-w-xl mx-auto leading-relaxed" style={{ fontFamily: "var(--font-body)" }}>
+            Buy credits once and spend them on any class — yours to share with family or a friend. No monthly commitment,
+            valid {packs[0].validMonths} months.
+          </p>
+        </div>
+
+        <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-5 mb-10">
+          {packs.map((pack) => (
+            <button
+              key={pack.id}
+              type="button"
+              onClick={() => onBuy(pack.id)}
+              className="group bg-white border border-[#2A2825]/8 p-7 text-left hover:border-[#C4785A]/50 hover:shadow-[0_10px_30px_rgba(42,40,37,0.08)] transition-all duration-300"
+            >
+              <p className="text-[#2A2825] text-3xl font-normal mb-1" style={{ fontFamily: "var(--font-display)" }}>
+                {pack.credits}
+              </p>
+              <p className="text-[10px] tracking-[0.25em] text-[#C4785A] uppercase mb-5" style={{ fontFamily: "var(--font-body)" }}>
+                Credits
+              </p>
+              <p className="text-[#2A2825] text-[17px] mb-1" style={{ fontFamily: "var(--font-body)" }}>{pack.price}</p>
+              <p className="text-[12px] text-[#7A7468] mb-6" style={{ fontFamily: "var(--font-body)" }}>
+                {pack.perCredit} per credit
+              </p>
+              <span className="text-[11px] tracking-[0.12em] uppercase text-[#C4785A] inline-flex items-center gap-1 group-hover:gap-2 transition-all duration-300" style={{ fontFamily: "var(--font-body)" }}>
+                Buy credits <ChevronRight size={12} />
+              </span>
+            </button>
+          ))}
+        </div>
+
+        <div className="bg-[#F2EBE0] px-7 py-6 flex flex-col sm:flex-row sm:items-center justify-between gap-5">
+          <div>
+            <p className="text-[10px] tracking-[0.25em] text-[#C4785A] uppercase mb-2" style={{ fontFamily: "var(--font-body)" }}>
+              Credits per class
+            </p>
+            <p className="text-[13px] text-[#2A2825]/80" style={{ fontFamily: "var(--font-body)" }}>
+              Yoga 2 · Aerial 3 · Dance 3 · Sound healing 4 · Ceremony 5 · Meditation free
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={() => onBuy()}
+            className="shrink-0 px-8 py-3.5 bg-[#C4785A] text-white text-[11px] tracking-[0.15em] uppercase hover:bg-[#B86848] transition-colors duration-300"
+            style={{ fontFamily: "var(--font-body)" }}
+          >
+            Buy credits
+          </button>
+        </div>
+      </div>
+    </section>
+  );
+}
+
 function ClassesPage({
   classSchedule,
-  onBookClass
+  onBookClass,
+  onBuyCredits
 }: {
   classSchedule: ScheduleEntry[];
   onBookClass: (info: BookingInfo) => void;
+  onBuyCredits: (packId?: string) => void;
 }) {
   const [notifyOpen, setNotifyOpen] = useState(false);
   const [pickerOpen, setPickerOpen] = useState(false);
@@ -1821,6 +1902,8 @@ function ClassesPage({
           </div>
         </div>
       </section>
+
+      <CreditPacksSection onBuy={onBuyCredits} />
 
       {notifyOpen && <ClassScheduleNotifyModal onClose={() => setNotifyOpen(false)} />}
       {pickerOpen && (
@@ -3226,6 +3309,8 @@ export default function MarketingSite({
   const [reserve, setReserve] = useState<ReserveInfo | null>(null);
   const [booking, setBooking] = useState<BookingInfo | null>(null);
   const [stripeBooking, setStripeBooking] = useState<PendingStripeBooking | null>(null);
+  const [creditPack, setCreditPack] = useState<{ packId?: string } | null>(null);
+  const [creditSuccess, setCreditSuccess] = useState(false);
   const [educationScrollTarget, setEducationScrollTarget] = useState<EducationSection | null>(null);
   const site = useSiteContent();
 
@@ -3235,6 +3320,10 @@ export default function MarketingSite({
   }, [initialPage]);
 
   useEffect(() => {
+    if (isCreditPurchaseReturn()) {
+      setCreditSuccess(true);
+      return;
+    }
     if (!isStripeBookingReturn()) return;
     const pending = readPendingStripeBooking();
     if (pending) {
@@ -3399,6 +3488,7 @@ export default function MarketingSite({
           <ClassesPage
             classSchedule={classSchedule}
             onBookClass={setBooking}
+            onBuyCredits={(packId) => setCreditPack({ packId })}
           />
         )}
       </main>
@@ -3410,11 +3500,23 @@ export default function MarketingSite({
           onClose={() => setAccountOpen(false)}
           onBookProgram={setReserve}
           onBookClass={setBooking}
+          onBuyCredits={() => setCreditPack({})}
         />
       )}
       {reserve && <ReserveModal info={reserve} onClose={() => setReserve(null)} />}
       {booking && <BookingModal info={booking} onClose={() => setBooking(null)} />}
       {stripeBooking && <BookingSuccessModal booking={stripeBooking} onClose={() => setStripeBooking(null)} />}
+      {creditPack && (
+        <CreditPackModal initialPackId={creditPack.packId} onClose={() => setCreditPack(null)} />
+      )}
+      {creditSuccess && (
+        <CreditPurchaseSuccessModal
+          onClose={() => {
+            setCreditSuccess(false);
+            setPage("classes");
+          }}
+        />
+      )}
     </div>
   );
 }

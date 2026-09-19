@@ -50,6 +50,8 @@ import { registerAdminCwpRoutes } from "./admin-cwp-routes.js";
 import { registerAdminMembershipRoutes } from "./admin-membership-routes.js";
 import { ensureMembershipTiers } from "./memberships/seed.js";
 import { ensureCreditPacks } from "./credits/seed.js";
+import { registerCreditRoutes } from "./credit-routes.js";
+import { expireLapsedWallets } from "./credits/purchase.js";
 import { ensureWeekOneSchedule } from "./schedule/week-one.js";
 
 let prisma!: PrismaClient;
@@ -1113,6 +1115,7 @@ async function startServer() {
   registerWellnessRoutes(app, prisma, auth, requireRole, companyUserIds);
   registerAdminCwpRoutes(app, prisma, auth, requireRole, sanitizeUser);
   registerAdminMembershipRoutes(app, prisma, auth, requireRole);
+  registerCreditRoutes(app, prisma, jwtSecret);
   registerOnboardingRoutes(app, prisma, auth);
   registerMessagingRoutes(app, prisma, auth);
   registerChallengeRoutes(app, prisma, auth);
@@ -1121,6 +1124,7 @@ async function startServer() {
   await ensureSiteContent(prisma).catch((error) => console.error("[startup] site content:", error));
   await ensureMembershipTiers(prisma).catch((error) => console.error("[startup] membership tiers:", error));
   await ensureCreditPacks(prisma).catch((error) => console.error("[startup] credit packs:", error));
+  await expireLapsedWallets(prisma).catch((error) => console.error("[startup] credit expiry:", error));
   await migrateProgramCategories(prisma).catch((error) => console.error("[startup] program migrate:", error));
   await migrateProgramScheduleFields(prisma).catch((error) => console.error("[startup] program schedule migrate:", error));
   await migrateClassScheduleFields(prisma).catch((error) => console.error("[startup] class migrate:", error));

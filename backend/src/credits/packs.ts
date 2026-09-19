@@ -31,7 +31,7 @@ export const CREDIT_PACK_SEEDS: CreditPackSeed[] = [
  * Credits to book one place in a class. Meditation is absent deliberately —
  * it is free for anyone holding credits, the same as it is for members.
  */
-const CREDIT_COST: Record<string, number> = {
+export const CREDIT_COSTS: Record<string, number> = {
   YOGA: 2,
   AERIAL: 3,
   DANCE: 3,
@@ -52,7 +52,7 @@ export function isCreditEligible(category: string): boolean {
 
 /** Zero means free — covered without drawing down the balance. */
 export function creditCost(category: string): number {
-  return CREDIT_COST[normalize(category)] ?? 0;
+  return CREDIT_COSTS[normalize(category)] ?? 0;
 }
 
 /** Per-credit value of a pack, used to show the saving against walk-up. */
