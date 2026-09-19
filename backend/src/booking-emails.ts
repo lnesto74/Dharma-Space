@@ -1,6 +1,8 @@
 import type { Booking, PrismaClient } from "@prisma/client";
 import { programCategoryToSegment, segmentLabel, type InquirySegment } from "./inquiry-meta.js";
 import { inboxFor, isMailConfigured, notifyInbox, sendMail } from "./mail.js";
+import { providerFromLegacyMethod, settlePayment } from "./payments/ledger.js";
+import { parsePriceToCents } from "./payments/money.js";
 
 type BookingMail = Pick<
   Booking,
@@ -174,6 +176,23 @@ export async function completeBookingPayment(
   if (!booking) return null;
 
   if (transitioned.count > 0) {
+    // Every rail settles through here, so the ledger stays complete without each
+    // caller having to remember to record the money.
+    const { provider, method } = providerFromLegacyMethod(paymentMethod);
+    await settlePayment(
+      prisma,
+      { id: booking.id, reference: booking.reference, memberId: booking.memberId, price: booking.price },
+      {
+        provider,
+        method,
+        amountCents: parsePriceToCents(booking.price),
+        providerRef: booking.stripeSessionId,
+        providerPaymentRef: booking.stripePaymentIntentId
+      }
+    ).catch((error) => {
+      console.error("[payments] could not record settlement:", error);
+    });
+
     await sendBookingConfirmedEmails(booking).catch((error) => {
       console.error("[booking-mail] confirmation failed:", error);
     });

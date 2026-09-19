@@ -70,6 +70,31 @@ export const LIVE_SITE_TRAINERS = [
     credentials: "MTTC · RYT 500",
     imageUrl: `${LIVE_COMPONENT_BASE}/IMG_7730.342fea81.jpg`,
     sortOrder: 7
+  },
+  {
+    name: "Kasi Ramakrishnan",
+    role: "Meditation & Breathwork Curriculum Lead",
+    description: "Teacher trainer grounded in classical yoga lineage and neuroscience",
+    credentials: "MSc Applied Neuroscience (KCL) · E-RYT 200 · YACEP",
+    imageUrl: "/specialists/kasi-ramakrishnan.jpg",
+    sortOrder: 8
+  },
+  {
+    name: "Divya",
+    role: "Yoga Teacher",
+    description: "Blending movement, breath and mindfulness for everyday wellbeing",
+    credentials: "RYT-200HR · MSBA",
+    imageUrl: "/specialists/divya.jpg",
+    sortOrder: 9
+  },
+  {
+    name: "Claudia Ng",
+    role: "Yoga Teacher",
+    description:
+      "Creating space to reconnect and move with intention — cultivating strength, flexibility and calm on and off the mat.",
+    credentials: "200RYT",
+    imageUrl: "/specialists/claudia-ng.jpg",
+    sortOrder: 10
   }
 ] as const;
 
@@ -91,6 +116,21 @@ export async function syncTrainersFromLiveSite(prisma: import("@prisma/client").
           sortOrder: live.sortOrder
         }
       });
+      continue;
     }
+
+    // The seed only runs on an empty database, so a specialist added after the
+    // studio went live would never appear without this.
+    await prisma.siteTrainer.create({
+      data: {
+        name: live.name,
+        role: live.role,
+        description: live.description,
+        credentials: live.credentials,
+        imageUrl: live.imageUrl,
+        sortOrder: live.sortOrder
+      }
+    });
+    console.log(`[startup] Added specialist ${live.name}.`);
   }
 }

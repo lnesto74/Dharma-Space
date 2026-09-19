@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import {
   heroImg, yttImg, payNowQR,
@@ -1509,20 +1509,243 @@ function EventsPage({
 
 // ── Classes Page ──────────────────────────────────────────────────────────────
 
+type ScheduleEntry = {
+  id?: string;
+  day: string;
+  dayIndex?: number;
+  date?: string;
+  classDate?: string;
+  time: string;
+  startMinutes?: number;
+  durationMinutes?: number;
+  type: string;
+  category?: string;
+  entryType?: string;
+  capacity?: number;
+  instructor: string;
+  level: string;
+  location: string;
+  price?: string;
+  stripeLink?: string | null;
+  comingSoon?: boolean;
+};
+
+const WEEKDAY_ORDER = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
+
+/** Categories the studio groups under "Experience" on the printed schedule. */
+const EXPERIENCE_CATEGORIES = ["AERIAL", "SOUND", "DANCE", "MEDITATION"];
+
+function entryStyle(entry: ScheduleEntry) {
+  if (entry.entryType === "TRAINING") {
+    return { accent: "#7E2D3A", bg: "#F7E7E9", label: "", muted: false };
+  }
+  if (entry.entryType === "WORKSHOP_WINDOW") {
+    return { accent: "transparent", bg: "#F6ECD9", label: "", muted: true };
+  }
+  if (entry.category && EXPERIENCE_CATEGORIES.includes(entry.category)) {
+    return { accent: "#6B5CA5", bg: "#EFEBF9", label: "Experience", muted: false };
+  }
+  return { accent: "#9C4A3C", bg: "#FFFFFF", label: "", muted: false };
+}
+
+function minutesToLabel(total: number) {
+  const h24 = Math.floor(total / 60) % 24;
+  const m = total % 60;
+  const meridiem = h24 >= 12 ? "PM" : "AM";
+  const h12 = h24 % 12 || 12;
+  return { text: `${h12}:${String(m).padStart(2, "0")}`, meridiem };
+}
+
+/** "7:30 – 8:30 AM" when both ends share a meridiem, "11:45 AM – 1:15 PM" otherwise. */
+function timeRange(entry: ScheduleEntry) {
+  if (entry.startMinutes == null) return entry.time;
+  const start = minutesToLabel(entry.startMinutes);
+  const end = minutesToLabel(entry.startMinutes + (entry.durationMinutes ?? 60));
+  return start.meridiem === end.meridiem
+    ? `${start.text} – ${end.text} ${end.meridiem}`
+    : `${start.text} ${start.meridiem} – ${end.text} ${end.meridiem}`;
+}
+
+function dayDateLabel(classDate?: string) {
+  if (!classDate) return "";
+  return new Date(`${classDate}T12:00:00`).toLocaleDateString(undefined, {
+    day: "numeric",
+    month: "short"
+  });
+}
+
+function WeeklyScheduleGrid({
+  classes,
+  onBookClass
+}: {
+  classes: ScheduleEntry[];
+  onBookClass: (info: BookingInfo) => void;
+}) {
+  // Columns stay Monday-first to match the printed schedule, even when the
+  // published week starts on another day.
+  const columns = WEEKDAY_ORDER.map((weekday) => {
+    const entries = classes
+      .filter((c) => c.day === weekday)
+      .sort((a, b) => (a.startMinutes ?? 0) - (b.startMinutes ?? 0));
+    return {
+      weekday,
+      entries,
+      date: dayDateLabel(entries.find((e) => e.classDate)?.classDate),
+      bookable: entries.filter((e) => (e.entryType ?? "CLASS") === "CLASS").length
+    };
+  }).filter((col) => col.entries.length > 0);
+
+  return (
+    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-7 gap-x-4 gap-y-8">
+      {columns.map((col) => (
+        <div key={col.weekday}>
+          <div className="flex items-baseline justify-between border-t-2 border-[#2A2825] pt-3 mb-4">
+            <span className="text-[#2A2825] text-[15px]" style={{ fontFamily: "var(--font-display)" }}>
+              {col.weekday}
+            </span>
+            <span className="text-[#7A7468] text-[11px]" style={{ fontFamily: "var(--font-body)" }}>
+              {col.date}
+            </span>
+          </div>
+
+          <div className="space-y-3">
+            {col.entries.map((entry, i) => {
+              const style = entryStyle(entry);
+              const isClass = (entry.entryType ?? "CLASS") === "CLASS";
+              return (
+                <div
+                  key={entry.id ?? `${col.weekday}-${i}`}
+                  className={`pl-3 pr-3 py-3 border-l-[3px] transition-shadow duration-200 ${isClass ? "cursor-pointer hover:shadow-[0_6px_18px_rgba(42,40,37,0.10)]" : ""}`}
+                  style={{ borderLeftColor: style.accent, backgroundColor: style.bg }}
+                  onClick={
+                    isClass
+                      ? () =>
+                          onBookClass({
+                            type: entry.type,
+                            day: entry.comingSoon ? "Coming Soon" : entry.date || entry.day,
+                            time: entry.time,
+                            instructor: entry.instructor,
+                            level: entry.level,
+                            location: entry.location,
+                            classId: entry.id,
+                            stripeLink: entry.stripeLink || undefined,
+                            price: entry.price || "SGD 35",
+                            comingSoon: entry.comingSoon
+                          })
+                      : undefined
+                  }
+                >
+                  {style.label && (
+                    <p className="text-[#6B5CA5] text-[8px] tracking-[0.18em] uppercase mb-1" style={{ fontFamily: "var(--font-body)" }}>
+                      {style.label}
+                    </p>
+                  )}
+                  <p
+                    className={`text-[10px] mb-1 ${style.muted ? "text-[#9C8B6E]" : "text-[#7A7468]"}`}
+                    style={{ fontFamily: "var(--font-body)" }}
+                  >
+                    {timeRange(entry)}
+                    {entry.durationMinutes && entry.durationMinutes !== 60 && !style.muted && (
+                      <span className="text-[#A39B8E]"> · {entry.durationMinutes} min</span>
+                    )}
+                  </p>
+                  <p
+                    className={`text-[14px] leading-snug ${style.muted ? "text-[#9C8B6E]" : "text-[#2A2825]"}`}
+                    style={{ fontFamily: "var(--font-display)" }}
+                  >
+                    {entry.type}
+                  </p>
+                  {(entry.instructor || isClass) && (
+                    <div className="flex items-center justify-between gap-2 mt-2">
+                      <span className="text-[#7A7468] text-[11px]" style={{ fontFamily: "var(--font-body)" }}>
+                        {entry.instructor}
+                      </span>
+                      <span className="bg-[#2A2825]/[0.06] text-[#2A2825]/60 text-[8px] tracking-[0.12em] uppercase px-2 py-0.5" style={{ fontFamily: "var(--font-body)" }}>
+                        {entry.location}
+                      </span>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function ScheduleLegend() {
+  const items = [
+    { color: "#9C4A3C", label: "Regular", detail: "yoga classes" },
+    { color: "#6B5CA5", label: "Experience", detail: "aerial, sound, dance, meditation" },
+    { color: "#7E2D3A", label: "200-hr Teacher Training", detail: "" }
+  ];
+  return (
+    <div className="flex flex-wrap items-center justify-center gap-x-8 gap-y-2 mb-10">
+      {items.map((item) => (
+        <span key={item.label} className="flex items-center gap-2">
+          <span className="w-[3px] h-4" style={{ backgroundColor: item.color }} />
+          <span className="text-[#2A2825] text-[11px]" style={{ fontFamily: "var(--font-body)" }}>
+            {item.label}
+          </span>
+          {item.detail && (
+            <span className="text-[#7A7468] text-[11px]" style={{ fontFamily: "var(--font-body)" }}>
+              {item.detail}
+            </span>
+          )}
+        </span>
+      ))}
+    </div>
+  );
+}
+
 function ClassesPage({
   classSchedule,
   onBookClass
 }: {
-  classSchedule: Array<{ id?: string; day: string; date?: string; time: string; type: string; instructor: string; level: string; location: string; price?: string; stripeLink?: string | null; comingSoon?: boolean }>;
+  classSchedule: ScheduleEntry[];
   onBookClass: (info: BookingInfo) => void;
 }) {
-  const [activeDay, setActiveDay] = useState<string | null>(null);
   const [notifyOpen, setNotifyOpen] = useState(false);
-  const dayKey = (c: (typeof classSchedule)[number]) => c.date || c.day;
-  const days = [...new Set(classSchedule.map(dayKey))];
-  const filtered = activeDay ? classSchedule.filter((c) => dayKey(c) === activeDay) : classSchedule;
+  const [pickerOpen, setPickerOpen] = useState(false);
   const schedulePublished = classSchedule.some((c) => !c.comingSoon);
   const showSchedulePreview = classSchedule.length > 0 && !schedulePublished;
+
+  /**
+   * The studio publishes one week at a time, so show a single 7-day span
+   * starting at the next upcoming class. It rolls forward on its own as weeks
+   * pass, with no edit needed on the page.
+   */
+  const { weekClasses, weekLabel } = useMemo(() => {
+    const dated = classSchedule.filter((c) => c.classDate);
+    if (!dated.length) return { weekClasses: classSchedule, weekLabel: "" };
+
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const dates = [...new Set(dated.map((c) => c.classDate as string))].sort();
+    const firstDate =
+      dates.find((d) => new Date(`${d}T12:00:00`) >= today) ?? dates[0];
+
+    const start = new Date(`${firstDate}T12:00:00`);
+    const end = new Date(start);
+    end.setDate(end.getDate() + 6);
+
+    const inWeek = dated.filter((c) => {
+      const d = new Date(`${c.classDate}T12:00:00`);
+      return d >= start && d <= end;
+    });
+
+    const span = [...new Set(inWeek.map((c) => c.classDate as string))].sort();
+    const from = new Date(`${span[0]}T12:00:00`);
+    const to = new Date(`${span[span.length - 1]}T12:00:00`);
+    const label =
+      from.getMonth() === to.getMonth()
+        ? `${from.getDate()} – ${to.getDate()} ${to.toLocaleDateString(undefined, { month: "long" })} ${to.getFullYear()}`
+        : `${from.toLocaleDateString(undefined, { day: "numeric", month: "short" })} – ${to.toLocaleDateString(undefined, { day: "numeric", month: "short" })} ${to.getFullYear()}`;
+
+    return { weekClasses: inWeek, weekLabel: label };
+  }, [classSchedule]);
 
   return (
     <div>
@@ -1549,54 +1772,29 @@ function ClassesPage({
             <h2 className="text-3xl md:text-4xl font-normal text-[#2A2825] leading-[1.15]" style={{ fontFamily: "var(--font-display)" }}>
               Weekly Schedule
             </h2>
+            {weekLabel && (
+              <p className="text-[#7A7468] text-[13px] mt-4" style={{ fontFamily: "var(--font-body)" }}>
+                {weekLabel} · Room 1 16 mats, aerial · Room 2 10 mats, sound
+              </p>
+            )}
+            {!showSchedulePreview && (
+              <button
+                type="button"
+                onClick={() => setPickerOpen(true)}
+                className="mt-8 px-9 py-3.5 bg-[#C4785A] text-white text-[11px] tracking-[0.15em] uppercase hover:bg-[#B86848] transition-colors duration-300"
+                style={{ fontFamily: "var(--font-body)" }}
+              >
+                Book a class
+              </button>
+            )}
           </div>
           <div className="relative">
             <div
               className={showSchedulePreview ? "blur-[5px] opacity-45 pointer-events-none select-none" : undefined}
               aria-hidden={showSchedulePreview}
             >
-              <div className="flex flex-wrap gap-2 justify-center mb-10">
-                <button onClick={() => setActiveDay(null)} className={`px-5 py-2 text-[11px] tracking-[0.15em] uppercase transition-all duration-200 ${!activeDay ? "bg-[#C4785A] text-white" : "bg-white text-[#2A2825]/60 hover:text-[#2A2825]"}`} style={{ fontFamily: "var(--font-body)" }}>
-                  All Days
-                </button>
-                {days.map(d => (
-                  <button key={d} onClick={() => setActiveDay(d === activeDay ? null : d)} className={`px-5 py-2 text-[11px] tracking-[0.15em] uppercase transition-all duration-200 ${activeDay === d ? "bg-[#C4785A] text-white" : "bg-white text-[#2A2825]/60 hover:text-[#2A2825]"}`} style={{ fontFamily: "var(--font-body)" }}>
-                    {d}
-                  </button>
-                ))}
-              </div>
-              <div className="space-y-2">
-                {filtered.map((cls, i) => (
-                  <div key={i} className="bg-white flex flex-col sm:flex-row sm:items-center justify-between p-6 gap-3 hover:border-l-2 hover:border-[#C4785A] transition-all duration-200">
-                    <div className="flex items-center gap-6">
-                      <div className="text-[#C4785A] text-[13px] font-medium w-14" style={{ fontFamily: "var(--font-body)" }}>{cls.time}</div>
-                      <div>
-                        <span className="text-[#2A2825] font-medium text-sm" style={{ fontFamily: "var(--font-body)" }}>{cls.type}</span>
-                        <span className="text-[#7A7468] text-[12px] ml-2" style={{ fontFamily: "var(--font-body)" }}>with {cls.instructor}</span>
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-5 ml-20 sm:ml-0">
-                      <span className="text-[11px] text-[#7A7468] tracking-wide" style={{ fontFamily: "var(--font-body)" }}>{cls.date || cls.day}</span>
-                      <span className="bg-[#F2EBE0] text-[#2A2825]/60 text-[10px] tracking-wider px-3 py-1 uppercase" style={{ fontFamily: "var(--font-body)" }}>{cls.level}</span>
-                      <span className="text-[#7A7468] text-[12px]" style={{ fontFamily: "var(--font-body)" }}>{cls.location}</span>
-                      <button onClick={() => onBookClass({
-                        type: cls.type,
-                        day: cls.comingSoon ? "Coming Soon" : (cls.date || cls.day),
-                        time: cls.time,
-                        instructor: cls.instructor,
-                        level: cls.level,
-                        location: cls.location,
-                        classId: cls.id,
-                        stripeLink: cls.stripeLink || undefined,
-                        price: cls.price || "SGD 35",
-                        comingSoon: cls.comingSoon
-                      })} className="px-4 py-1.5 border border-[#C4785A] text-[#C4785A] text-[10px] tracking-[0.12em] uppercase hover:bg-[#C4785A] hover:text-white transition-all duration-200" style={{ fontFamily: "var(--font-body)" }}>
-                        {cls.comingSoon ? "Reserve Spot" : "Book"}
-                      </button>
-                    </div>
-                  </div>
-                ))}
-              </div>
+              <ScheduleLegend />
+              <WeeklyScheduleGrid classes={weekClasses} onBookClass={onBookClass} />
             </div>
 
             {showSchedulePreview && (
@@ -1625,6 +1823,113 @@ function ClassesPage({
       </section>
 
       {notifyOpen && <ClassScheduleNotifyModal onClose={() => setNotifyOpen(false)} />}
+      {pickerOpen && (
+        <ClassPickerModal
+          classes={weekClasses}
+          onClose={() => setPickerOpen(false)}
+          onPick={(info) => {
+            setPickerOpen(false);
+            onBookClass(info);
+          }}
+        />
+      )}
+    </div>
+  );
+}
+
+/**
+ * Entry point for people who click "Book a class" rather than a specific slot.
+ * Narrows day then class, and hands off to the same booking modal the grid uses.
+ */
+function ClassPickerModal({
+  classes,
+  onClose,
+  onPick
+}: {
+  classes: ScheduleEntry[];
+  onClose: () => void;
+  onPick: (info: BookingInfo) => void;
+}) {
+  const bookable = classes.filter((c) => (c.entryType ?? "CLASS") === "CLASS");
+  const days = WEEKDAY_ORDER.filter((d) => bookable.some((c) => c.day === d));
+  const [day, setDay] = useState<string>(days[0] ?? "");
+  const forDay = bookable
+    .filter((c) => c.day === day)
+    .sort((a, b) => (a.startMinutes ?? 0) - (b.startMinutes ?? 0));
+
+  return (
+    <div className="fixed inset-0 z-[90] flex items-center justify-center p-4 bg-[#1A1815]/70 backdrop-blur-sm" onClick={onClose}>
+      <div
+        className="bg-[#FAF8F3] w-full max-w-lg max-h-[85vh] overflow-y-auto shadow-[0_24px_64px_rgba(42,40,37,0.2)]"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-start justify-between p-7 pb-5">
+          <div>
+            <p className="text-[#C4785A] text-[10px] tracking-[0.25em] uppercase mb-2" style={{ fontFamily: "var(--font-body)" }}>
+              Book a class
+            </p>
+            <h3 className="text-2xl font-normal text-[#2A2825]" style={{ fontFamily: "var(--font-display)" }}>
+              Pick your day
+            </h3>
+          </div>
+          <button type="button" onClick={onClose} className="text-[#7A7468] hover:text-[#2A2825] transition-colors" aria-label="Close">
+            <X size={20} />
+          </button>
+        </div>
+
+        <div className="px-7 flex flex-wrap gap-2 pb-5">
+          {days.map((d) => (
+            <button
+              key={d}
+              type="button"
+              onClick={() => setDay(d)}
+              className={`px-4 py-2 text-[11px] tracking-[0.12em] uppercase transition-colors duration-200 ${d === day ? "bg-[#C4785A] text-white" : "bg-white text-[#2A2825]/60 hover:text-[#2A2825]"}`}
+              style={{ fontFamily: "var(--font-body)" }}
+            >
+              {d.slice(0, 3)}
+            </button>
+          ))}
+        </div>
+
+        <div className="px-7 pb-7 space-y-2">
+          {forDay.map((entry) => (
+            <button
+              key={entry.id}
+              type="button"
+              onClick={() =>
+                onPick({
+                  type: entry.type,
+                  day: entry.comingSoon ? "Coming Soon" : entry.date || entry.day,
+                  time: entry.time,
+                  instructor: entry.instructor,
+                  level: entry.level,
+                  location: entry.location,
+                  classId: entry.id,
+                  stripeLink: entry.stripeLink || undefined,
+                  price: entry.price || "SGD 35",
+                  comingSoon: entry.comingSoon
+                })
+              }
+              className="w-full bg-white p-4 flex items-center justify-between gap-4 text-left hover:shadow-[0_6px_18px_rgba(42,40,37,0.10)] transition-shadow duration-200"
+            >
+              <div>
+                <p className="text-[#2A2825] text-[14px]" style={{ fontFamily: "var(--font-display)" }}>{entry.type}</p>
+                <p className="text-[#7A7468] text-[11px] mt-0.5" style={{ fontFamily: "var(--font-body)" }}>
+                  {timeRange(entry)}{entry.instructor ? ` · ${entry.instructor}` : ""} · {entry.location}
+                </p>
+              </div>
+              <span className="text-[#C4785A] text-[12px] whitespace-nowrap" style={{ fontFamily: "var(--font-body)" }}>
+                {entry.price || "SGD 35"}
+              </span>
+            </button>
+          ))}
+          {!forDay.length && (
+            <p className="text-[#7A7468] text-[13px] text-center py-6" style={{ fontFamily: "var(--font-body)" }}>
+              No classes scheduled on this day.
+            </p>
+          )}
+        </div>
+      </div>
     </div>
   );
 }
@@ -1797,9 +2102,21 @@ function PayNowStep({ amount, reference, name, email, phone, notes, title, booki
   );
 }
 
-function ConfirmedStep({ name, title, variant = "stripe" }: { name: string; title: string; variant?: "stripe" | "paynow" | "waitlist" }) {
+function ConfirmedStep({
+  name,
+  title,
+  variant = "stripe",
+  membershipNote
+}: {
+  name: string;
+  title: string;
+  variant?: "stripe" | "paynow" | "waitlist" | "membership";
+  membershipNote?: string;
+}) {
   const message =
-    variant === "paynow"
+    variant === "membership"
+      ? <>You&apos;re booked into <strong className="text-[#2A2825]">{title}</strong>, <strong className="text-[#2A2825]">{name || "friend"}</strong> — nothing to pay, it&apos;s covered by your membership. See you on the mat.</>
+      : variant === "paynow"
       ? <>Thank you, <strong className="text-[#2A2825]">{name || "friend"}</strong>. We&apos;ll verify your PayNow payment for <strong className="text-[#2A2825]">{title}</strong> and send a confirmation to your email within a few hours.</>
       : variant === "waitlist"
         ? <>Thank you, <strong className="text-[#2A2825]">{name || "friend"}</strong>. You&apos;re on the list for <strong className="text-[#2A2825]">{title}</strong>. We&apos;ll email you when dates are announced.</>
@@ -1814,6 +2131,11 @@ function ConfirmedStep({ name, title, variant = "stripe" }: { name: string; titl
       <p className="text-[#7A7468] text-[14px] leading-relaxed max-w-xs mx-auto" style={{ fontFamily: "var(--font-body)" }}>
         {message}
       </p>
+      {membershipNote && (
+        <p className="text-[#C4785A] text-[12px] mt-3" style={{ fontFamily: "var(--font-body)" }}>
+          {membershipNote}
+        </p>
+      )}
       <p className="text-[#7A7468] text-[12px] mt-4" style={{ fontFamily: "var(--font-body)" }}>
         Need help? WhatsApp +65 9866 4331
       </p>
@@ -2219,17 +2541,21 @@ function BookingModal({ info, onClose }: { info: BookingInfo; onClose: () => voi
   const isComingSoon = Boolean(info.comingSoon ?? info.day === "Coming Soon");
   const bookable = !isComingSoon;
 
-  type Step = "auth" | "confirm" | "waitlist" | "done";
+  type Step = "auth" | "confirm" | "waitlist" | "paynow" | "done";
   const [step, setStep] = useState<Step>(() => {
     if (isLoggedIn) return isComingSoon ? "waitlist" : "confirm";
     return "auth";
   });
+  const [payReference, setPayReference] = useState("");
+  const [payAmount, setPayAmount] = useState("");
   const [phone, setPhone] = useState("");
   const [notes, setNotes] = useState("");
   const [waitlistSent, setWaitlistSent] = useState(false);
   const [submitError, setSubmitError] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [alreadyBooked, setAlreadyBooked] = useState(false);
+  // Set when the class was covered by the member's plan, so no checkout happens.
+  const [membershipNote, setMembershipNote] = useState("");
   const code = info.code ?? info.type.replace(/\s+/g, "").slice(0, 8);
 
   useEffect(() => {
@@ -2302,11 +2628,23 @@ function BookingModal({ info, onClose }: { info: BookingInfo; onClose: () => voi
         await updateMemberProfile(token, { phone: formatPhone(phone) || null });
         await refreshMember();
       }
+      // The server picks the rail — it knows whether Stripe is set up.
       const result = await createMemberBooking(token, {
         siteClassId: info.classId,
-        notes: notes || undefined,
-        paymentMethod: "STRIPE"
+        notes: notes || undefined
       });
+      // Covered by the member's plan — already confirmed, no checkout to send them to.
+      if (result.membership) {
+        setMembershipNote(result.membership.reason);
+        setStep("done");
+        return;
+      }
+      if (result.booking.paymentMethod === "PAYNOW") {
+        setPayReference(result.booking.reference);
+        setPayAmount(result.payNowAmount || result.booking.price);
+        setStep("paynow");
+        return;
+      }
       if (result.checkoutUrl) {
         savePendingStripeBooking({
           name: member.name,
@@ -2438,7 +2776,37 @@ function BookingModal({ info, onClose }: { info: BookingInfo; onClose: () => voi
           </>
         )}
 
-        {step === "done" && <ConfirmedStep name={member?.name || ""} title={info.type} variant={waitlistSent ? "waitlist" : "stripe"} />}
+        {step === "paynow" && member && (
+          <PayNowStep
+            amount={payAmount}
+            reference={payReference}
+            name={member.name}
+            email={member.email}
+            phone={formatPhone(phone) || ""}
+            notes={notes}
+            title={info.type}
+            bookingType="Drop-in class"
+            date={info.day}
+            schedule={info.time}
+            programCategory="REGULAR_CLASS"
+            location={info.location}
+            facilitator={info.instructor}
+            price={info.price}
+            memberBooking
+            onDone={() => setStep("done")}
+          />
+        )}
+
+        {step === "done" && (
+          <ConfirmedStep
+            name={member?.name || ""}
+            title={info.type}
+            variant={
+              waitlistSent ? "waitlist" : membershipNote ? "membership" : payReference ? "paynow" : "stripe"
+            }
+            membershipNote={membershipNote}
+          />
+        )}
       </div>
     </div>
   );
@@ -2950,7 +3318,11 @@ export default function MarketingSite({
             ? new Date(`${c.classDate}T12:00:00`).toLocaleDateString(undefined, { weekday: "short", day: "numeric", month: "short" })
             : undefined,
           time: c.time,
+          durationMinutes: c.durationMinutes,
           type: c.classType,
+          category: c.category,
+          entryType: c.entryType,
+          capacity: c.capacity,
           instructor: c.instructor,
           level: c.level,
           location: c.location,
@@ -2967,6 +3339,10 @@ export default function MarketingSite({
           sortOrder: 0,
           dayIndex: 0,
           startMinutes: 0,
+          durationMinutes: 60,
+          category: "YOGA",
+          entryType: "CLASS",
+          capacity: 0,
           classDate: undefined,
           date: undefined
         }))

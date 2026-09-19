@@ -1,4 +1,5 @@
 import type { PrismaClient, SiteClass } from "@prisma/client";
+import { defaultCapacityFor } from "./schedule/capacity.js";
 
 export const WEEKDAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"] as const;
 export type Weekday = (typeof WEEKDAYS)[number];
@@ -6,6 +7,10 @@ export type Weekday = (typeof WEEKDAYS)[number];
 export const DEFAULT_DURATION_MINUTES = 60;
 export const CALENDAR_START_MINUTES = 6 * 60;
 export const CALENDAR_END_MINUTES = 22 * 60;
+/**
+ * Height of one row in the admin calendar grid. Purely visual — classes are
+ * positioned proportionally and are never rounded to it.
+ */
 export const SLOT_MINUTES = 30;
 
 export function dayToIndex(day: string): number {
@@ -88,6 +93,15 @@ export function formatMinutesToTime(minutes: number): string {
   return `${hours12}:${String(mins).padStart(2, "0")} ${meridiem}`;
 }
 
+/** Keeps a time within the day without altering the minute it falls on. */
+export function clampMinutes(minutes: number): number {
+  return Math.max(0, Math.min(24 * 60 - 1, Math.round(minutes)));
+}
+
+/**
+ * Rounds to a step. Only for the admin calendar's drag-and-drop, which drops
+ * onto grid rows — never apply it to a published time.
+ */
 export function snapMinutes(minutes: number, step = SLOT_MINUTES): number {
   return Math.round(minutes / step) * step;
 }
@@ -102,6 +116,9 @@ export function serializeClass(row: SiteClass) {
     startMinutes: row.startMinutes,
     durationMinutes: row.durationMinutes,
     classType: row.classType,
+    category: row.category,
+    entryType: row.entryType,
+    capacity: row.capacity,
     instructor: row.instructor,
     level: row.level,
     location: row.location,
@@ -123,6 +140,9 @@ export type ClassScheduleInput = {
   startMinutes?: number;
   durationMinutes?: number;
   classType?: string;
+  category?: string;
+  entryType?: string;
+  capacity?: number;
   instructor?: string;
   level?: string;
   location?: string;
@@ -147,19 +167,32 @@ export function normalizeClassSchedule(input: ClassScheduleInput): ClassSchedule
     next.day = indexToDay(next.dayIndex);
   }
 
+  // Times are stored exactly as published. The studio schedules on quarter
+  // hours and leans on uneven gaps to turn a room over between classes, so
+  // rounding here would quietly rewrite the timetable.
   if (next.startMinutes != null) {
-    next.startMinutes = snapMinutes(next.startMinutes);
+    next.startMinutes = clampMinutes(next.startMinutes);
     next.time = formatMinutesToTime(next.startMinutes);
   } else if (next.time) {
     const parsed = parseTimeToMinutes(next.time);
     if (parsed != null) {
-      next.startMinutes = snapMinutes(parsed);
+      next.startMinutes = clampMinutes(parsed);
       next.time = formatMinutesToTime(next.startMinutes);
     }
   }
 
   if (next.durationMinutes != null) {
-    next.durationMinutes = Math.max(SLOT_MINUTES, snapMinutes(next.durationMinutes, SLOT_MINUTES));
+    next.durationMinutes = Math.max(5, Math.round(next.durationMinutes));
+  }
+
+  // Fall back to the room/class-type limit so a new class is never uncapped by
+  // omission. An explicit capacity from the editor always wins.
+  if (next.capacity == null) {
+    next.capacity = defaultCapacityFor({
+      category: next.category,
+      location: next.location,
+      entryType: next.entryType
+    });
   }
 
   return next;
@@ -169,7 +202,7 @@ export async function migrateClassScheduleFields(prisma: PrismaClient) {
   const rows = await prisma.siteClass.findMany();
   for (const row of rows) {
     const parsed = parseTimeToMinutes(row.time);
-    const startMinutes = parsed != null ? snapMinutes(parsed) : row.startMinutes || 420;
+    const startMinutes = parsed != null ? clampMinutes(parsed) : row.startMinutes || 420;
     const dayIndex = dayToIndex(row.day);
     const classDate = row.classDate?.trim() || nextClassDateForDayIndex(dayIndex);
     const needsUpdate =

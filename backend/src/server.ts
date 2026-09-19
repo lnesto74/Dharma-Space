@@ -47,6 +47,10 @@ import { registerMessagingRoutes } from "./messaging-routes.js";
 import { registerChallengeRoutes } from "./challenge-routes.js";
 import { saveUploadedAvatarFile } from "./avatar-media.js";
 import { registerAdminCwpRoutes } from "./admin-cwp-routes.js";
+import { registerAdminMembershipRoutes } from "./admin-membership-routes.js";
+import { ensureMembershipTiers } from "./memberships/seed.js";
+import { ensureCreditPacks } from "./credits/seed.js";
+import { ensureWeekOneSchedule } from "./schedule/week-one.js";
 
 let prisma!: PrismaClient;
 const app = express();
@@ -1108,15 +1112,19 @@ async function startServer() {
   registerSiteBookingRoutes(app, prisma, jwtSecret, auth, requireRole("SUPER_ADMIN"));
   registerWellnessRoutes(app, prisma, auth, requireRole, companyUserIds);
   registerAdminCwpRoutes(app, prisma, auth, requireRole, sanitizeUser);
+  registerAdminMembershipRoutes(app, prisma, auth, requireRole);
   registerOnboardingRoutes(app, prisma, auth);
   registerMessagingRoutes(app, prisma, auth);
   registerChallengeRoutes(app, prisma, auth);
   installErrorHandler();
   await ensureSiteAdmin().catch((error) => console.error("[startup] site admin:", error));
   await ensureSiteContent(prisma).catch((error) => console.error("[startup] site content:", error));
+  await ensureMembershipTiers(prisma).catch((error) => console.error("[startup] membership tiers:", error));
+  await ensureCreditPacks(prisma).catch((error) => console.error("[startup] credit packs:", error));
   await migrateProgramCategories(prisma).catch((error) => console.error("[startup] program migrate:", error));
   await migrateProgramScheduleFields(prisma).catch((error) => console.error("[startup] program schedule migrate:", error));
   await migrateClassScheduleFields(prisma).catch((error) => console.error("[startup] class migrate:", error));
+  await ensureWeekOneSchedule(prisma).catch((error) => console.error("[startup] week 1 schedule:", error));
 
   app.listen(port, "0.0.0.0", () => {
     logMailStatus();

@@ -72,6 +72,27 @@ export const LIVE_SITE_SPECIALISTS: LiveSpecialist[] = [
     desc: "Bringing the depth of classical yoga philosophy and meditation into modern life — making ancient teachings accessible, transformative, and deeply relevant.",
     cert: "MTTC · RYT 500",
     img: `${LIVE_COMPONENT_BASE}/IMG_7730.342fea81.jpg`
+  },
+  {
+    name: "Kasi Ramakrishnan",
+    role: "Meditation & Breathwork Curriculum Lead",
+    desc: "Teacher trainer grounded in classical yoga lineage and neuroscience",
+    cert: "MSc Applied Neuroscience (KCL) · E-RYT 200 · YACEP",
+    img: "/specialists/kasi-ramakrishnan.jpg"
+  },
+  {
+    name: "Divya",
+    role: "Yoga Teacher",
+    desc: "Blending movement, breath and mindfulness for everyday wellbeing",
+    cert: "RYT-200HR · MSBA",
+    img: "/specialists/divya.jpg"
+  },
+  {
+    name: "Claudia Ng",
+    role: "Yoga Teacher",
+    desc: "Creating space to reconnect and move with intention — cultivating strength, flexibility and calm on and off the mat.",
+    cert: "200RYT",
+    img: "/specialists/claudia-ng.jpg"
   }
 ];
 

@@ -161,6 +161,8 @@ export async function createMemberBooking(
     booking: MemberBooking;
     checkoutUrl?: string | null;
     payNowAmount?: string | null;
+    /** Present when the plan covered the class, so there is nothing to pay. */
+    membership?: { reason: string; sessionsSpent: number };
   }>("/api/member/bookings", token, {
     method: "POST",
     body: JSON.stringify(input)

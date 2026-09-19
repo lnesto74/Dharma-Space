@@ -19,6 +19,21 @@ import {
 } from "./stripe.js";
 import { completeBookingPayment, sendBookingPayNowPendingEmails } from "./booking-emails.js";
 import { verifyGoogleIdToken } from "./google-auth.js";
+import {
+  deriveCategory,
+  resolvePaymentPlan,
+  type MembershipContext,
+  type PaymentPlan
+} from "./memberships/booking-rules.js";
+import {
+  cancelPayments,
+  openPayment,
+  primaryPayment,
+  providerFromLegacyMethod,
+  refundPayment
+} from "./payments/ledger.js";
+import { parsePriceToCents } from "./payments/money.js";
+import type { WalletLedger } from "./credits/wallet.js";
 
 export type MemberToken = { sub: string; kind: "site_member" };
 
@@ -65,6 +80,9 @@ export function serializeBooking(booking: {
   refundedAt: Date | null;
   createdAt: Date;
   updatedAt: Date;
+  membershipId?: string | null;
+  membershipPeriodId?: string | null;
+  sessionsSpent?: number;
 }) {
   const refundable =
     booking.status === "PAID" &&
@@ -92,6 +110,8 @@ export function serializeBooking(booking: {
     customerPhone: booking.customerPhone,
     status: booking.status,
     paymentMethod: booking.paymentMethod,
+    membershipId: booking.membershipId ?? null,
+    sessionsSpent: booking.sessionsSpent ?? 0,
     stripeCheckoutUrl: booking.stripeCheckoutUrl,
     paidAt: booking.paidAt?.toISOString() ?? null,
     refundedAt: booking.refundedAt?.toISOString() ?? null,
@@ -175,6 +195,9 @@ async function loadOffering(prisma: PrismaClient, input: { siteProgramId?: strin
       siteClassId: null as string | null,
       offeringTitle: program.title,
       category: program.category,
+      // Programs (workshops, trainings, events) are never part of a weekly
+      // membership allowance — they're ticketed separately.
+      membershipCategory: null as string | null,
       scheduledLabel: program.dates,
       time: program.time,
       location: program.location,
@@ -199,13 +222,18 @@ async function loadOffering(prisma: PrismaClient, input: { siteProgramId?: strin
       siteClassId: siteClass.id,
       offeringTitle: siteClass.classType,
       category: "REGULAR_CLASS",
+      // The membership category (YOGA / AERIAL / …) decides which plans cover it,
+      // separately from the booking's "REGULAR_CLASS" grouping category.
+      membershipCategory: siteClass.category || deriveCategory(siteClass.classType),
       scheduledLabel,
       time: siteClass.time,
       location: siteClass.location,
       facilitator: siteClass.instructor,
       price: siteClass.price,
       stripeLink: siteClass.stripeLink,
-      usePayNow: false,
+      // Drop-ins can be settled by PayNow, same as programs. Per-class Stripe
+      // links don't scale to a timetable republished every week.
+      usePayNow: true,
       depositAmount: null as string | null
     };
   }
@@ -263,6 +291,250 @@ export async function getBookableOfferings(prisma: PrismaClient) {
   };
 }
 
+/** The member's current plan and this month's ledger, if they have one. */
+export async function loadMembershipContext(
+  prisma: PrismaClient,
+  memberId: string
+): Promise<MembershipContext | null> {
+  const membership = await prisma.membership.findFirst({
+    where: { memberId, status: { not: "CANCELLED" } },
+    include: {
+      tier: true,
+      periods: { orderBy: { periodStart: "desc" }, take: 1 }
+    }
+  });
+  if (!membership) return null;
+  const period = membership.periods[0] ?? null;
+  return {
+    membershipId: membership.id,
+    status: membership.status,
+    allowedCategories: membership.tier.allowedCategories,
+    period: period
+      ? {
+          id: period.id,
+          sessionsIncluded: period.sessionsIncluded,
+          sessionsUsed: period.sessionsUsed,
+          sessionsRolledIn: period.sessionsRolledIn
+        }
+      : null
+  };
+}
+
+/**
+ * Every credit wallet this person may spend from — their own purchases plus any
+ * pack someone else shared with them. Expired and spent-out packs are filtered
+ * here so the booking rules only ever see usable balances.
+ */
+export async function loadCreditWallets(
+  prisma: PrismaClient,
+  memberId: string
+): Promise<WalletLedger[]> {
+  return prisma.creditWallet.findMany({
+    where: {
+      status: "ACTIVE",
+      expiresAt: { gt: new Date() },
+      OR: [{ ownerId: memberId }, { sharedWith: { some: { memberId } } }]
+    },
+    select: {
+      id: true,
+      creditsTotal: true,
+      creditsUsed: true,
+      expiresAt: true,
+      status: true
+    }
+  });
+}
+
+/**
+ * Confirms a booking paid out of a credit pack. The draw, the booking and the
+ * ledger entry are one transaction, so a shared wallet can never be debited
+ * without a booking to show for it — and two people spending the last credits
+ * at the same moment can't both succeed.
+ */
+async function createCreditBooking(
+  prisma: PrismaClient,
+  member: SiteMember,
+  offering: Awaited<ReturnType<typeof loadOffering>>,
+  plan: Extract<PaymentPlan, { method: "CREDITS" }>,
+  notes?: string
+) {
+  const reference = bookingReference();
+
+  const booking = await prisma.$transaction(async (tx) => {
+    if (plan.creditsSpent > 0) {
+      // Re-check inside the transaction — this wallet may be shared, so someone
+      // else could have spent the balance since the plan was resolved.
+      const wallet = await tx.creditWallet.findUnique({ where: { id: plan.walletId } });
+      if (!wallet) throw Object.assign(new Error("Credit pack not found."), { status: 409 });
+      const remaining = wallet.creditsTotal - wallet.creditsUsed;
+      if (
+        wallet.status !== "ACTIVE" ||
+        wallet.expiresAt.getTime() <= Date.now() ||
+        remaining < plan.creditsSpent
+      ) {
+        throw Object.assign(new Error("Not enough credits left in the pack."), { status: 409 });
+      }
+      await tx.creditWallet.update({
+        where: { id: plan.walletId },
+        data: { creditsUsed: { increment: plan.creditsSpent } }
+      });
+    }
+
+    const created = await tx.booking.create({
+      data: {
+        reference,
+        memberId: member.id,
+        siteProgramId: offering.siteProgramId,
+        siteClassId: offering.siteClassId,
+        offeringType: offering.offeringType,
+        offeringTitle: offering.offeringTitle,
+        category: offering.category,
+        scheduledLabel: offering.scheduledLabel,
+        time: offering.time,
+        location: offering.location,
+        facilitator: offering.facilitator,
+        price:
+          plan.creditsSpent > 0
+            ? `${plan.creditsSpent} credit${plan.creditsSpent === 1 ? "" : "s"}`
+            : "Free with credits",
+        guests: 1,
+        notes: notes?.trim() || null,
+        customerName: member.name,
+        customerEmail: member.email,
+        customerPhone: member.phone,
+        // Nothing to collect — the pack was paid for up front.
+        status: "PAID",
+        paidAt: new Date(),
+        paymentMethod: "CREDITS",
+        creditWalletId: plan.walletId,
+        creditsSpent: plan.creditsSpent
+      }
+    });
+
+    // Who spent what, so a pack shared between people can be accounted for.
+    await tx.creditLedgerEntry.create({
+      data: {
+        walletId: plan.walletId,
+        memberId: member.id,
+        bookingId: created.id,
+        credits: -plan.creditsSpent,
+        reason: `${offering.offeringTitle} — ${plan.reason}`
+      }
+    });
+
+    await openPayment(tx, {
+      bookingId: created.id,
+      memberId: member.id,
+      reference,
+      provider: "CREDITS",
+      method: "CREDITS",
+      amountCents: 0,
+      paid: true
+    });
+
+    return created;
+  });
+
+  return {
+    booking: serializeBooking(booking),
+    checkoutUrl: null as string | null,
+    payNowAmount: null as string | null,
+    credits: {
+      reason: plan.reason,
+      creditsSpent: plan.creditsSpent,
+      walletId: plan.walletId
+    }
+  };
+}
+
+/**
+ * Confirms a booking paid out of the membership allowance. The session draw and
+ * the booking row are written in one transaction so an allowance can never be
+ * decremented without a booking to show for it.
+ */
+async function createMembershipBooking(
+  prisma: PrismaClient,
+  member: SiteMember,
+  offering: Awaited<ReturnType<typeof loadOffering>>,
+  plan: Extract<PaymentPlan, { method: "MEMBERSHIP" }>,
+  notes?: string
+) {
+  const reference = bookingReference();
+
+  const booking = await prisma.$transaction(async (tx) => {
+    if (plan.sessionsSpent > 0 && plan.periodId) {
+      // Re-check inside the transaction so two concurrent bookings can't both
+      // take the last included session.
+      const period = await tx.membershipPeriod.findUnique({ where: { id: plan.periodId } });
+      if (!period) throw Object.assign(new Error("Membership period not found."), { status: 409 });
+      const available =
+        period.sessionsIncluded === null
+          ? Number.POSITIVE_INFINITY
+          : period.sessionsIncluded + period.sessionsRolledIn - period.sessionsUsed;
+      if (available < plan.sessionsSpent) {
+        throw Object.assign(
+          new Error("No included sessions left this period."),
+          { status: 409 }
+        );
+      }
+      await tx.membershipPeriod.update({
+        where: { id: plan.periodId },
+        data: { sessionsUsed: { increment: plan.sessionsSpent } }
+      });
+    }
+
+    const created = await tx.booking.create({
+      data: {
+        reference,
+        memberId: member.id,
+        siteProgramId: offering.siteProgramId,
+        siteClassId: offering.siteClassId,
+        offeringType: offering.offeringType,
+        offeringTitle: offering.offeringTitle,
+        category: offering.category,
+        scheduledLabel: offering.scheduledLabel,
+        time: offering.time,
+        location: offering.location,
+        facilitator: offering.facilitator,
+        price: plan.sessionsSpent > 0 ? "Included in membership" : "Free on membership",
+        guests: 1,
+        notes: notes?.trim() || null,
+        customerName: member.name,
+        customerEmail: member.email,
+        customerPhone: member.phone,
+        // Nothing to collect — the membership already paid for it.
+        status: "PAID",
+        paidAt: new Date(),
+        paymentMethod: "MEMBERSHIP",
+        membershipId: plan.membershipId,
+        membershipPeriodId: plan.periodId,
+        sessionsSpent: plan.sessionsSpent
+      }
+    });
+
+    // A zero-value payment, so a membership class still appears in the ledger
+    // next to cash and card takings rather than vanishing from the day's report.
+    await openPayment(tx, {
+      bookingId: created.id,
+      memberId: member.id,
+      reference,
+      provider: "MEMBERSHIP",
+      method: "MEMBERSHIP",
+      amountCents: 0,
+      paid: true
+    });
+
+    return created;
+  });
+
+  return {
+    booking: serializeBooking(booking),
+    checkoutUrl: null as string | null,
+    payNowAmount: null as string | null,
+    membership: { reason: plan.reason, sessionsSpent: plan.sessionsSpent }
+  };
+}
+
 export async function createSiteBooking(
   prisma: PrismaClient,
   member: SiteMember,
@@ -277,7 +549,37 @@ export async function createSiteBooking(
 
   await assertMemberHasNoActiveBooking(prisma, member.id, offering);
 
-  const paymentMethod = input.paymentMethod ?? (offering.usePayNow && !stripeConfigured() ? "PAYNOW" : "STRIPE");
+  // A weekly class may be covered by the member's plan. If it is, the booking is
+  // confirmed against their allowance instead of going to checkout.
+  const plan = offering.membershipCategory
+    ? resolvePaymentPlan(
+        offering.membershipCategory,
+        await loadMembershipContext(prisma, member.id),
+        await loadCreditWallets(prisma, member.id)
+      )
+    : { method: "DROP_IN" as const, reason: "Ticketed separately from memberships." };
+
+  if (plan.method === "MEMBERSHIP") {
+    return createMembershipBooking(prisma, member, offering, plan, input.notes);
+  }
+
+  if (plan.method === "CREDITS") {
+    return createCreditBooking(prisma, member, offering, plan, input.notes);
+  }
+
+  // Whether Stripe can take this payment is a server-side fact: it needs either
+  // API keys or a payment link on the offering. The browser asking for Stripe
+  // doesn't make it available, so a request for it falls back to PayNow rather
+  // than failing the booking outright.
+  const stripeAvailable = stripeConfigured() || Boolean(offering.stripeLink?.trim());
+  const paymentMethod: "STRIPE" | "PAYNOW" = stripeAvailable
+    ? input.paymentMethod === "PAYNOW" && offering.usePayNow
+      ? "PAYNOW"
+      : "STRIPE"
+    : offering.usePayNow
+      ? "PAYNOW"
+      : "STRIPE";
+
   const reference = bookingReference();
   const priceLabel = offering.depositAmount || offering.price;
 
@@ -301,7 +603,12 @@ export async function createSiteBooking(
       checkoutUrl = stripeCheckoutUrl(offering.stripeLink, member.email, reference);
     }
     if (!checkoutUrl) {
-      throw Object.assign(new Error("Online payment is not available for this offering yet."), { status: 400 });
+      throw Object.assign(
+        new Error(
+          "Online payment isn't set up for this offering yet. Please contact us on WhatsApp to book."
+        ),
+        { status: 400 }
+      );
     }
   }
 
@@ -331,6 +638,18 @@ export async function createSiteBooking(
     }
   });
 
+  await openPayment(prisma, {
+    bookingId: booking.id,
+    memberId: member.id,
+    reference,
+    ...providerFromLegacyMethod(paymentMethod),
+    amountCents: parsePriceToCents(booking.price),
+    providerRef: stripeSessionId,
+    checkoutUrl
+  }).catch((error) => {
+    console.error("[payments] could not open payment:", error);
+  });
+
   if (paymentMethod === "PAYNOW") {
     await sendBookingPayNowPendingEmails(booking).catch((error) => {
       console.error("[booking-mail] PayNow pending email failed:", error);
@@ -344,8 +663,32 @@ export async function createSiteBooking(
   };
 }
 
+/**
+ * What plan each booker is on right now, keyed by member id. Bookers with no
+ * member account or no membership are absent and shown as walk-ups.
+ */
+async function loadMemberTypes(prisma: PrismaClient, memberIds: string[]) {
+  if (!memberIds.length) return new Map<string, { tierName: string; status: string }>();
+  const memberships = await prisma.membership.findMany({
+    where: { memberId: { in: memberIds }, status: { not: "CANCELLED" } },
+    include: { tier: true }
+  });
+  const byMember = new Map<string, { tierName: string; status: string }>();
+  for (const m of memberships) {
+    byMember.set(m.memberId, { tierName: m.tier.name, status: m.status });
+  }
+  return byMember;
+}
+
 export async function getAdminBookingOverview(prisma: PrismaClient) {
-  const bookings = await prisma.booking.findMany({ orderBy: { createdAt: "desc" } });
+  const bookings = await prisma.booking.findMany({
+    orderBy: { createdAt: "desc" },
+    include: { payments: true }
+  });
+  const memberTypes = await loadMemberTypes(
+    prisma,
+    [...new Set(bookings.map((b) => b.memberId).filter((id): id is string => Boolean(id)))]
+  );
   const grouped = new Map<string, {
     key: string;
     offeringType: string;
@@ -357,7 +700,20 @@ export async function getAdminBookingOverview(prisma: PrismaClient) {
     paidCount: number;
     unpaidCount: number;
     guestTotal: number;
-    bookings: ReturnType<typeof serializeBooking>[];
+    /** Heads per plan on this offering, e.g. { "Walk-up": 3, "Flow 4": 2 }. */
+    memberTypeCounts: Record<string, number>;
+    /** Money actually taken for this offering, across every rail. */
+    collectedCents: number;
+    bookings: (ReturnType<typeof serializeBooking> & {
+      memberType: string;
+      memberStatus: string | null;
+      payment: {
+        provider: string;
+        method: string;
+        status: string;
+        amountCents: number;
+      } | null;
+    })[];
   }>();
 
   for (const row of bookings) {
@@ -373,10 +729,32 @@ export async function getAdminBookingOverview(prisma: PrismaClient) {
       paidCount: 0,
       unpaidCount: 0,
       guestTotal: 0,
+      memberTypeCounts: {},
+      collectedCents: 0,
       bookings: []
     };
-    const serialized = serializeBooking(row);
-    entry.bookings.push(serialized);
+    const memberType = row.memberId ? memberTypes.get(row.memberId) : undefined;
+    const label = memberType?.tierName ?? "Walk-up";
+    const payment = primaryPayment(row.payments);
+    entry.bookings.push({
+      ...serializeBooking(row),
+      memberType: label,
+      memberStatus: memberType?.status ?? null,
+      payment: payment
+        ? {
+            provider: payment.provider,
+            method: payment.method,
+            status: payment.status,
+            amountCents: payment.amountCents
+          }
+        : null
+    });
+    if (payment?.status === "PAID") {
+      entry.collectedCents += payment.amountCents;
+    }
+    if (row.status !== "CANCELLED") {
+      entry.memberTypeCounts[label] = (entry.memberTypeCounts[label] ?? 0) + row.guests;
+    }
     entry.guestTotal += row.guests;
     if (row.status === "PAID") entry.paidCount += row.guests;
     else if (row.status === "AWAITING_PAYMENT") entry.unpaidCount += row.guests;
@@ -601,14 +979,45 @@ export function registerSiteBookingRoutes(
       if (booking.status === "CANCELLED" || booking.status === "REFUNDED") {
         return res.status(409).json({ message: "Booking is already cancelled or refunded." });
       }
-      if (booking.status === "PAID") {
+      // Membership and credit bookings are "paid" with an allowance rather than
+      // money — there is nothing to refund, so cancelling returns the session or
+      // the credits instead.
+      const onMembership = booking.paymentMethod === "MEMBERSHIP";
+      const onCredits = booking.paymentMethod === "CREDITS";
+      if (booking.status === "PAID" && !onMembership && !onCredits) {
         return res.status(400).json({
           message: "Paid bookings must be refunded before cancelling. Use Refund for Stripe/PayNow payments."
         });
       }
-      const updated = await prisma.booking.update({
-        where: { id: booking.id },
-        data: { status: "CANCELLED" }
+      const updated = await prisma.$transaction(async (tx) => {
+        if (onMembership && booking.sessionsSpent > 0 && booking.membershipPeriodId) {
+          await tx.membershipPeriod.update({
+            where: { id: booking.membershipPeriodId },
+            data: { sessionsUsed: { decrement: booking.sessionsSpent } }
+          });
+        }
+        if (onCredits && booking.creditsSpent > 0 && booking.creditWalletId) {
+          await tx.creditWallet.update({
+            where: { id: booking.creditWalletId },
+            data: { creditsUsed: { decrement: booking.creditsSpent } }
+          });
+          // Positive entry, so the wallet history shows the return rather than
+          // the spend silently disappearing.
+          await tx.creditLedgerEntry.create({
+            data: {
+              walletId: booking.creditWalletId,
+              memberId: booking.memberId,
+              bookingId: booking.id,
+              credits: booking.creditsSpent,
+              reason: `Cancelled — ${booking.offeringTitle}`
+            }
+          });
+        }
+        await cancelPayments(tx, booking.id);
+        return tx.booking.update({
+          where: { id: booking.id },
+          data: { status: "CANCELLED", sessionsSpent: 0, creditsSpent: 0 }
+        });
       });
       res.json({ booking: serializeBooking(updated) });
     } catch (error) {
@@ -631,6 +1040,12 @@ export function registerSiteBookingRoutes(
           message: "Only Stripe or PayNow bookings can be refunded from here."
         });
       }
+
+      await refundPayment(prisma, booking.id, {
+        providerPaymentRef: booking.stripePaymentIntentId
+      }).catch((error) => {
+        console.error("[payments] could not record refund:", error);
+      });
 
       res.json({
         booking: serializeBooking(updated),

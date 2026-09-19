@@ -267,6 +267,13 @@ model SiteClass {
   startMinutes    Int      @default(420)
   durationMinutes Int      @default(60)
   classType       String
+  // YOGA | AERIAL | SOUND | DANCE | MEDITATION — decides which memberships cover it
+  category        String   @default("YOGA")
+  // CLASS | TRAINING | WORKSHOP_WINDOW — only CLASS entries are bookable; the
+  // others occupy a room on the timetable without taking drop-in bookings.
+  entryType       String   @default("CLASS")
+  // Mats available in the room. 0 = uncapped.
+  capacity        Int      @default(0)
   instructor      String
   level           String
   location        String
@@ -323,14 +330,184 @@ model SiteTeamActivity {
 }
 
 model SiteMember {
-  id           String    @id @default(cuid())
+  id           String       @id @default(cuid())
   name         String
-  email        String    @unique
+  email        String       @unique
   phone        String?
   passwordHash String
-  createdAt    DateTime  @default(now())
-  updatedAt    DateTime  @updatedAt
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
   bookings     Booking[]
+  memberships  Membership[]
+  payments     Payment[]
+  creditWallets      CreditWallet[]       @relation("CreditWalletOwner")
+  creditWalletShares CreditWalletMember[] @relation("CreditWalletShare")
+  creditEntries      CreditLedgerEntry[]  @relation("CreditLedgerMember")
+}
+
+// ─── Memberships ─────────────────────────────────────────────────────────────
+// Money is stored in integer cents (SGD). Never floats.
+
+model MembershipTier {
+  id                      String       @id @default(cuid())
+  name                    String       @unique
+  // FLOW | EXPERIENCE | ALL_ACCESS
+  tierGroup               String
+  monthlyPriceCents       Int
+  // null = unlimited (no session counting)
+  includedSessionsPerMonth Int?
+  // Comma-separated categories this tier covers:
+  // YOGA | AERIAL | SOUND | DANCE | MEDITATION | CEREMONY | WORKSHOP | TRAINING
+  allowedCategories       String       @default("")
+  guestPassesPerMonth     Int          @default(0)
+  priorityBookingDays     Int          @default(10)
+  // Discount toward the 200-hour training (best single discount, never stacked)
+  trainingDiscountCents   Int          @default(0)
+  trainingDiscountPercent Int          @default(0)
+  // Founding 50 = 50. null = no cap.
+  maxMembers              Int?
+  // Months the introductory rate is held (Founding 50 = 12). null = forever.
+  rateHeldMonths          Int?
+  notes                   String       @default("")
+  isActive                Boolean      @default(true)
+  sortOrder               Int          @default(0)
+  createdAt               DateTime     @default(now())
+  updatedAt               DateTime     @updatedAt
+  memberships             Membership[]
+}
+
+model Membership {
+  id                  String             @id @default(cuid())
+  memberId            String
+  member              SiteMember         @relation(fields: [memberId], references: [id], onDelete: Cascade)
+  tierId              String
+  tier                MembershipTier     @relation(fields: [tierId], references: [id])
+  // ACTIVE | FROZEN | PENDING_CANCEL | CANCELLED | PAYMENT_FAILED
+  status              String             @default("ACTIVE")
+  startedAt           DateTime           @default(now())
+  currentPeriodStart  DateTime
+  currentPeriodEnd    DateTime
+  // 3-month initial term
+  minimumTermEndsAt   DateTime
+  cancelRequestedAt   DateTime?
+  cancelEffectiveAt   DateTime?
+  frozenAt            DateTime?
+  freezeEndsAt        DateTime?
+  // Freeze allowance is 2 months per calendar year
+  freezeMonthsUsedYear Int               @default(0)
+  freezeYear          Int?
+  // Founding 50 holds $199 instead of the tier's $239
+  priceCentsOverride  Int?
+  rateHeldUntil       DateTime?
+  stripeSubscriptionId String?
+  notes               String             @default("")
+  createdAt           DateTime           @default(now())
+  updatedAt           DateTime           @updatedAt
+  periods             MembershipPeriod[]
+  bookings            Booking[]
+
+  @@index([memberId])
+  @@index([tierId])
+  @@index([status])
+}
+
+// One row per billing month — this is the ledger that makes
+// "8 classes a month" auditable.
+model MembershipPeriod {
+  id               String     @id @default(cuid())
+  membershipId     String
+  membership       Membership @relation(fields: [membershipId], references: [id], onDelete: Cascade)
+  periodStart      DateTime
+  periodEnd        DateTime
+  // null = unlimited tier
+  sessionsIncluded Int?
+  sessionsUsed     Int        @default(0)
+  // Unused sessions roll forward exactly one month
+  sessionsRolledIn Int        @default(0)
+  sessionsRolledOut Int       @default(0)
+  guestPassesUsed  Int        @default(0)
+  createdAt        DateTime   @default(now())
+  updatedAt        DateTime   @updatedAt
+  bookings         Booking[]
+
+  @@index([membershipId])
+}
+
+// ─── Credit packs ────────────────────────────────────────────────────────────
+// Prepaid class credits, priced per category (yoga 2, aerial 3, dance 3,
+// sound 4, ceremony 5; meditation is free). Unlike a membership these are
+// shareable — the buyer names other people who may spend from the same wallet.
+
+model CreditPack {
+  id          String         @id @default(cuid())
+  name        String         @unique
+  credits     Int
+  priceCents  Int
+  // Months from purchase before unused credits lapse.
+  validMonths Int            @default(6)
+  isActive    Boolean        @default(true)
+  sortOrder   Int            @default(0)
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
+  wallets     CreditWallet[]
+}
+
+// One purchase. The balance is creditsTotal - creditsUsed, and it is shared
+// across the owner plus everyone in sharedWith.
+model CreditWallet {
+  id           String               @id @default(cuid())
+  packId       String?
+  pack         CreditPack?          @relation(fields: [packId], references: [id], onDelete: SetNull)
+  ownerId      String
+  owner        SiteMember           @relation("CreditWalletOwner", fields: [ownerId], references: [id], onDelete: Cascade)
+  creditsTotal Int
+  creditsUsed  Int                  @default(0)
+  purchasedAt  DateTime             @default(now())
+  expiresAt    DateTime
+  // ACTIVE | EXPIRED | CANCELLED
+  status       String               @default("ACTIVE")
+  notes        String               @default("")
+  createdAt    DateTime             @default(now())
+  updatedAt    DateTime             @updatedAt
+  sharedWith   CreditWalletMember[]
+  entries      CreditLedgerEntry[]
+  bookings     Booking[]
+
+  @@index([ownerId])
+  @@index([status])
+  @@index([expiresAt])
+}
+
+// People besides the owner who may spend from a wallet.
+model CreditWalletMember {
+  id       String       @id @default(cuid())
+  walletId String
+  wallet   CreditWallet @relation(fields: [walletId], references: [id], onDelete: Cascade)
+  memberId String
+  member   SiteMember   @relation("CreditWalletShare", fields: [memberId], references: [id], onDelete: Cascade)
+  addedAt  DateTime     @default(now())
+
+  @@unique([walletId, memberId])
+  @@index([memberId])
+}
+
+// Every credit movement, so a shared wallet can be audited per person.
+model CreditLedgerEntry {
+  id        String       @id @default(cuid())
+  walletId  String
+  wallet    CreditWallet @relation(fields: [walletId], references: [id], onDelete: Cascade)
+  // Who spent them — the owner, or someone they shared the wallet with.
+  memberId  String?
+  member    SiteMember?  @relation("CreditLedgerMember", fields: [memberId], references: [id], onDelete: SetNull)
+  bookingId String?
+  // Negative to spend, positive to return when a booking is cancelled.
+  credits   Int
+  reason    String       @default("")
+  createdAt DateTime     @default(now())
+
+  @@index([walletId])
+  @@index([memberId])
+  @@index([bookingId])
 }
 
 model Booking {
@@ -360,14 +537,76 @@ model Booking {
   stripePaymentIntentId String?
   paidAt            DateTime?
   refundedAt        DateTime?
+  // Set when the booking was paid for out of a membership allowance, so the
+  // session can be returned to the exact period it was drawn from on cancel.
+  membershipId       String?
+  membership         Membership?       @relation(fields: [membershipId], references: [id], onDelete: SetNull)
+  membershipPeriodId String?
+  membershipPeriod   MembershipPeriod? @relation(fields: [membershipPeriodId], references: [id], onDelete: SetNull)
+  sessionsSpent      Int               @default(0)
+  // Set when the booking was paid out of a credit wallet, so the exact number
+  // of credits can be returned to the right wallet on cancellation.
+  creditWalletId     String?
+  creditWallet       CreditWallet?     @relation(fields: [creditWalletId], references: [id], onDelete: SetNull)
+  creditsSpent       Int               @default(0)
   createdAt         DateTime    @default(now())
   updatedAt         DateTime    @updatedAt
   siteProgram       SiteProgram? @relation(fields: [siteProgramId], references: [id], onDelete: SetNull)
+  payments          Payment[]
 
   @@index([siteProgramId])
   @@index([siteClassId])
   @@index([memberId])
   @@index([customerEmail])
+  @@index([status])
+  @@index([membershipId])
+  @@index([membershipPeriodId])
+}
+
+// ─── Payments ────────────────────────────────────────────────────────────────
+// One row per attempt to collect money, whatever the rail. Provider-specific
+// identifiers live in providerRef/providerPaymentRef so adding a provider (POS
+// terminal, new gateway) needs an adapter, not a schema change.
+// Amounts are integer cents (SGD). Never floats.
+
+model Payment {
+  id        String   @id @default(cuid())
+  bookingId String?
+  booking   Booking? @relation(fields: [bookingId], references: [id], onDelete: SetNull)
+  // Denormalised so counter sales with no booking still tie to a person.
+  memberId  String?
+  member    SiteMember? @relation(fields: [memberId], references: [id], onDelete: SetNull)
+
+  // STRIPE | QASHIER | PAYNOW | CASH | MEMBERSHIP | MANUAL
+  provider String
+  // CARD | PAYNOW | CASH | MEMBERSHIP | OTHER
+  method   String
+  // PENDING | PAID | FAILED | REFUNDED | CANCELLED
+  status   String @default("PENDING")
+
+  amountCents Int    @default(0)
+  currency    String @default("SGD")
+
+  // Our reference, handed to the provider so their webhook can find this row.
+  reference String
+  // The provider's id for the transaction (Stripe session, POS txn id).
+  providerRef String?
+  // Secondary provider id used for refunds (Stripe payment intent).
+  providerPaymentRef String?
+  checkoutUrl String?
+
+  paidAt              DateTime?
+  refundedAt          DateTime?
+  refundedAmountCents Int       @default(0)
+  failureReason       String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([bookingId])
+  @@index([memberId])
+  @@index([reference])
+  @@index([provider, providerRef])
   @@index([status])
 }
 

@@ -5,6 +5,7 @@ import {
   BookOpen,
   Building2,
   CalendarDays,
+  CreditCard,
   ExternalLink,
   GraduationCap,
   Info,
@@ -156,7 +157,8 @@ export function AdminShell({
     ["Inquiries", "/admin/inquiries", Mail],
     ["Trainers", "/admin/site/trainers", GraduationCap],
     ["Regular Class Schedule", "/admin/site/classes", CalendarDays],
-    ["Education & Events", "/admin/site/programs", BookOpen]
+    ["Education & Events", "/admin/site/programs", BookOpen],
+    ["Memberships", "/admin/site/memberships", CreditCard]
   ] as const;
   const cwpNav = [
     ["CWP Platform", "/admin/cwp", Building2]
@@ -923,7 +925,47 @@ type BookingRow = {
   refundable?: boolean;
   refundedAt?: string | null;
   createdAt: string;
+  /** Plan name the booker is on, or "Walk-up" when they have no membership. */
+  memberType: string;
+  memberStatus?: string | null;
+  sessionsSpent?: number;
+  /** How the money was collected, from the payment ledger. */
+  payment?: {
+    provider: string;
+    method: string;
+    status: string;
+    amountCents: number;
+  } | null;
 };
+
+const PROVIDER_LABELS: Record<string, string> = {
+  STRIPE: "Card (Stripe)",
+  QASHIER: "Card (Qashier)",
+  PAYNOW: "PayNow",
+  CASH: "Cash",
+  MEMBERSHIP: "Membership",
+  MANUAL: "Manual"
+};
+
+function money(cents: number) {
+  return `SGD ${(cents / 100).toFixed(2)}`;
+}
+
+function paidViaCell(booking: BookingRow) {
+  const payment = booking.payment;
+  if (!payment) return <span className="admin-muted-sm">—</span>;
+  const label = PROVIDER_LABELS[payment.provider] ?? payment.provider;
+  return (
+    <div>
+      <div>{label}</div>
+      <span className="admin-muted-sm">
+        {payment.provider === "MEMBERSHIP" ? "no charge" : money(payment.amountCents)}
+        {payment.status === "PENDING" && " · not collected"}
+        {payment.status === "REFUNDED" && " · refunded"}
+      </span>
+    </div>
+  );
+}
 
 type OfferingGroup = {
   key: string;
@@ -933,8 +975,30 @@ type OfferingGroup = {
   paidCount: number;
   unpaidCount: number;
   guestTotal: number;
+  memberTypeCounts: Record<string, number>;
+  collectedCents: number;
   bookings: BookingRow[];
 };
+
+/** "Walk-up" reads as a non-member, so it stays visually neutral. */
+function memberTypePill(booking: BookingRow) {
+  const walkUp = booking.memberType === "Walk-up";
+  const frozen = booking.memberStatus === "FROZEN";
+  return (
+    <span className="admin-action-row" style={{ gap: 6 }}>
+      <span className={`admin-pill ${walkUp ? "admin-pill-gray" : "admin-pill-green"}`}>
+        <span className="admin-pill-dot" />
+        {booking.memberType}
+      </span>
+      {frozen && <span className="admin-pill admin-pill-amber">Frozen</span>}
+      {booking.paymentMethod === "MEMBERSHIP" && (
+        <span className="admin-muted-sm">
+          {booking.sessionsSpent ? "−1 session" : "free"}
+        </span>
+      )}
+    </span>
+  );
+}
 
 // Booking categories rolled up into the sections shown on the page.
 const BOOKING_GROUPS: {
@@ -1130,11 +1194,20 @@ export function AdminBookingsPage({ auth }: { auth: Auth }) {
           <div className="admin-card-subtitle">
             {offering.scheduledLabel || "Schedule TBC"}
           </div>
+          <div className="admin-card-subtitle">
+            {Object.entries(offering.memberTypeCounts ?? {})
+              .sort((a, b) => b[1] - a[1])
+              .map(([type, count]) => `${count} ${type}`)
+              .join(" · ")}
+          </div>
         </div>
         <div className="admin-card-meta">
           <StatusPill variant="green" label={`${offering.paidCount} paid`} />
           <StatusPill variant="orange" label={`${offering.unpaidCount} unpaid`} />
           <StatusPill variant="gray" label={`${offering.guestTotal} guests`} />
+          {offering.collectedCents > 0 && (
+            <StatusPill variant="purple" label={money(offering.collectedCents)} />
+          )}
         </div>
       </button>
 
@@ -1144,8 +1217,10 @@ export function AdminBookingsPage({ auth }: { auth: Auth }) {
             <thead>
               <tr>
                 <th>Name</th>
+                <th>Type</th>
                 <th>Email</th>
                 <th>Guests</th>
+                <th>Paid via</th>
                 <th>Status</th>
                 <th>Reference</th>
                 <th>Actions</th>
@@ -1155,8 +1230,10 @@ export function AdminBookingsPage({ auth }: { auth: Auth }) {
               {offering.bookings.map((booking) => (
                 <tr key={booking.id}>
                   <td>{booking.customerName}</td>
+                  <td>{memberTypePill(booking)}</td>
                   <td>{booking.customerEmail}</td>
                   <td>{booking.guests}</td>
+                  <td>{paidViaCell(booking)}</td>
                   <td>{bookingStatusPill(booking)}</td>
                   <td>{booking.reference}</td>
                   <td>

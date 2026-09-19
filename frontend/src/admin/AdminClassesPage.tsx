@@ -37,6 +37,9 @@ export type SiteClassRow = {
   startMinutes: number;
   durationMinutes: number;
   classType: string;
+  category: MembershipCategory;
+  entryType: "CLASS" | "TRAINING" | "WORKSHOP_WINDOW";
+  capacity: number;
   instructor: string;
   level: string;
   location: string;
@@ -47,10 +50,55 @@ export type SiteClassRow = {
   sortOrder: number;
 };
 
+// Which memberships cover a class is decided by its category, so every class
+// needs one even though the public site shows the free-text class type.
+export const MEMBERSHIP_CATEGORIES = ["YOGA", "AERIAL", "SOUND", "DANCE", "MEDITATION"] as const;
+export type MembershipCategory = (typeof MEMBERSHIP_CATEGORIES)[number];
+
+const CATEGORY_LABELS: Record<MembershipCategory, string> = {
+  YOGA: "Yoga — Flow & All-Access plans",
+  AERIAL: "Aerial — Experience & All-Access plans",
+  SOUND: "Sound healing — Experience & All-Access plans",
+  DANCE: "Dance — Experience & All-Access plans",
+  MEDITATION: "Meditation — free on every plan"
+};
+
+// Capacity follows the class type where it has its own limit (aerial is capped
+// by hammocks, meditation and sound seat more than the room's mat count), and
+// otherwise falls back to the room. Mirrors the rule the backend applies.
+const ROOM_CAPACITY: Record<string, number> = { "Room 1": 15, "Room 2": 10 };
+const CATEGORY_CAPACITY: Partial<Record<MembershipCategory, number>> = {
+  AERIAL: 11,
+  MEDITATION: 15,
+  SOUND: 15
+};
+
+function defaultCapacityFor(category?: MembershipCategory, location?: string): number {
+  const byCategory = category ? CATEGORY_CAPACITY[category] : undefined;
+  if (byCategory != null) return byCategory;
+  return ROOM_CAPACITY[(location ?? "").trim()] ?? 15;
+}
+
+/** Suggests a category from the class name so the studio rarely has to set it. */
+function guessCategory(classType: string): MembershipCategory {
+  const name = classType.toLowerCase();
+  if (/aerial|hammock|silk/.test(name)) return "AERIAL";
+  if (/sound|gong|bowl|handpan/.test(name)) return "SOUND";
+  if (/dance|ecstatic|embodiment|movement/.test(name)) return "DANCE";
+  if (/meditation|mindfulness|breathwork|pranayama/.test(name)) return "MEDITATION";
+  return "YOGA";
+}
+
 function livePill(published: boolean) {
   return published
     ? <span className="admin-pill admin-pill-green"><span className="admin-pill-dot" />Live</span>
     : <span className="admin-pill admin-pill-gray"><span className="admin-pill-dot" />Draft</span>;
+}
+
+// Stripe checkout links only apply to Drop-In classes; other class types
+// (packages, memberships, etc.) don't use a per-class Stripe link.
+function isDropInClass(classType?: string | null): boolean {
+  return /drop\s*-?\s*in/i.test(classType ?? "");
 }
 
 function emptyClass(weekStart: Date, dayIndex = 0, startMinutes = 7 * 60): Partial<SiteClassRow> {
@@ -63,9 +111,12 @@ function emptyClass(weekStart: Date, dayIndex = 0, startMinutes = 7 * 60): Parti
     startMinutes,
     durationMinutes: DEFAULT_DURATION_MINUTES,
     classType: "",
+    category: "YOGA" as MembershipCategory,
+    entryType: "CLASS" as const,
+    capacity: defaultCapacityFor("YOGA", "Room 1"),
     instructor: "",
     level: "All Levels",
-    location: "Dharma",
+    location: "Room 1",
     price: "SGD 35",
     stripeLink: "",
     published: true,
@@ -241,9 +292,11 @@ export function AdminSiteClassesPage({ auth }: { auth: Auth }) {
     e.preventDefault();
     setError("");
     const comingSoon = Boolean(form.comingSoon);
+    const dropIn = isDropInClass(form.classType);
     const stripeLink = String(form.stripeLink ?? "").trim();
-    if (!comingSoon && (!stripeLink || !isValidStripeLink(stripeLink))) {
-      setError("Stripe booking link is required when the class is scheduled.");
+    const useStripe = dropIn && !comingSoon;
+    if (useStripe && (!stripeLink || !isValidStripeLink(stripeLink))) {
+      setError("Stripe booking link is required for scheduled Drop In classes.");
       return;
     }
     if (comingSoon && stripeLink) {
@@ -251,7 +304,7 @@ export function AdminSiteClassesPage({ auth }: { auth: Auth }) {
       return;
     }
     try {
-      const payload = { ...form, stripeLink: comingSoon ? null : stripeLink || null };
+      const payload = { ...form, stripeLink: useStripe ? stripeLink || null : null };
       if (editingId) {
         const res = await adminApi<{ class: SiteClassRow }>(`/api/admin/site/classes/${editingId}`, auth.token, {
           method: "PUT",
@@ -379,9 +432,58 @@ export function AdminSiteClassesPage({ auth }: { auth: Auth }) {
           label="Class type"
           value={form.classType ?? ""}
           presets={presets.classTypes}
-          onChange={(classType) => setForm({ ...form, classType })}
+          onChange={(classType) =>
+            setForm({
+              ...form,
+              classType,
+              // Follow the name until someone picks a category by hand.
+              category: form.category ?? guessCategory(classType)
+            })
+          }
           onAddPreset={(value) => addPreset("classType", value)}
         />
+
+        <label className="admin-field">
+          <span className="admin-field-label">Counts towards</span>
+          <select
+            value={form.category ?? "YOGA"}
+            onChange={(e) => {
+              const category = e.target.value as MembershipCategory;
+              setForm({
+                ...form,
+                category,
+                // Keep capacity on the rule unless it was set by hand.
+                capacity:
+                  form.capacity === defaultCapacityFor(form.category, form.location)
+                    ? defaultCapacityFor(category, form.location)
+                    : form.capacity
+              });
+            }}
+            className="admin-input"
+          >
+            {MEMBERSHIP_CATEGORIES.map((c) => (
+              <option key={c} value={c}>{CATEGORY_LABELS[c]}</option>
+            ))}
+          </select>
+          <span className="admin-field-hint">
+            Decides which memberships cover this class and draw a session for it.
+          </span>
+        </label>
+
+        <label className="admin-field">
+          <span className="admin-field-label">Spots (max people)</span>
+          <input
+            type="number"
+            min={0}
+            max={200}
+            value={form.capacity ?? 0}
+            onChange={(e) => setForm({ ...form, capacity: Number(e.target.value) })}
+            className="admin-input"
+          />
+          <span className="admin-field-hint">
+            {`Default for ${form.category ?? "YOGA"} in ${form.location || "this room"} is ${defaultCapacityFor(form.category, form.location)}. Aerial is limited by hammocks; meditation and sound seat more than the mat count.`}
+          </span>
+        </label>
 
         <label className="admin-field">
           <span className="admin-field-label">Instructor</span>
@@ -432,9 +534,9 @@ export function AdminSiteClassesPage({ auth }: { auth: Auth }) {
           </label>
         ))}
 
-        {!form.comingSoon && (
+        {isDropInClass(form.classType) && !form.comingSoon && (
           <label className="admin-field">
-            <span className="admin-field-label">Stripe booking link *</span>
+            <span className="admin-field-label">Stripe link Drop In class *</span>
             <input
               type="url"
               value={String(form.stripeLink ?? "")}

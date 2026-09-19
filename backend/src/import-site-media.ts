@@ -16,7 +16,10 @@ const SPECIALIST_NAMES: Record<string, string> = {
   "yana-an": "Yana An",
   "kanthan-jeganathan": "Kanthan Jeganathan",
   "dr-nirmal-bhusal": "Dr. Nirmal Bhusal",
-  "manjeet-mathur": "Manjeet Mathur"
+  "manjeet-mathur": "Manjeet Mathur",
+  "kasi-ramakrishnan": "Kasi Ramakrishnan",
+  divya: "Divya",
+  "claudia-ng": "Claudia Ng"
 };
 
 const PROGRAM_TITLES: Record<string, string> = {
@@ -59,6 +62,9 @@ async function needsBundledMediaImport(url: string | null | undefined): Promise<
   if (!url) return true;
   if (url.includes("_components/v2/")) return true;
   if (url.includes("images.unsplash.com")) return true;
+  // A path served by the frontend bundle rather than stored here. Importing it
+  // puts the portrait in the media store, so it can be replaced from admin.
+  if (url.startsWith("/specialists/")) return true;
   if (url.includes("/api/media/trainers/") || url.includes("/api/media/programs/")) {
     return !(await storedMediaFileExists(url));
   }

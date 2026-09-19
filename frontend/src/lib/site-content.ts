@@ -66,7 +66,11 @@ export type SiteContent = {
     startMinutes?: number;
     sortOrder?: number;
     time: string;
+    durationMinutes?: number;
     classType: string;
+    category?: string;
+    entryType?: string;
+    capacity?: number;
     instructor: string;
     level: string;
     location: string;

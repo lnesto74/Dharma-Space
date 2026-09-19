@@ -3,6 +3,7 @@ import express from "express";
 import Stripe from "stripe";
 import type { PrismaClient } from "@prisma/client";
 import { completeBookingPayment } from "./booking-emails.js";
+import { cancelPayments, failPayment } from "./payments/ledger.js";
 
 let stripeClient: Stripe | null = null;
 
@@ -73,8 +74,14 @@ export async function createStripeCheckoutSession(input: {
       siteClassId: input.siteClassId || ""
     },
     success_url: `${base}/booking/success?session_id={CHECKOUT_SESSION_ID}`,
-    cancel_url: `${base}/events`,
-    payment_method_types: ["card", "paynow"]
+    // Send people back where they came from — classes and programs are
+    // different pages now.
+    cancel_url: `${base}/${input.siteClassId ? "classes" : "events"}`,
+    // Order sets the order Checkout displays them in. PayNow leads because it
+    // avoids the fixed per-card fee that bites hardest on a SGD 35 drop-in, and
+    // it's the method most Singapore customers expect. Card stays available for
+    // anyone without a participating bank app, and for overseas visitors.
+    payment_method_types: ["paynow", "card"]
   });
 
   if (!session.url) {
@@ -189,6 +196,27 @@ export async function markBookingPaidByReference(prisma: PrismaClient, reference
   return completeBookingPayment(prisma, reference, "STRIPE");
 }
 
+/**
+ * The booking stays AWAITING_PAYMENT so the customer can retry — only the
+ * payment attempt is marked failed, with the reason kept for support.
+ */
+export async function markBookingPaymentFailed(
+  prisma: PrismaClient,
+  reference: string,
+  reason: string
+) {
+  const booking = await prisma.booking.findUnique({ where: { reference } });
+  if (!booking) return;
+  await failPayment(prisma, booking.id, reason);
+}
+
+/** Abandoned checkout — stop the attempt showing as money still owed. */
+export async function voidBookingPayment(prisma: PrismaClient, reference: string) {
+  const booking = await prisma.booking.findUnique({ where: { reference } });
+  if (!booking) return;
+  await cancelPayments(prisma, booking.id);
+}
+
 export async function verifyCheckoutSessionPaid(sessionId: string, expectedReference: string) {
   const stripe = getStripe();
   if (!stripe) return false;
@@ -228,12 +256,28 @@ export function registerStripeWebhook(app: Express, getPrisma: () => PrismaClien
       }
 
       try {
-        if (event.type === "checkout.session.completed") {
-          const session = event.data.object as Stripe.Checkout.Session;
-          const reference = session.client_reference_id || session.metadata?.bookingReference;
-          if (reference && session.payment_status === "paid") {
-            await syncStripePaymentIds(getPrisma(), reference, session);
-            await markBookingPaidByReference(getPrisma(), reference);
+        const session = event.data.object as Stripe.Checkout.Session;
+        const reference = session.client_reference_id || session.metadata?.bookingReference;
+
+        switch (event.type) {
+          // PayNow can settle after the customer has closed the tab, so the
+          // paid signal may arrive as an async event rather than on completion.
+          // Both paths lead to the same place.
+          case "checkout.session.completed":
+          case "checkout.session.async_payment_succeeded": {
+            if (reference && session.payment_status === "paid") {
+              await syncStripePaymentIds(getPrisma(), reference, session);
+              await markBookingPaidByReference(getPrisma(), reference);
+            }
+            break;
+          }
+          case "checkout.session.async_payment_failed": {
+            if (reference) await markBookingPaymentFailed(getPrisma(), reference, "Payment failed at Stripe.");
+            break;
+          }
+          case "checkout.session.expired": {
+            if (reference) await voidBookingPayment(getPrisma(), reference);
+            break;
           }
         }
         res.json({ received: true });
