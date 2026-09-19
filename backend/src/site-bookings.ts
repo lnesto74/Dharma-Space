@@ -17,7 +17,11 @@ import {
   markBookingRefundedManual,
   retrieveCheckoutSession
 } from "./stripe.js";
-import { completeBookingPayment, sendBookingPayNowPendingEmails } from "./booking-emails.js";
+import {
+  completeBookingPayment,
+  sendBookingConfirmation,
+  sendBookingPayNowPendingEmails
+} from "./booking-emails.js";
 import { verifyGoogleIdToken } from "./google-auth.js";
 import {
   deriveCategory,
@@ -435,6 +439,10 @@ async function createCreditBooking(
     return created;
   });
 
+  // Confirmed the moment it's booked, so the confirmation and calendar entry
+  // are sent here rather than waiting on a payment that will never arrive.
+  await sendBookingConfirmation(prisma, booking);
+
   return {
     booking: serializeBooking(booking),
     checkoutUrl: null as string | null,
@@ -526,6 +534,8 @@ async function createMembershipBooking(
 
     return created;
   });
+
+  await sendBookingConfirmation(prisma, booking);
 
   return {
     booking: serializeBooking(booking),

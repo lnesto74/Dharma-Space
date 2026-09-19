@@ -3,6 +3,7 @@ import { programCategoryToSegment, segmentLabel, type InquirySegment } from "./i
 import { inboxFor, isMailConfigured, notifyInbox, sendMail } from "./mail.js";
 import { providerFromLegacyMethod, settlePayment } from "./payments/ledger.js";
 import { parsePriceToCents } from "./payments/money.js";
+import { STUDIO_ADDRESS, buildIcs, icsFilename, singaporeInstant } from "./calendar-invite.js";
 
 type BookingMail = Pick<
   Booking,
@@ -29,6 +30,24 @@ function bookingSegment(booking: BookingMail): InquirySegment {
   return programCategoryToSegment(booking.category);
 }
 
+/** How it was paid, in words a customer would use rather than our enum. */
+function paymentLabel(method: string | null): string | null {
+  switch (method) {
+    case "MEMBERSHIP":
+      return "Included in your membership";
+    case "CREDITS":
+      return "Paid with class credits";
+    case "STRIPE":
+      return "Paid online";
+    case "PAYNOW":
+      return "PayNow";
+    case "CASH":
+      return "Cash";
+    default:
+      return method;
+  }
+}
+
 function bookingDetailsBlock(booking: BookingMail) {
   return [
     booking.offeringTitle ? `Title: ${booking.offeringTitle}` : null,
@@ -39,7 +58,7 @@ function bookingDetailsBlock(booking: BookingMail) {
     booking.price ? `Price: ${booking.price}` : null,
     booking.guests ? `Guests: ${booking.guests}` : null,
     booking.reference ? `Reference: ${booking.reference}` : null,
-    booking.paymentMethod ? `Payment: ${booking.paymentMethod}` : null,
+    paymentLabel(booking.paymentMethod) ? `Payment: ${paymentLabel(booking.paymentMethod)}` : null,
     booking.customerPhone ? `Phone: ${booking.customerPhone}` : null,
     booking.notes ? `Notes: ${booking.notes}` : null
   ]
@@ -161,6 +180,118 @@ export async function sendBookingPayNowPendingEmails(booking: BookingMail) {
   );
 }
 
+/**
+ * The exact moment a booking starts, from whichever row it was booked against.
+ * Returns null when the offering has no fixed date yet — a "Coming Soon"
+ * program has nothing to put in a calendar.
+ */
+async function bookingOccurrence(
+  prisma: PrismaClient,
+  booking: { siteClassId: string | null; siteProgramId: string | null }
+): Promise<{ start: Date; durationMinutes: number; room: string } | null> {
+  if (booking.siteClassId) {
+    const siteClass = await prisma.siteClass.findUnique({ where: { id: booking.siteClassId } });
+    if (!siteClass) return null;
+    const start = singaporeInstant(siteClass.classDate, siteClass.startMinutes);
+    if (!start) return null;
+    return { start, durationMinutes: siteClass.durationMinutes || 60, room: siteClass.location };
+  }
+
+  if (booking.siteProgramId) {
+    const program = await prisma.siteProgram.findUnique({ where: { id: booking.siteProgramId } });
+    if (!program) return null;
+    const start = singaporeInstant(program.scheduledDate, program.startMinutes);
+    if (!start) return null;
+    // Programs run to their own published schedule; block a nominal two hours
+    // so the entry is visible without pretending to know the finish time.
+    return { start, durationMinutes: 120, room: program.location };
+  }
+
+  return null;
+}
+
+/**
+ * The second email: the booking as a calendar entry. Sent separately from the
+ * confirmation so the receipt stays readable and the .ics is easy to find.
+ */
+export async function sendBookingCalendarInvite(prisma: PrismaClient, booking: Booking) {
+  const category = "education" as const;
+  if (!isMailConfigured(category)) return false;
+
+  const occurrence = await bookingOccurrence(prisma, booking);
+  if (!occurrence) {
+    // Nothing to put in a calendar — a program with no date set yet.
+    console.log("[booking-mail] no fixed date, calendar invite skipped:", booking.reference);
+    return false;
+  }
+
+  const inbox = inboxFor(category);
+  const location = [occurrence.room, STUDIO_ADDRESS].filter(Boolean).join(" · ");
+  const ics = buildIcs({
+    uid: `${booking.reference}@dharma-space.com`,
+    title: `${booking.offeringTitle} · Dharma Space`,
+    description: [
+      booking.facilitator ? `With ${booking.facilitator}` : null,
+      `Reference: ${booking.reference}`,
+      `Questions: ${inbox}`
+    ]
+      .filter(Boolean)
+      .join("\n"),
+    location,
+    start: occurrence.start,
+    durationMinutes: occurrence.durationMinutes,
+    organizerName: "Dharma Space",
+    organizerEmail: inbox
+  });
+
+  const sent = await sendMail(category, {
+    to: booking.customerEmail,
+    replyTo: inbox,
+    subject: `Add to your calendar — ${booking.offeringTitle}`,
+    text: [
+      `Hi ${booking.customerName},`,
+      "",
+      "Here's your class as a calendar entry — open the attachment to add it.",
+      "",
+      `${booking.offeringTitle}`,
+      `${booking.scheduledLabel}${booking.time ? ` · ${booking.time}` : ""}`,
+      location,
+      "",
+      "We've set a reminder for an hour before, and we'll see you on the mat.",
+      "",
+      "Dharma Space Team"
+    ].join("\n"),
+    attachments: [
+      {
+        filename: icsFilename(booking.reference),
+        content: ics,
+        contentType: "text/calendar; charset=utf-8; method=PUBLISH"
+      }
+    ]
+  });
+
+  console.log(
+    sent
+      ? `[booking-mail] Calendar invite sent for ${booking.reference}`
+      : `[booking-mail] Calendar invite failed for ${booking.reference}`
+  );
+  return sent;
+}
+
+/**
+ * Everything a confirmed booking should send: the confirmation and receipt,
+ * then the calendar entry. Every rail that confirms a booking goes through
+ * here, so a class booked on a membership is treated the same as one paid for.
+ */
+export async function sendBookingConfirmation(prisma: PrismaClient, booking: Booking) {
+  await sendBookingConfirmedEmails(booking).catch((error) => {
+    console.error("[booking-mail] confirmation failed:", error);
+  });
+  await sendBookingCalendarInvite(prisma, booking).catch((error) => {
+    console.error("[booking-mail] calendar invite failed:", error);
+  });
+}
+
 /** Mark booking paid once and send confirmation emails (idempotent). */
 export async function completeBookingPayment(
   prisma: PrismaClient,
@@ -193,9 +324,7 @@ export async function completeBookingPayment(
       console.error("[payments] could not record settlement:", error);
     });
 
-    await sendBookingConfirmedEmails(booking).catch((error) => {
-      console.error("[booking-mail] confirmation failed:", error);
-    });
+    await sendBookingConfirmation(prisma, booking);
   }
 
   return booking;

@@ -17,6 +17,7 @@ import {
   newMembershipDates,
   sessionsRemaining
 } from "./memberships/lifecycle.js";
+import { sendMembershipWelcomeEmail } from "./memberships/emails.js";
 
 type AuthedRequest = Request & { user?: User };
 
@@ -370,6 +371,7 @@ export function registerAdminMembershipRoutes(
       // Admin-created accounts get a random password; the person sets their own via
       // the website's password reset when they first sign in.
       let member;
+      let isNewAccount = false;
       if (body.memberId) {
         member = await prisma.siteMember.findUnique({ where: { id: body.memberId } });
         if (!member) return res.status(404).json({ message: "Member not found" });
@@ -385,6 +387,7 @@ export function registerAdminMembershipRoutes(
               passwordHash: await bcrypt.hash(randomBytes(32).toString("hex"), 12)
             }
           });
+          isNewAccount = true;
         }
       }
 
@@ -436,6 +439,26 @@ export function registerAdminMembershipRoutes(
           }
         },
         include: MEMBERSHIP_INCLUDE
+      });
+
+      // Nothing else tells the member their membership exists — memberships are
+      // only ever started from this screen.
+      await sendMembershipWelcomeEmail({
+        member: { name: member.name, email: member.email },
+        tier: {
+          name: tier.name,
+          includedSessionsPerMonth: tier.includedSessionsPerMonth,
+          allowedCategories: tier.allowedCategories,
+          guestPassesPerMonth: tier.guestPassesPerMonth
+        },
+        priceCents: priceCentsOverride ?? tier.monthlyPriceCents,
+        startedAt: dates.startedAt,
+        currentPeriodEnd: dates.currentPeriodEnd,
+        minimumTermEndsAt: dates.minimumTermEndsAt,
+        rateHeld: priceCentsOverride !== null,
+        isNewAccount
+      }).catch((error) => {
+        console.error("[membership-mail] welcome failed:", error);
       });
 
       res.status(201).json({ membership });

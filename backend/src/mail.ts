@@ -96,6 +96,11 @@ export async function sendMail(
     html?: string;
     replyTo?: string;
     cc?: string | string[];
+    attachments?: {
+      filename: string;
+      content: string;
+      contentType?: string;
+    }[];
   }
 ) {
   const transport = getTransporter(category);
@@ -111,7 +116,8 @@ export async function sendMail(
       replyTo: options.replyTo,
       subject: options.subject,
       text: options.text,
-      html: options.html
+      html: options.html,
+      attachments: options.attachments
     });
     return true;
   } catch (error) {
