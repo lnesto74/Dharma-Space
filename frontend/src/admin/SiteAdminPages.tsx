@@ -5,6 +5,7 @@ import {
   BookOpen,
   Building2,
   CalendarDays,
+  Coins,
   CreditCard,
   ExternalLink,
   GraduationCap,
@@ -158,7 +159,8 @@ export function AdminShell({
     ["Trainers", "/admin/site/trainers", GraduationCap],
     ["Regular Class Schedule", "/admin/site/classes", CalendarDays],
     ["Education & Events", "/admin/site/programs", BookOpen],
-    ["Memberships", "/admin/site/memberships", CreditCard]
+    ["Memberships", "/admin/site/memberships", CreditCard],
+    ["Credit Packs", "/admin/site/credit-packs", Coins]
   ] as const;
   const cwpNav = [
     ["CWP Platform", "/admin/cwp", Building2]

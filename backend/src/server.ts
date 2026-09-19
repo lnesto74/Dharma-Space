@@ -51,7 +51,9 @@ import { registerAdminMembershipRoutes } from "./admin-membership-routes.js";
 import { ensureMembershipTiers } from "./memberships/seed.js";
 import { ensureCreditPacks } from "./credits/seed.js";
 import { registerCreditRoutes } from "./credit-routes.js";
+import { registerAdminCreditRoutes } from "./admin-credit-routes.js";
 import { expireLapsedWallets } from "./credits/purchase.js";
+import { scheduleExpiryReminders } from "./reminders/expiry.js";
 import { ensureWeekOneSchedule } from "./schedule/week-one.js";
 
 let prisma!: PrismaClient;
@@ -1115,6 +1117,7 @@ async function startServer() {
   registerWellnessRoutes(app, prisma, auth, requireRole, companyUserIds);
   registerAdminCwpRoutes(app, prisma, auth, requireRole, sanitizeUser);
   registerAdminMembershipRoutes(app, prisma, auth, requireRole);
+  registerAdminCreditRoutes(app, prisma, auth, requireRole);
   registerCreditRoutes(app, prisma, jwtSecret);
   registerOnboardingRoutes(app, prisma, auth);
   registerMessagingRoutes(app, prisma, auth);
@@ -1129,6 +1132,7 @@ async function startServer() {
   await migrateProgramScheduleFields(prisma).catch((error) => console.error("[startup] program schedule migrate:", error));
   await migrateClassScheduleFields(prisma).catch((error) => console.error("[startup] class migrate:", error));
   await ensureWeekOneSchedule(prisma).catch((error) => console.error("[startup] week 1 schedule:", error));
+  scheduleExpiryReminders(prisma);
 
   app.listen(port, "0.0.0.0", () => {
     logMailStatus();

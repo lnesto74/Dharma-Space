@@ -343,6 +343,34 @@ model SiteMember {
   creditWallets      CreditWallet[]       @relation("CreditWalletOwner")
   creditWalletShares CreditWalletMember[] @relation("CreditWalletShare")
   creditEntries      CreditLedgerEntry[]  @relation("CreditLedgerMember")
+  expiryReminders    ExpiryReminder[]
+}
+
+// ─── Expiry reminders ────────────────────────────────────────────────────────
+// Credit packs lapse six months after purchase, held founding rates run out,
+// and a cancelled membership stops on a date. Each of those gets a warning at
+// three months, two months and one month.
+
+model ExpiryReminder {
+  id         String      @id @default(cuid())
+  // CREDIT_PACK | MEMBERSHIP_END | MEMBERSHIP_RATE
+  kind       String
+  // The CreditWallet or Membership this is about.
+  targetId   String
+  // Months of notice this reminder gave: 3, 2 or 1.
+  monthsOut  Int
+  memberId   String?
+  member     SiteMember? @relation(fields: [memberId], references: [id], onDelete: SetNull)
+  // Kept flat so the record survives the member row being deleted.
+  email      String      @default("")
+  expiresAt  DateTime
+  sentAt     DateTime    @default(now())
+
+  // The whole idempotency story. A given milestone can only ever be recorded
+  // once per target, so the sweep is safe to run as often as we like.
+  @@unique([kind, targetId, monthsOut])
+  @@index([memberId])
+  @@index([sentAt])
 }
 
 // ─── Memberships ─────────────────────────────────────────────────────────────

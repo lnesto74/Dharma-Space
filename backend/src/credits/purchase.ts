@@ -304,7 +304,9 @@ export async function recordCounterPackSale(
     where: { reference: started.reference, bookingId: null },
     data: { provider: input.provider, method: input.method }
   });
-  const fulfilled = await fulfilPackPurchase(prisma, started.reference);
+  // Settled through the same door as Stripe, so someone who pays at the desk
+  // gets the same receipt as someone who pays online.
+  const fulfilled = await completePackPurchase(prisma, started.reference);
   return { ...started, fulfilled };
 }
 

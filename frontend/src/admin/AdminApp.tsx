@@ -10,6 +10,7 @@ import { AdminSiteProgramsPage } from "./AdminProgramsPage";
 import { AdminSiteTrainersPage } from "./AdminTrainersPage";
 import { AdminSiteClassesPage } from "./AdminClassesPage";
 import { AdminMembershipsPage } from "./AdminMembershipsPage";
+import { AdminCreditPacksPage } from "./AdminCreditPacksPage";
 import { AdminCwpPage } from "./AdminCwpPage";
 import { AdminCompanyPage } from "./AdminCompanyPage";
 
@@ -30,6 +31,7 @@ export default function AdminApp() {
       <Route path="site/classes" element={<AdminSiteClassesPage auth={auth} />} />
       <Route path="site/programs" element={<AdminSiteProgramsPage auth={auth} />} />
       <Route path="site/memberships" element={<AdminMembershipsPage auth={auth} />} />
+      <Route path="site/credit-packs" element={<AdminCreditPacksPage auth={auth} />} />
       <Route path="dashboard" element={<Navigate to="/admin" replace />} />
       <Route path="*" element={<Navigate to="/admin" replace />} />
     </Routes>

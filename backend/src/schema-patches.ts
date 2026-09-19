@@ -65,6 +65,7 @@ export async function applySchemaPatches(): Promise<void> {
       await ensureSiteClassCategory(client);
       await repriceClassesByCategory(client);
       await backfillPaymentLedger(client);
+      await ensureExpiryReminderTable(client);
 
       const after = await missingUserColumns(client);
       if (after.length === 0) {
@@ -289,6 +290,37 @@ async function ensureCategoryGroups(client: PrismaClient) {
       names
     );
   }
+}
+
+/**
+ * The log of expiry warnings already sent. The unique index is what stops a
+ * member being told three times that the same pack is running out, so it
+ * matters more than the table.
+ */
+async function ensureExpiryReminderTable(client: PrismaClient) {
+  await client.$executeRawUnsafe(`
+    CREATE TABLE IF NOT EXISTS "ExpiryReminder" (
+      "id" TEXT NOT NULL,
+      "kind" TEXT NOT NULL,
+      "targetId" TEXT NOT NULL,
+      "monthsOut" INTEGER NOT NULL,
+      "memberId" TEXT,
+      "email" TEXT NOT NULL DEFAULT '',
+      "expiresAt" TIMESTAMP(3) NOT NULL,
+      "sentAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      CONSTRAINT "ExpiryReminder_pkey" PRIMARY KEY ("id")
+    )
+  `);
+  await client.$executeRawUnsafe(`
+    CREATE UNIQUE INDEX IF NOT EXISTS "ExpiryReminder_kind_targetId_monthsOut_key"
+      ON "ExpiryReminder"("kind", "targetId", "monthsOut")
+  `);
+  await client.$executeRawUnsafe(`
+    CREATE INDEX IF NOT EXISTS "ExpiryReminder_memberId_idx" ON "ExpiryReminder"("memberId")
+  `);
+  await client.$executeRawUnsafe(`
+    CREATE INDEX IF NOT EXISTS "ExpiryReminder_sentAt_idx" ON "ExpiryReminder"("sentAt")
+  `);
 }
 
 async function ensureDuelTables(client: PrismaClient) {

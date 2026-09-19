@@ -28,7 +28,13 @@ import {
   type PendingStripeBooking
 } from "../lib/stripe-booking";
 import { CreditPackModal, CreditPurchaseSuccessModal } from "../components/CreditPackModal";
-import { fetchCreditPacks, isCreditPurchaseReturn, type CreditPack } from "../lib/credits-api";
+import {
+  fetchCreditPacks,
+  fetchMemberCredits,
+  isCreditPurchaseReturn,
+  type CreditPack,
+  type CreditSummary
+} from "../lib/credits-api";
 
 type Page = "about" | "corporate" | "education" | "events" | "classes";
 type EducationSection = "flagship-program" | "courses-certifications" | "workshops-intensives";
@@ -1429,6 +1435,8 @@ interface BookingInfo {
   classId?: string;
   stripeLink?: string | null;
   price?: string;
+  /** YOGA | AERIAL | DANCE | SOUND | CEREMONY | MEDITATION — sets the credit cost. */
+  category?: string;
   comingSoon?: boolean;
 }
 
@@ -1632,6 +1640,7 @@ function WeeklyScheduleGrid({
                             classId: entry.id,
                             stripeLink: entry.stripeLink || undefined,
                             price: entry.price || "SGD 35",
+                            category: entry.category,
                             comingSoon: entry.comingSoon
                           })
                       : undefined
@@ -1990,6 +1999,7 @@ function ClassPickerModal({
                   classId: entry.id,
                   stripeLink: entry.stripeLink || undefined,
                   price: entry.price || "SGD 35",
+                  category: entry.category,
                   comingSoon: entry.comingSoon
                 })
               }
@@ -2193,12 +2203,14 @@ function ConfirmedStep({
 }: {
   name: string;
   title: string;
-  variant?: "stripe" | "paynow" | "waitlist" | "membership";
+  variant?: "stripe" | "paynow" | "waitlist" | "membership" | "credits";
   membershipNote?: string;
 }) {
   const message =
     variant === "membership"
       ? <>You&apos;re booked into <strong className="text-[#2A2825]">{title}</strong>, <strong className="text-[#2A2825]">{name || "friend"}</strong> — nothing to pay, it&apos;s covered by your membership. See you on the mat.</>
+      : variant === "credits"
+      ? <>You&apos;re booked into <strong className="text-[#2A2825]">{title}</strong>, <strong className="text-[#2A2825]">{name || "friend"}</strong> — paid from your credit pack, nothing further to pay. See you on the mat.</>
       : variant === "paynow"
       ? <>Thank you, <strong className="text-[#2A2825]">{name || "friend"}</strong>. We&apos;ll verify your PayNow payment for <strong className="text-[#2A2825]">{title}</strong> and send a confirmation to your email within a few hours.</>
       : variant === "waitlist"
@@ -2618,7 +2630,102 @@ function ReserveModal({ info, onClose }: { info: ReserveInfo; onClose: () => voi
 
 // ── Booking Modal ─────────────────────────────────────────────────────────────
 
-function BookingModal({ info, onClose }: { info: BookingInfo; onClose: () => void }) {
+/**
+ * What credits mean for this particular class — the balance if they hold one,
+ * the offer if they don't. It belongs in the booking modal because this is the
+ * moment someone is deciding to spend, and the per-class saving is the whole
+ * argument for a pack.
+ *
+ * Deliberately quiet about what will actually be charged: the server decides
+ * between plan, credits and card at booking time, and promising here what it
+ * might rule differently there would be worse than saying nothing.
+ */
+function CreditNudge({
+  category,
+  onBuyCredits
+}: {
+  category?: string;
+  onBuyCredits?: () => void;
+}) {
+  const { isLoggedIn, token } = useMemberAuth();
+  const [summary, setSummary] = useState<CreditSummary | null>(null);
+  const [cheapest, setCheapest] = useState<CreditPack | null>(null);
+
+  useEffect(() => {
+    let live = true;
+    if (isLoggedIn && token) {
+      fetchMemberCredits(token)
+        .then((data) => live && setSummary(data))
+        .catch(() => {});
+    }
+    fetchCreditPacks()
+      .then(({ packs }) => {
+        if (!live || !packs.length) return;
+        setCheapest(packs.reduce((best, p) => (p.perCreditCents < best.perCreditCents ? p : best)));
+      })
+      .catch(() => {});
+    return () => {
+      live = false;
+    };
+  }, [isLoggedIn, token]);
+
+  const cost = category ? summary?.costs?.[category.toUpperCase()] : undefined;
+  const creditsLeft = summary?.creditsLeft ?? 0;
+  const isMeditation = (category || "").toUpperCase() === "MEDITATION";
+
+  if (creditsLeft > 0) {
+    const enough = cost === undefined || creditsLeft >= cost;
+    return (
+      <div className="px-8 py-3 bg-[#EDE5D8] flex items-center justify-between gap-4">
+        <p className="text-[12px] text-[#2A2825]" style={{ fontFamily: "var(--font-body)" }}>
+          <strong>{creditsLeft} credits</strong> in your account
+          {isMeditation
+            ? " · meditation is free"
+            : cost
+              ? ` · this class costs ${cost}`
+              : ""}
+        </p>
+        {!enough && (
+          <span className="text-[11px] text-[#7A7468]" style={{ fontFamily: "var(--font-body)" }}>
+            Not quite enough
+          </span>
+        )}
+      </div>
+    );
+  }
+
+  if (!cheapest || !onBuyCredits) return null;
+
+  return (
+    <div className="px-8 py-3 bg-[#EDE5D8] flex items-center justify-between gap-4">
+      <p className="text-[12px] text-[#7A7468]" style={{ fontFamily: "var(--font-body)" }}>
+        Coming more than once? Credits work out from{" "}
+        <strong className="text-[#2A2825]">
+          {cheapest.perCredit} a credit
+        </strong>
+        , and last six months.
+      </p>
+      <button
+        type="button"
+        onClick={onBuyCredits}
+        className="shrink-0 text-[10px] tracking-[0.15em] uppercase text-[#C4785A] border border-[#C4785A] px-3 py-2 hover:bg-[#C4785A] hover:text-white transition-colors duration-300"
+        style={{ fontFamily: "var(--font-body)" }}
+      >
+        Buy credits
+      </button>
+    </div>
+  );
+}
+
+function BookingModal({
+  info,
+  onClose,
+  onBuyCredits
+}: {
+  info: BookingInfo;
+  onClose: () => void;
+  onBuyCredits?: () => void;
+}) {
   const { isLoggedIn, member, token, refreshMember } = useMemberAuth();
   const CLASS_PRICE = info.price ?? "SGD 35";
   const isComingSoon = Boolean(info.comingSoon ?? info.day === "Coming Soon");
@@ -2637,8 +2744,10 @@ function BookingModal({ info, onClose }: { info: BookingInfo; onClose: () => voi
   const [submitError, setSubmitError] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [alreadyBooked, setAlreadyBooked] = useState(false);
-  // Set when the class was covered by the member's plan, so no checkout happens.
+  // Set when the class was covered by the member's plan or their credits, so
+  // no checkout happens. `coveredBy` decides which of the two we say.
   const [membershipNote, setMembershipNote] = useState("");
+  const [coveredBy, setCoveredBy] = useState<"membership" | "credits" | null>(null);
   const code = info.code ?? info.type.replace(/\s+/g, "").slice(0, 8);
 
   useEffect(() => {
@@ -2719,6 +2828,15 @@ function BookingModal({ info, onClose }: { info: BookingInfo; onClose: () => voi
       // Covered by the member's plan — already confirmed, no checkout to send them to.
       if (result.membership) {
         setMembershipNote(result.membership.reason);
+        setCoveredBy("membership");
+        setStep("done");
+        return;
+      }
+      // Paid out of a credit pack. Confirmed the same way, and the balance is
+      // already down, so the only job left is telling them what it cost.
+      if (result.credits) {
+        setMembershipNote(result.credits.reason);
+        setCoveredBy("credits");
         setStep("done");
         return;
       }
@@ -2786,6 +2904,19 @@ function BookingModal({ info, onClose }: { info: BookingInfo; onClose: () => voi
         {step === "auth" && (
           <>
             {classDetails}
+            {bookable && (
+              <CreditNudge
+                category={info.category}
+                onBuyCredits={
+                  onBuyCredits
+                    ? () => {
+                        onClose();
+                        onBuyCredits();
+                      }
+                    : undefined
+                }
+              />
+            )}
             <MemberAuthPanel compact onSuccess={() => setStep(isComingSoon ? "waitlist" : "confirm")} />
           </>
         )}
@@ -2793,6 +2924,17 @@ function BookingModal({ info, onClose }: { info: BookingInfo; onClose: () => voi
         {step === "confirm" && bookable && member && (
           <>
             {classDetails}
+            <CreditNudge
+              category={info.category}
+              onBuyCredits={
+                onBuyCredits
+                  ? () => {
+                      onClose();
+                      onBuyCredits();
+                    }
+                  : undefined
+              }
+            />
             <div className="p-8">
               <div className="space-y-5">
                 <div className="bg-[#F2EBE0] p-4">
@@ -2885,7 +3027,7 @@ function BookingModal({ info, onClose }: { info: BookingInfo; onClose: () => voi
             name={member?.name || ""}
             title={info.type}
             variant={
-              waitlistSent ? "waitlist" : membershipNote ? "membership" : payReference ? "paynow" : "stripe"
+              waitlistSent ? "waitlist" : coveredBy ? coveredBy : payReference ? "paynow" : "stripe"
             }
             membershipNote={membershipNote}
           />
@@ -3504,7 +3646,13 @@ export default function MarketingSite({
         />
       )}
       {reserve && <ReserveModal info={reserve} onClose={() => setReserve(null)} />}
-      {booking && <BookingModal info={booking} onClose={() => setBooking(null)} />}
+      {booking && (
+        <BookingModal
+          info={booking}
+          onClose={() => setBooking(null)}
+          onBuyCredits={() => setCreditPack({})}
+        />
+      )}
       {stripeBooking && <BookingSuccessModal booking={stripeBooking} onClose={() => setStripeBooking(null)} />}
       {creditPack && (
         <CreditPackModal initialPackId={creditPack.packId} onClose={() => setCreditPack(null)} />
