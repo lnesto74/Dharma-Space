@@ -428,6 +428,15 @@
   box-shadow: none;
 }
 
+.admin-btn:disabled,
+.admin-btn:disabled:hover {
+  opacity: 0.45;
+  cursor: not-allowed;
+  background: var(--admin-surface);
+  border-color: var(--admin-border);
+  box-shadow: none;
+}
+
 .admin-btn-primary {
   background: var(--admin-accent);
   border-color: var(--admin-accent);
@@ -686,11 +695,26 @@
   font-size: 14px;
 }
 
+/* Goes on a wrapper inside the cell. Never on the <td> itself — a table cell
+   made into a flex container leaves the table layout, so its buttons float
+   over the row instead of sitting in it. */
 .admin-table-actions {
   display: flex;
   gap: 2px;
   opacity: 0;
   transition: opacity 0.1s;
+}
+
+/* For cells whose buttons are always visible, such as Freeze and Cancel on a
+   membership. Shrinks to its content so the column doesn't take the slack. */
+.admin-td-actions {
+  width: 1%;
+  white-space: nowrap;
+}
+
+.admin-td-actions .admin-action-row {
+  justify-content: flex-start;
+  flex-wrap: nowrap;
 }
 
 .admin-table tbody tr:hover .admin-table-actions {

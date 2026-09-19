@@ -500,7 +500,7 @@ function MembersTab({
                         <div className="admin-field-hint">held rate</div>
                       )}
                     </td>
-                    <td className="admin-table-actions">
+                    <td className="admin-td-actions">
                       <div className="admin-action-row">
                         {m.status === "FROZEN" ? (
                           <button className="admin-btn" onClick={() => onChangeStatus(m.id, "unfreeze")}>
