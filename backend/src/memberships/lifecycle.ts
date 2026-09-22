@@ -37,8 +37,23 @@ export type NewMembershipDates = {
 
 export function newMembershipDates(
   startedAt: Date,
-  rateHeldMonths: number | null
+  rateHeldMonths: number | null,
+  /** Set for a pass that runs a fixed number of days and then stops. */
+  termDays: number | null = null
 ): NewMembershipDates {
+  if (termDays && termDays > 0) {
+    const endsAt = addDays(startedAt, termDays);
+    return {
+      startedAt,
+      currentPeriodStart: startedAt,
+      currentPeriodEnd: endsAt,
+      // A week-long pass carries no three-month commitment — there is nothing
+      // to commit to. It ends when it ends.
+      minimumTermEndsAt: endsAt,
+      rateHeldUntil: null
+    };
+  }
+
   return {
     startedAt,
     currentPeriodStart: startedAt,

@@ -51,6 +51,8 @@ export type MembershipWelcome = {
   rateHeld: boolean;
   /** True when the studio created the account, so they have no password yet. */
   isNewAccount: boolean;
+  /** Set for a fixed-length pass: it ends on its date rather than renewing. */
+  termDays?: number | null;
 };
 
 export async function sendMembershipWelcomeEmail(input: MembershipWelcome) {
@@ -71,21 +73,29 @@ export async function sendMembershipWelcomeEmail(input: MembershipWelcome) {
       .map((c) => CATEGORY_LABELS[c] ?? c.toLowerCase())
   );
 
+  // A pass runs for a set number of days and then stops. Everything the email
+  // says about months and renewal has to change with it, or the first thing a
+  // new person reads about us is wrong.
+  const isPass = Boolean(input.termDays && input.termDays > 0);
+  const per = isPass ? `for ${input.termDays} days` : "each month";
+
   const allowance =
     input.tier.includedSessionsPerMonth === null
-      ? "Unlimited classes each month"
-      : `${input.tier.includedSessionsPerMonth} classes each month`;
+      ? `Unlimited classes ${per}`
+      : `${input.tier.includedSessionsPerMonth} classes ${per}`;
 
   const details = [
     `Plan: ${input.tier.name}`,
-    `Price: ${formatCents(input.priceCents)} per month${input.rateHeld ? " — your rate is held" : ""}`,
+    isPass
+      ? `Price: ${formatCents(input.priceCents)}, paid once`
+      : `Price: ${formatCents(input.priceCents)} per month${input.rateHeld ? " — your rate is held" : ""}`,
     `Included: ${allowance}${covered ? ` across ${covered}` : ""}`,
     `Meditation: free, and never counts against your allowance`,
     input.tier.guestPassesPerMonth > 0
       ? `Guest passes: ${input.tier.guestPassesPerMonth} a month`
       : null,
     `Started: ${longDate(input.startedAt)}`,
-    `Renews: ${longDate(input.currentPeriodEnd)}`
+    `${isPass ? "Ends" : "Renews"}: ${longDate(input.currentPeriodEnd)}`
   ]
     .filter(Boolean)
     .join("\n");
@@ -100,12 +110,16 @@ export async function sendMembershipWelcomeEmail(input: MembershipWelcome) {
   const body = [
     `Hi ${input.member.name},`,
     "",
-    `Welcome to Dharma Space. Your ${input.tier.name} membership is active.`,
+    isPass
+      ? `Welcome to Dharma Space. Your ${input.tier.name} pass is open — everything on the timetable, for the next ${input.termDays} days.`
+      : `Welcome to Dharma Space. Your ${input.tier.name} membership is active.`,
     "",
     details,
     ...signIn,
     "",
-    `Good to know: the first ${MINIMUM_TERM_MONTHS} months are a minimum term, after which it runs month to month. Cancelling needs ${CANCELLATION_NOTICE_DAYS} days' notice and you keep access to the end of the period you've paid for. Classes your plan doesn't cover are available to you at the member rate.`,
+    isPass
+      ? `Good to know: the pass runs to ${longDate(input.currentPeriodEnd)} and then simply stops — there's nothing to cancel and nothing renews. Come as often as you like in between; if you find your rhythm, we'll be glad to talk about a monthly plan.`
+      : `Good to know: the first ${MINIMUM_TERM_MONTHS} months are a minimum term, after which it runs month to month. Cancelling needs ${CANCELLATION_NOTICE_DAYS} days' notice and you keep access to the end of the period you've paid for. Classes your plan doesn't cover are available to you at the member rate.`,
     "",
     `Any questions, just reply to this email or message us on WhatsApp: ${process.env.WHATSAPP_URL || "https://wa.me/6598664331"}`,
     "",
@@ -117,29 +131,36 @@ export async function sendMembershipWelcomeEmail(input: MembershipWelcome) {
     sendMail(CATEGORY, {
       to: input.member.email,
       replyTo: inbox,
-      subject: `Welcome to Dharma Space — your ${input.tier.name} membership`,
+      subject: isPass
+        ? `Your ${input.tier.name} week starts now`
+        : `Welcome to Dharma Space — your ${input.tier.name} membership`,
       text: body,
       html: renderCustomerEmail({
-        eyebrow: "Membership active",
+        eyebrow: isPass ? "Pass open" : "Membership active",
         heading: `Welcome to ${input.tier.name}`,
         preheader: `${allowance}${covered ? ` across ${covered}` : ""}, starting today.`,
         greeting: `Hi ${input.member.name},`,
         paragraphs: [
-          "Welcome to Dharma Space. Your membership is active from today — book any class it covers and your allowance is applied automatically, with nothing to pay at the door."
+          isPass
+            ? `Welcome to Dharma Space. For the next ${input.termDays} days everything on the timetable is open to you — yoga, aerial, dance, sound healing and meditation. Come as often as you like and see what fits.`
+            : "Welcome to Dharma Space. Your membership is active from today — book any class it covers and your allowance is applied automatically, with nothing to pay at the door."
         ],
-        highlight: {
-          value:
-            input.tier.includedSessionsPerMonth === null
-              ? "Unlimited"
-              : String(input.tier.includedSessionsPerMonth),
-          label:
-            input.tier.includedSessionsPerMonth === null ? "classes each month" : "classes each month"
-        },
+        highlight: isPass
+          ? { value: String(input.termDays), label: "days of everything" }
+          : {
+              value:
+                input.tier.includedSessionsPerMonth === null
+                  ? "Unlimited"
+                  : String(input.tier.includedSessionsPerMonth),
+              label: "classes each month"
+            },
         details: [
           { label: "Plan", value: input.tier.name },
           {
             label: "Price",
-            value: `${formatCents(input.priceCents)} per month${input.rateHeld ? " — rate held" : ""}`
+            value: isPass
+              ? `${formatCents(input.priceCents)}, paid once`
+              : `${formatCents(input.priceCents)} per month${input.rateHeld ? " — rate held" : ""}`
           },
           ...(covered ? [{ label: "Covers", value: covered }] : []),
           { label: "Meditation", value: "Free, and never counts against your allowance" },
@@ -147,9 +168,12 @@ export async function sendMembershipWelcomeEmail(input: MembershipWelcome) {
             ? [{ label: "Guest passes", value: `${input.tier.guestPassesPerMonth} a month` }]
             : []),
           { label: "Started", value: longDate(input.startedAt) },
-          { label: "Renews", value: longDate(input.currentPeriodEnd) }
+          {
+            label: isPass ? "Ends" : "Renews",
+            value: longDate(input.currentPeriodEnd)
+          }
         ],
-        detailsTitle: "Your membership",
+        detailsTitle: isPass ? "Your pass" : "Your membership",
         ...(input.isNewAccount
           ? {
               note: {
@@ -162,10 +186,17 @@ export async function sendMembershipWelcomeEmail(input: MembershipWelcome) {
             }
           : {}),
         cta: { label: "Book your first class", url: "https://dharma-space.com/classes" },
-        closing: [
-          `The first ${MINIMUM_TERM_MONTHS} months are a minimum term, after which it runs month to month. Cancelling needs ${CANCELLATION_NOTICE_DAYS} days' notice and you keep access to the end of the period you've paid for.`,
-          "Classes your plan doesn't cover are always open to you at the member rate."
-        ]
+        closing: isPass
+          ? [
+              `Your pass runs to ${longDate(
+                input.currentPeriodEnd
+              )} and then simply stops — there's nothing to cancel and nothing renews.`,
+              "If you find your rhythm with us in that week, we'd love to talk about a monthly plan."
+            ]
+          : [
+              `The first ${MINIMUM_TERM_MONTHS} months are a minimum term, after which it runs month to month. Cancelling needs ${CANCELLATION_NOTICE_DAYS} days' notice and you keep access to the end of the period you've paid for.`,
+              "Classes your plan doesn't cover are always open to you at the member rate."
+            ]
       })
     }),
     sendMail(CATEGORY, {

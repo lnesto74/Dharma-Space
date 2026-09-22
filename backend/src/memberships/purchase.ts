@@ -63,6 +63,10 @@ export async function listTiersForSale(prisma: PrismaClient) {
       guestPassesPerMonth: tier.guestPassesPerMonth,
       rateHeldMonths: tier.rateHeldMonths,
       maxMembers: tier.maxMembers,
+      // A one-off pass rather than a plan that renews.
+      termDays: tier.termDays,
+      introOnly: tier.introOnly,
+      notes: tier.notes,
       placesLeft,
       soldOut: placesLeft === 0
     };
@@ -72,7 +76,13 @@ export async function listTiersForSale(prisma: PrismaClient) {
 export type StartedMembershipPurchase = {
   reference: string;
   amountCents: number;
-  tier: { id: string; name: string; monthlyPriceCents: number; rateHeldMonths: number | null };
+  tier: {
+    id: string;
+    name: string;
+    monthlyPriceCents: number;
+    rateHeldMonths: number | null;
+    termDays: number | null;
+  };
 };
 
 /**
@@ -112,7 +122,8 @@ export async function startMembershipPurchase(
       id: tier.id,
       name: tier.name,
       monthlyPriceCents: tier.monthlyPriceCents,
-      rateHeldMonths: tier.rateHeldMonths
+      rateHeldMonths: tier.rateHeldMonths,
+      termDays: tier.termDays
     }
   };
 }
@@ -127,6 +138,7 @@ export async function attachCheckoutUrl(prisma: PrismaClient, reference: string,
 export type CompletedMembershipPurchase = {
   membershipId: string;
   tierName: string;
+  termDays: number | null;
   alreadyStarted: boolean;
 };
 
@@ -159,6 +171,7 @@ export async function completeMembershipPurchase(
     return {
       membershipId: existing.id,
       tierName: existing.tier?.name ?? "your plan",
+      termDays: existing.tier?.termDays ?? null,
       alreadyStarted: true
     };
   }
@@ -184,7 +197,12 @@ export async function completeMembershipPurchase(
       include: { tier: true }
     });
     return raced
-      ? { membershipId: raced.id, tierName: raced.tier?.name ?? tier.name, alreadyStarted: true }
+      ? {
+          membershipId: raced.id,
+          tierName: raced.tier?.name ?? tier.name,
+          termDays: raced.tier?.termDays ?? null,
+          alreadyStarted: true
+        }
       : null;
   }
 
@@ -198,7 +216,12 @@ export async function completeMembershipPurchase(
     stripeSubscriptionId: opts.subscriptionId ?? null
   });
 
-  return { membershipId: membership.id, tierName: tier.name, alreadyStarted: false };
+  return {
+    membershipId: membership.id,
+    tierName: tier.name,
+    termDays: tier.termDays,
+    alreadyStarted: false
+  };
 }
 
 /** Checkout abandoned or card declined — nothing was created, so just close the payment off. */

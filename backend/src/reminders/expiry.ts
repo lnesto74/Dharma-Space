@@ -214,7 +214,10 @@ export async function sweepExpiryReminders(
   const renewing = await prisma.membership.findMany({
     where: {
       status: "ACTIVE",
-      currentPeriodEnd: { gt: now, lte: addDays(now, RENEWAL_NOTICE_DAYS) }
+      currentPeriodEnd: { gt: now, lte: addDays(now, RENEWAL_NOTICE_DAYS) },
+      // A week-long pass ends rather than renews, so a renewal notice would be
+      // telling it wrong.
+      tier: { termDays: null }
     },
     include: {
       member: { select: { id: true, name: true, email: true } },

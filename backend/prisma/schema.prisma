@@ -396,6 +396,11 @@ model MembershipTier {
   maxMembers              Int?
   // Months the introductory rate is held (Founding 50 = 12). null = forever.
   rateHeldMonths          Int?
+  // A pass that runs for a fixed number of days and then simply stops —
+  // New Here is 7. null means the usual monthly plan that renews itself.
+  termDays                Int?
+  // Only sellable to someone who has never held a membership here.
+  introOnly               Boolean      @default(false)
   notes                   String       @default("")
   isActive                Boolean      @default(true)
   sortOrder               Int          @default(0)

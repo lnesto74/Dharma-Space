@@ -67,6 +67,7 @@ export async function applySchemaPatches(): Promise<void> {
       await backfillPaymentLedger(client);
       await ensureExpiryReminderTable(client);
       await ensurePaymentKind(client);
+      await ensureIntroPassColumns(client);
 
       const after = await missingUserColumns(client);
       if (after.length === 0) {
@@ -291,6 +292,19 @@ async function ensureCategoryGroups(client: PrismaClient) {
       names
     );
   }
+}
+
+/**
+ * A plan that runs for a fixed number of days instead of renewing monthly.
+ * Every existing plan is monthly, so the defaults leave them untouched.
+ */
+async function ensureIntroPassColumns(client: PrismaClient) {
+  await client.$executeRawUnsafe(
+    `ALTER TABLE "MembershipTier" ADD COLUMN IF NOT EXISTS "termDays" INTEGER`
+  );
+  await client.$executeRawUnsafe(
+    `ALTER TABLE "MembershipTier" ADD COLUMN IF NOT EXISTS "introOnly" BOOLEAN NOT NULL DEFAULT false`
+  );
 }
 
 /**

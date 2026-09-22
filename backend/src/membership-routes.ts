@@ -19,6 +19,7 @@ import {
   voidMembershipPurchase
 } from "./memberships/purchase.js";
 import { effectivePriceCents, sessionsRemaining } from "./memberships/lifecycle.js";
+import { isFixedTerm } from "./memberships/tiers.js";
 import { formatCents } from "./payments/money.js";
 import {
   createMembershipCheckoutSession,
@@ -71,7 +72,11 @@ export function registerMembershipRoutes(app: Express, prisma: PrismaClient, jwt
           price: formatCents(priceCents),
           currentPeriodEnd: membership.currentPeriodEnd,
           sessionsRemaining: period ? sessionsRemaining(period) : null,
-          unlimited: membership.tier.includedSessionsPerMonth === null
+          unlimited: membership.tier.includedSessionsPerMonth === null,
+          // A pass ends on its date; a plan renews on it. The difference is
+          // the whole message, so the date alone isn't enough to send.
+          renews: !isFixedTerm(membership.tier),
+          termDays: membership.tier.termDays
         }
       });
     } catch (error) {
@@ -99,7 +104,8 @@ export function registerMembershipRoutes(app: Express, prisma: PrismaClient, jwt
         tierName: started.tier.name,
         amountCents: started.amountCents,
         includedSessions: tier?.includedSessionsPerMonth ?? null,
-        rateHeldMonths: started.tier.rateHeldMonths
+        rateHeldMonths: started.tier.rateHeldMonths,
+        termDays: started.tier.termDays
       });
 
       if (!session) {
@@ -172,6 +178,7 @@ export function registerMembershipRoutes(app: Express, prisma: PrismaClient, jwt
         res.json({
           membershipId: result.membershipId,
           tierName: result.tierName,
+          termDays: result.termDays,
           alreadyStarted: result.alreadyStarted
         });
       } catch (error) {

@@ -54,6 +54,7 @@ import { registerCreditRoutes } from "./credit-routes.js";
 import { registerMembershipRoutes } from "./membership-routes.js";
 import { registerAdminCreditRoutes } from "./admin-credit-routes.js";
 import { expireLapsedWallets } from "./credits/purchase.js";
+import { expireLapsedPasses } from "./memberships/signup.js";
 import { scheduleExpiryReminders } from "./reminders/expiry.js";
 import { ensureWeekOneSchedule } from "./schedule/week-one.js";
 
@@ -1130,6 +1131,7 @@ async function startServer() {
   await ensureMembershipTiers(prisma).catch((error) => console.error("[startup] membership tiers:", error));
   await ensureCreditPacks(prisma).catch((error) => console.error("[startup] credit packs:", error));
   await expireLapsedWallets(prisma).catch((error) => console.error("[startup] credit expiry:", error));
+  await expireLapsedPasses(prisma).catch((error) => console.error("[startup] pass expiry:", error));
   await migrateProgramCategories(prisma).catch((error) => console.error("[startup] program migrate:", error));
   await migrateProgramScheduleFields(prisma).catch((error) => console.error("[startup] program schedule migrate:", error));
   await migrateClassScheduleFields(prisma).catch((error) => console.error("[startup] class migrate:", error));

@@ -10,6 +10,11 @@ export type MembershipTier = {
   guestPassesPerMonth: number;
   rateHeldMonths: number | null;
   maxMembers: number | null;
+  /** Days a fixed-length pass runs for. null = a monthly plan that renews. */
+  termDays: number | null;
+  /** Only sellable to someone who has never been a member. */
+  introOnly: boolean;
+  notes: string;
   placesLeft: number | null;
   soldOut: boolean;
 };
@@ -24,6 +29,9 @@ export type MyMembership = {
   currentPeriodEnd: string;
   sessionsRemaining: number | null;
   unlimited: boolean;
+  /** False for a fixed-length pass, which ends on its date instead. */
+  renews: boolean;
+  termDays: number | null;
 };
 
 const STORAGE_KEY = "dharma_pending_membership";
@@ -59,7 +67,13 @@ export async function startMembershipCheckout(token: string, input: { tierId: st
   return memberFetch<{
     reference: string;
     checkoutUrl: string;
-    tier: { id: string; name: string; monthlyPriceCents: number; rateHeldMonths: number | null };
+    tier: {
+      id: string;
+      name: string;
+      monthlyPriceCents: number;
+      rateHeldMonths: number | null;
+      termDays: number | null;
+    };
   }>("/api/member/memberships/checkout", token, {
     method: "POST",
     body: JSON.stringify(input)
@@ -70,7 +84,12 @@ export async function confirmMembershipPurchase(
   token: string,
   input: { sessionId?: string; reference?: string }
 ) {
-  return memberFetch<{ membershipId: string; tierName: string; alreadyStarted: boolean }>(
+  return memberFetch<{
+    membershipId: string;
+    tierName: string;
+    termDays: number | null;
+    alreadyStarted: boolean;
+  }>(
     "/api/member/memberships/confirm-return",
     token,
     { method: "POST", body: JSON.stringify(input) }

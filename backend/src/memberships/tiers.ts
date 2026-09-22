@@ -51,6 +51,10 @@ export const CANCELLATION_NOTICE_DAYS = 14;
 export const MAX_FREEZE_MONTHS_PER_YEAR = 2;
 export const FREEZE_FEE_CENTS = 1500;
 
+/** The week-long introduction: everything, once, for people who are new. */
+export const NEW_HERE_NAME = "New Here";
+export const NEW_HERE_DAYS = 7;
+
 export type TierSeed = {
   name: string;
   tierGroup: TierGroup;
@@ -64,9 +68,18 @@ export type TierSeed = {
   trainingDiscountPercent: number;
   maxMembers: number | null;
   rateHeldMonths: number | null;
+  /** Fixed-length pass in days. null = the usual monthly plan. */
+  termDays?: number | null;
+  /** Sellable only to someone who has never held a membership here. */
+  introOnly?: boolean;
   notes: string;
   sortOrder: number;
 };
+
+/** A pass that ends on its own date rather than renewing. */
+export function isFixedTerm(tier: { termDays: number | null }): boolean {
+  return tier.termDays !== null && tier.termDays > 0;
+}
 
 const FLOW_CATEGORIES: Category[] = ["YOGA", "MEDITATION"];
 const EXPERIENCE_CATEGORIES: Category[] = ["AERIAL", "SOUND", "DANCE", "MEDITATION"];
@@ -79,6 +92,26 @@ const ALL_ACCESS_CATEGORIES: Category[] = [
 ];
 
 export const TIER_SEEDS: TierSeed[] = [
+  {
+    // Seven days of everything, bought once. It sits above the monthly plans
+    // because it is how most people meet the studio, and it is deliberately
+    // not a membership that renews — nobody should discover they joined.
+    name: NEW_HERE_NAME,
+    tierGroup: "ALL_ACCESS",
+    monthlyPriceCents: 5900,
+    includedSessionsPerMonth: null,
+    allowedCategories: ALL_ACCESS_CATEGORIES,
+    guestPassesPerMonth: 0,
+    priorityBookingDays: 0,
+    trainingDiscountCents: 0,
+    trainingDiscountPercent: 0,
+    maxMembers: null,
+    rateHeldMonths: null,
+    termDays: NEW_HERE_DAYS,
+    introOnly: true,
+    notes: "Seven days, everything. One week to find your slot. First visit only.",
+    sortOrder: 0
+  },
   {
     name: "Flow 4",
     tierGroup: "FLOW",

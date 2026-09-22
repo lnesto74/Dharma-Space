@@ -38,6 +38,7 @@ import {
 } from "./payments/ledger.js";
 import { parsePriceToCents } from "./payments/money.js";
 import { formatPrice, singleClassCents, walkUpCents } from "./schedule/pricing.js";
+import { isFixedTerm } from "./memberships/tiers.js";
 import type { WalletLedger } from "./credits/wallet.js";
 
 export type MemberToken = { sub: string; kind: "site_member" };
@@ -374,7 +375,9 @@ export async function loadMembershipContext(
           sessionsUsed: period.sessionsUsed,
           sessionsRolledIn: period.sessionsRolledIn
         }
-      : null
+      : null,
+    // A fixed-length pass stops at its end date; a monthly plan doesn't.
+    expiresAt: isFixedTerm(membership.tier) ? membership.currentPeriodEnd : null
   };
 }
 

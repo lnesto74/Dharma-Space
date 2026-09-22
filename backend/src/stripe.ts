@@ -176,6 +176,8 @@ export async function createMembershipCheckoutSession(input: {
   amountCents: number;
   includedSessions: number | null;
   rateHeldMonths: number | null;
+  /** Set for a fixed-length pass, which is bought once and never renews. */
+  termDays?: number | null;
 }) {
   const stripe = getStripe();
   if (!stripe) return null;
@@ -189,8 +191,19 @@ export async function createMembershipCheckoutSession(input: {
     ? `, rate held for ${input.rateHeldMonths} months`
     : "";
 
+  const metadata = {
+    purchaseType: MEMBERSHIP_PURCHASE,
+    purchaseReference: input.reference,
+    membershipTierId: input.tierId
+  };
+
+  // A pass with an end date has nothing to charge next month, so it is a single
+  // payment — and because there is no renewal to protect, PayNow works for it
+  // where it cannot for a subscription.
+  const oneOff = Boolean(input.termDays && input.termDays > 0);
+
   const session = await stripe.checkout.sessions.create({
-    mode: "subscription",
+    mode: oneOff ? "payment" : "subscription",
     customer_email: input.email,
     client_reference_id: input.reference,
     line_items: [
@@ -199,31 +212,23 @@ export async function createMembershipCheckoutSession(input: {
         price_data: {
           currency: "sgd",
           unit_amount: input.amountCents,
-          recurring: { interval: "month" },
+          ...(oneOff ? {} : { recurring: { interval: "month" as const } }),
           product_data: {
             name: `${input.tierName} — Dharma Space`,
-            description: `${included}${held}`
+            description: oneOff
+              ? `Everything for ${input.termDays} days`
+              : `${included}${held}`
           }
         }
       }
     ],
-    metadata: {
-      purchaseType: MEMBERSHIP_PURCHASE,
-      purchaseReference: input.reference,
-      membershipTierId: input.tierId
-    },
+    metadata,
     // Copied onto the subscription so renewal invoices, which carry no session,
     // can still be traced back to the plan that was bought.
-    subscription_data: {
-      metadata: {
-        purchaseType: MEMBERSHIP_PURCHASE,
-        purchaseReference: input.reference,
-        membershipTierId: input.tierId
-      }
-    },
+    ...(oneOff ? {} : { subscription_data: { metadata } }),
     success_url: `${base}/memberships/success?session_id={CHECKOUT_SESSION_ID}`,
     cancel_url: `${base}/classes`,
-    payment_method_types: ["card"]
+    payment_method_types: oneOff ? ["paynow", "card"] : ["card"]
   });
 
   if (!session.url) {
@@ -413,9 +418,12 @@ async function handleMembershipEvent(
   session: Stripe.Checkout.Session
 ) {
   switch (eventType) {
-    case "checkout.session.completed": {
+    // An intro pass may be paid by PayNow, which can settle after the customer
+    // has closed the tab — so the paid signal arrives as an async event.
+    case "checkout.session.completed":
+    case "checkout.session.async_payment_succeeded": {
       // Subscriptions report `paid` on the first invoice; anything else means
-      // the card did not go through and no membership should exist yet.
+      // the money did not arrive and no membership should exist yet.
       if (session.payment_status !== "paid") return;
       await completeMembershipPurchase(prisma, reference, {
         tierId: session.metadata?.membershipTierId ?? null,

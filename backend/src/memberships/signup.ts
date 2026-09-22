@@ -40,6 +40,19 @@ export async function canJoinTier(
     };
   }
 
+  // "New here" means new. Cancelled and lapsed plans count, otherwise the
+  // week-long pass becomes a $59 rolling membership for anyone patient enough.
+  if (tier.introOnly) {
+    const everHeld = await prisma.membership.count({ where: { memberId } });
+    if (everHeld > 0) {
+      return {
+        ok: false,
+        status: 409,
+        message: `${tier.name} is for a first visit only — you've been with us before. Have a look at the monthly plans.`
+      };
+    }
+  }
+
   // Founding 50 and any other capped plan stops being sellable at its cap.
   if (tier.maxMembers !== null) {
     const used = await prisma.membership.count({
@@ -77,7 +90,7 @@ export type StartMembershipInput = {
 export async function startMembership(prisma: PrismaClient, input: StartMembershipInput) {
   const { member, tier } = input;
   const startedAt = input.startedAt ?? new Date();
-  const dates = newMembershipDates(startedAt, tier.rateHeldMonths);
+  const dates = newMembershipDates(startedAt, tier.rateHeldMonths, tier.termDays);
   // A capped, rate-held plan (Founding 50) holds its own price.
   const priceCentsOverride =
     input.priceCentsOverride ?? (tier.rateHeldMonths ? tier.monthlyPriceCents : null);
@@ -123,12 +136,35 @@ export async function startMembership(prisma: PrismaClient, input: StartMembersh
     currentPeriodEnd: dates.currentPeriodEnd,
     minimumTermEndsAt: dates.minimumTermEndsAt,
     rateHeld: priceCentsOverride !== null,
-    isNewAccount: input.isNewAccount ?? false
+    isNewAccount: input.isNewAccount ?? false,
+    termDays: tier.termDays
   }).catch((error) => {
     console.error("[membership-mail] welcome failed:", error);
   });
 
   return membership;
+}
+
+/**
+ * Closes fixed-length passes whose time is up.
+ *
+ * Booking already refuses a lapsed pass on the date itself, so this is not
+ * what protects the studio — it is what stops a finished week sitting in the
+ * admin list looking active, and what makes the member's own account honest.
+ */
+export async function expireLapsedPasses(prisma: PrismaClient, now = new Date()) {
+  const lapsed = await prisma.membership.updateMany({
+    where: {
+      status: { in: ["ACTIVE", "PAYMENT_FAILED"] },
+      currentPeriodEnd: { lt: now },
+      tier: { termDays: { not: null } }
+    },
+    data: { status: "CANCELLED", cancelEffectiveAt: now }
+  });
+  if (lapsed.count) {
+    console.log(`[memberships] closed ${lapsed.count} finished pass(es)`);
+  }
+  return lapsed.count;
 }
 
 /**

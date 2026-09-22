@@ -38,6 +38,9 @@ const tierBodySchema = z.object({
   trainingDiscountPercent: z.number().int().min(0).max(100).default(0),
   maxMembers: z.number().int().min(1).nullable().default(null),
   rateHeldMonths: z.number().int().min(1).nullable().default(null),
+  // A pass that runs for a set number of days instead of renewing monthly.
+  termDays: z.number().int().min(1).max(365).nullable().default(null),
+  introOnly: z.boolean().default(false),
   notes: z.string().default(""),
   isActive: z.boolean().default(true),
   sortOrder: z.number().int().default(0)
@@ -81,6 +84,8 @@ function tierView(tier: {
   trainingDiscountPercent: number;
   maxMembers: number | null;
   rateHeldMonths: number | null;
+  termDays: number | null;
+  introOnly: boolean;
   notes: string;
   isActive: boolean;
   sortOrder: number;

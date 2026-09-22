@@ -1768,6 +1768,11 @@ function MembershipPacksSection({
 
   if (!packs.length && !tiers.length) return null;
 
+  // The week-long pass is how most people meet the studio, so it leads rather
+  // than sitting as one row among the monthly plans.
+  const introPass = tiers.find((t) => t.termDays && t.introOnly && !t.soldOut) || null;
+  const plans = tiers.filter((t) => !t.termDays);
+
   return (
     <section id="membership-packs" className="scroll-mt-24 bg-[#FAF8F3] py-24">
       <div className="max-w-7xl mx-auto px-6 lg:px-12">
@@ -1781,6 +1786,35 @@ function MembershipPacksSection({
             timetable — it's only a question of rhythm.
           </p>
         </div>
+
+        {introPass && !mine && (
+          <button
+            type="button"
+            onClick={() => onJoinPlan(introPass.id)}
+            className="group w-full bg-[#2A2825] text-white p-8 lg:p-10 mb-8 flex flex-col sm:flex-row sm:items-center gap-6 sm:gap-10 text-left hover:bg-[#33302C] transition-colors duration-300"
+          >
+            <div className="shrink-0">
+              <p className="text-4xl lg:text-5xl font-normal leading-none" style={{ fontFamily: "var(--font-display)" }}>
+                {introPass.monthlyPrice.replace(/^SGD\s*/, "$")}
+              </p>
+              <p className="text-[10px] tracking-[0.25em] text-[#D4B896] uppercase mt-3" style={{ fontFamily: "var(--font-body)" }}>
+                New here
+              </p>
+            </div>
+            <div className="flex-1">
+              <h3 className="text-xl lg:text-2xl font-normal mb-2" style={{ fontFamily: "var(--font-display)" }}>
+                {introPass.termDays} days, everything
+              </h3>
+              <p className="text-white/70 text-[14px] leading-relaxed max-w-lg" style={{ fontFamily: "var(--font-body)" }}>
+                Yoga, aerial, dance, sound healing and meditation — one week to come as often as you like and find your
+                slot. First visit only, and nothing renews.
+              </p>
+            </div>
+            <span className="shrink-0 text-[11px] tracking-[0.15em] uppercase text-[#D4B896] inline-flex items-center gap-2 group-hover:gap-3 transition-all duration-300" style={{ fontFamily: "var(--font-body)" }}>
+              Start the week <ChevronRight size={14} />
+            </span>
+          </button>
+        )}
 
         <div className="grid lg:grid-cols-2 gap-8 lg:gap-10 items-start">
           {/* Monthly plans */}
@@ -1809,12 +1843,13 @@ function MembershipPacksSection({
                   {mine.unlimited
                     ? "Unlimited classes"
                     : `${mine.sessionsRemaining ?? 0} classes left this month`}{" "}
-                  · renews {new Date(mine.currentPeriodEnd).toLocaleDateString(undefined, { day: "numeric", month: "long" })}
+                  · {mine.renews ? "renews" : "ends"}{" "}
+                  {new Date(mine.currentPeriodEnd).toLocaleDateString(undefined, { day: "numeric", month: "long" })}
                 </p>
               </div>
             ) : (
               <div className="space-y-3">
-                {tiers.map((tier) => (
+                {plans.map((tier) => (
                   <button
                     key={tier.id}
                     type="button"

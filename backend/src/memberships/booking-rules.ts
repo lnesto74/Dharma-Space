@@ -54,6 +54,11 @@ export type MembershipContext = {
   status: string;
   allowedCategories: string;
   period: (PeriodLedger & { id: string }) | null;
+  /**
+   * When a fixed-length pass stops covering classes. Monthly plans leave this
+   * null: they renew, so the period ending is not the plan ending.
+   */
+  expiresAt?: Date | null;
 };
 
 export type PaymentPlan =
@@ -85,6 +90,17 @@ export function resolvePaymentPlan(
       fromCredits(category, wallets, now) ?? {
         method: "DROP_IN",
         reason: `Membership is ${membership.status.replace(/_/g, " ").toLowerCase()} — cannot book on the plan.`
+      }
+    );
+  }
+  // A week-long pass whose week is over. Checked here rather than trusting a
+  // status flag, because the pass lapses on a date and nothing is guaranteed
+  // to have run in between.
+  if (membership.expiresAt && now.getTime() > membership.expiresAt.getTime()) {
+    return (
+      fromCredits(category, wallets, now) ?? {
+        method: "DROP_IN",
+        reason: "That pass has ended — walk-up rate."
       }
     );
   }

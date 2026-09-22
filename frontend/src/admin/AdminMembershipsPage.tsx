@@ -35,6 +35,9 @@ type TierRow = {
   trainingDiscountPercent: number;
   maxMembers: number | null;
   rateHeldMonths: number | null;
+  /** Days a fixed-length pass runs for. null = a monthly plan. */
+  termDays: number | null;
+  introOnly: boolean;
   notes: string;
   isActive: boolean;
   sortOrder: number;
@@ -678,11 +681,15 @@ function PlansTab({ tiers }: { tiers: TierRow[] }) {
               <tr key={t.id}>
                 <td className="admin-td-name">
                   {t.name}
+                  {t.introOnly && <span className="admin-tag">first visit only</span>}
                   {t.notes && <div className="admin-field-hint">{t.notes}</div>}
                 </td>
                 <td>{groupPill(t.tierGroup)}</td>
-                <td>{money(t.monthlyPriceCents)}</td>
-                <td>{allowanceLabel(t)}</td>
+                <td>
+                  {money(t.monthlyPriceCents)}
+                  {t.termDays && <div className="admin-field-hint">once · {t.termDays} days</div>}
+                </td>
+                <td>{t.termDays ? `Everything, ${t.termDays} days` : allowanceLabel(t)}</td>
                 <td>
                   {t.allowedCategories.map((c) => (
                     <span key={c} className="admin-tag">
@@ -712,7 +719,9 @@ function PlansTab({ tiers }: { tiers: TierRow[] }) {
 
       <p className="admin-field-hint" style={{ marginTop: 16 }}>
         Meditation is free on every plan and never uses an included session. Flow plans cover yoga;
-        Experience plans cover aerial, sound and dance; All-Access covers everything.
+        Experience plans cover aerial, sound and dance; All-Access covers everything. New Here is a
+        one-off week rather than a plan — it is paid once, covers everything, and closes itself on
+        the seventh day with nothing to cancel.
       </p>
     </div>
   );

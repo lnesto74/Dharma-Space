@@ -49,6 +49,9 @@ export function MembershipModal({
   }, []);
 
   const selected = tiers.find((t) => t.id === tierId) || null;
+  // A fixed-length pass is bought once. Nothing about renewal applies to it,
+  // and saying otherwise would be the first thing a new person reads.
+  const isPass = Boolean(selected?.termDays);
 
   const handleJoin = async () => {
     if (!token || !selected) return;
@@ -65,7 +68,7 @@ export function MembershipModal({
   };
 
   return (
-    <ModalShell eyebrow="Membership" title="Join a plan" onClose={onClose}>
+    <ModalShell eyebrow="Membership" title={isPass ? "Start your week" : "Join a plan"} onClose={onClose}>
       {!isLoggedIn ? (
         <>
           <div className="px-8 pt-6 pb-2">
@@ -103,7 +106,11 @@ export function MembershipModal({
                       {tier.name}
                     </p>
                     <p className="text-[11px] text-[#7A7468] mt-0.5 leading-relaxed" style={BODY}>
-                      {sessionsLabel(tier.includedSessionsPerMonth)} · {categoriesLabel(tier.allowedCategories)}
+                      {tier.termDays
+                        ? `${tier.termDays} days, everything · paid once`
+                        : `${sessionsLabel(tier.includedSessionsPerMonth)} · ${categoriesLabel(
+                            tier.allowedCategories
+                          )}`}
                     </p>
                     {tier.soldOut ? (
                       <p className="text-[11px] text-[#C4785A] mt-1" style={BODY}>
@@ -118,6 +125,7 @@ export function MembershipModal({
                   <div className="flex items-center gap-3 shrink-0">
                     <span className="text-[#2A2825] text-[15px]" style={BODY}>
                       {tier.monthlyPrice}
+                      {tier.termDays ? "" : " / mth"}
                     </span>
                     {active && !tier.soldOut && <Check size={16} className="text-[#C4785A]" />}
                   </div>
@@ -126,7 +134,17 @@ export function MembershipModal({
             })}
           </div>
 
-          {selected?.rateHeldMonths ? (
+          {isPass && selected ? (
+            <div className="bg-[#F2EBE0] p-4">
+              <p className="text-[10px] tracking-[0.2em] text-[#C4785A] uppercase mb-1" style={BODY}>
+                How the week works
+              </p>
+              <p className="text-[12px] text-[#2A2825]/75 leading-relaxed" style={BODY}>
+                Your {selected.termDays} days start the moment you pay, and everything on the timetable is open to you
+                until they're up. Nothing renews and there's nothing to cancel.
+              </p>
+            </div>
+          ) : selected?.rateHeldMonths ? (
             <div className="bg-[#F2EBE0] p-4">
               <p className="text-[10px] tracking-[0.2em] text-[#C4785A] uppercase mb-1" style={BODY}>
                 Founding rate
@@ -158,13 +176,17 @@ export function MembershipModal({
           >
             {submitting
               ? "Opening checkout…"
-              : selected
-                ? `${selected.monthlyPrice} a month — pay by card`
-                : "Choose a plan"}
+              : !selected
+                ? "Choose a plan"
+                : isPass
+                  ? `Pay ${selected.monthlyPrice} once — PayNow or card`
+                  : `${selected.monthlyPrice} a month — pay by card`}
             <ChevronRight size={14} />
           </button>
           <p className="text-[11px] text-[#7A7468] text-center leading-relaxed" style={BODY}>
-            Renews monthly by card. Three-month minimum term, then cancel any time with 14 days' notice.
+            {isPass
+              ? `One payment, ${selected?.termDays} days, nothing to cancel. First visit only.`
+              : "Renews monthly by card. Three-month minimum term, then cancel any time with 14 days' notice."}
           </p>
         </div>
       )}
@@ -182,6 +204,7 @@ export function MembershipSuccessModal({ onClose }: { onClose: () => void }) {
   const [state, setState] = useState<"confirming" | "done" | "pending" | "error">("confirming");
   const [message, setMessage] = useState("");
   const [tierName, setTierName] = useState("");
+  const [termDays, setTermDays] = useState<number | null>(null);
 
   useEffect(() => {
     if (!isLoggedIn || !token) {
@@ -193,6 +216,7 @@ export function MembershipSuccessModal({ onClose }: { onClose: () => void }) {
     confirmMembershipPurchase(token, { sessionId, reference: pending?.reference })
       .then((res) => {
         setTierName(res.tierName);
+        setTermDays(res.termDays);
         setState("done");
         clearPendingMembership();
         // Drop the Stripe session id so a refresh doesn't re-confirm.
@@ -228,8 +252,9 @@ export function MembershipSuccessModal({ onClose }: { onClose: () => void }) {
               Welcome to {tierName}
             </p>
             <p className="text-[#7A7468] text-[14px] leading-relaxed" style={BODY}>
-              Your classes are included from today, and your membership renews each month on the same date. Everything
-              you need is in the welcome email on its way to you.
+              {termDays
+                ? `Your ${termDays} days start today — every class on the timetable is open to you until they're up. Nothing renews, and the details are in the email on its way to you.`
+                : "Your classes are included from today, and your membership renews each month on the same date. Everything you need is in the welcome email on its way to you."}
             </p>
           </>
         )}
