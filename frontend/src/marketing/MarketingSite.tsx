@@ -1795,7 +1795,7 @@ function MembershipPacksSection({
           >
             <div className="shrink-0">
               <p className="text-4xl lg:text-5xl font-normal leading-none" style={{ fontFamily: "var(--font-display)" }}>
-                {introPass.monthlyPrice.replace(/^SGD\s*/, "$")}
+                {introPass.monthlyPrice.replace(/^SGD\s*/, "$").replace(/\.00$/, "")}
               </p>
               <p className="text-[10px] tracking-[0.25em] text-[#D4B896] uppercase mt-3" style={{ fontFamily: "var(--font-body)" }}>
                 New here
