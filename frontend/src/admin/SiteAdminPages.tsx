@@ -1061,6 +1061,307 @@ type BookingSection = (typeof BOOKING_GROUPS)[number] & {
   unpaid: number;
 };
 
+type DeskOffering = {
+  id: string;
+  kind: "CLASS" | "PROGRAM";
+  label: string;
+  detail: string;
+};
+
+type WalkInLookup = {
+  found: boolean;
+  member: {
+    id: string;
+    name: string;
+    email: string;
+    phone: string | null;
+    hasMembership: boolean;
+    membershipStatus: string | null;
+    creditsLeft: number;
+  } | null;
+  plan: { method: string; reason: string } | null;
+  priceCents: number;
+  alreadyBooked: boolean;
+};
+
+/**
+ * Booking somebody in at the counter.
+ *
+ * All we need from the person is a name and an email — the email is what the
+ * confirmation and the calendar invite go to, and it's how somebody who
+ * already has a membership or a pack is recognised rather than charged twice.
+ */
+function FrontDeskBooking({ auth, onBooked }: { auth: Auth; onBooked: () => void }) {
+  const [offerings, setOfferings] = useState<DeskOffering[]>([]);
+  const [offeringId, setOfferingId] = useState("");
+  const [name, setName] = useState("");
+  const [email, setEmail] = useState("");
+  const [phone, setPhone] = useState("");
+  const [tender, setTender] = useState<"CASH" | "CARD" | "PAYNOW" | "PLAN">("CASH");
+  const [amount, setAmount] = useState("");
+  const [notes, setNotes] = useState("");
+  const [guests, setGuests] = useState(1);
+  const [lookup, setLookup] = useState<WalkInLookup | null>(null);
+  const [checking, setChecking] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+  const [overrideFull, setOverrideFull] = useState(false);
+
+  const offering = offerings.find((o) => o.id === offeringId) || null;
+
+  useEffect(() => {
+    fetch("/api/member/offerings")
+      .then((r) => r.json())
+      .then((data) => {
+        const classes: DeskOffering[] = (data.classes || [])
+          .filter((c: any) => c.bookable && (c.entryType ?? "CLASS") === "CLASS")
+          .map((c: any) => ({
+            id: c.id,
+            kind: "CLASS" as const,
+            label: `${c.day}${c.classDate ? ` ${c.classDate}` : ""} · ${c.time} · ${c.classType}`,
+            detail: [c.instructor, c.location, c.price].filter(Boolean).join(" · ")
+          }));
+        const programs: DeskOffering[] = (data.programs || [])
+          .filter((p: any) => p.bookable && !p.soldOut)
+          .map((p: any) => ({
+            id: p.id,
+            kind: "PROGRAM" as const,
+            label: `${p.title}${p.dates ? ` · ${p.dates}` : ""}`,
+            detail: [p.facilitator, p.location, p.price].filter(Boolean).join(" · ")
+          }));
+        setOfferings([...classes, ...programs]);
+      })
+      .catch(() => setOfferings([]));
+  }, []);
+
+  const offeringQuery = (o: DeskOffering) =>
+    o.kind === "CLASS" ? `siteClassId=${o.id}` : `siteProgramId=${o.id}`;
+
+  /** Looked up on blur rather than each keystroke — it's a person, not a search. */
+  const checkEmail = async () => {
+    if (!email.includes("@") || !offering) return;
+    setChecking(true);
+    setError("");
+    try {
+      const result = await adminApi<WalkInLookup>(
+        `/api/admin/bookings/walk-in-lookup?email=${encodeURIComponent(email)}&${offeringQuery(offering)}`,
+        auth.token
+      );
+      setLookup(result);
+      if (result.member) {
+        if (!name.trim()) setName(result.member.name);
+        if (!phone.trim() && result.member.phone) setPhone(result.member.phone);
+      }
+      // Their plan covers it, so don't invite the desk to take money for it.
+      if (result.plan && result.plan.method !== "DROP_IN") setTender("PLAN");
+      setAmount((result.priceCents / 100).toFixed(2));
+    } catch (e: any) {
+      setError(e.message || "Could not look that person up.");
+    } finally {
+      setChecking(false);
+    }
+  };
+
+  const reset = () => {
+    setName("");
+    setEmail("");
+    setPhone("");
+    setNotes("");
+    setGuests(1);
+    setTender("CASH");
+    setAmount("");
+    setLookup(null);
+    setOverrideFull(false);
+  };
+
+  const submit = async () => {
+    if (!offering) return setError("Choose a class first.");
+    if (!name.trim()) return setError("Name is required.");
+    if (!email.includes("@")) return setError("A valid email is required.");
+
+    setSaving(true);
+    setError("");
+    try {
+      const result = await adminApi<{
+        booking: { reference: string; customerEmail: string; offeringTitle: string };
+        isNewAccount?: boolean;
+      }>("/api/admin/bookings", auth.token, {
+        method: "POST",
+        body: JSON.stringify({
+          ...(offering.kind === "CLASS"
+            ? { siteClassId: offering.id }
+            : { siteProgramId: offering.id }),
+          name: name.trim(),
+          email: email.trim(),
+          phone: phone.trim() || undefined,
+          guests,
+          notes: notes.trim() || undefined,
+          tender,
+          ...(tender === "PLAN" ? {} : { amountCents: Math.round(Number(amount || 0) * 100) }),
+          ...(overrideFull ? { overrideFull: true } : {})
+        })
+      });
+      onBooked();
+      reset();
+      window.alert(
+        `Booked ${result.booking.reference} — confirmation and calendar invite sent to ${
+          result.booking.customerEmail
+        }.${result.isNewAccount ? "\n\nA new account was created for them." : ""}`
+      );
+    } catch (e: any) {
+      setError(e.message || "Could not book that in.");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const roomFull = /is full|places left/i.test(error);
+  const covered = lookup?.plan && lookup.plan.method !== "DROP_IN";
+
+  return (
+    <div className="admin-panel">
+      <h2 className="admin-panel-title">Book someone in</h2>
+      <p className="admin-field-hint" style={{ marginBottom: 18 }}>
+        For a walk-in who paid at the desk. All we need is their name and email — the email carries the
+        confirmation and the calendar invite, and links the booking to their account if they already have one.
+      </p>
+
+      <label className="admin-field">
+        <span className="admin-field-label">Class or session *</span>
+        <select
+          className="admin-input"
+          value={offeringId}
+          onChange={(e) => {
+            setOfferingId(e.target.value);
+            setLookup(null);
+            setOverrideFull(false);
+          }}
+        >
+          <option value="">Choose one…</option>
+          {offerings.map((o) => (
+            <option key={o.id} value={o.id}>
+              {o.label}
+            </option>
+          ))}
+        </select>
+        {offering && <span className="admin-field-hint">{offering.detail}</span>}
+      </label>
+
+      <div className="admin-field-pair">
+        <label className="admin-field">
+          <span className="admin-field-label">Name *</span>
+          <input className="admin-input" value={name} onChange={(e) => setName(e.target.value)} placeholder="Full name" />
+        </label>
+        <label className="admin-field">
+          <span className="admin-field-label">Email *</span>
+          <input
+            className="admin-input"
+            type="email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            onBlur={checkEmail}
+            placeholder="name@email.com"
+          />
+          <span className="admin-field-hint">
+            {checking
+              ? "Checking…"
+              : lookup?.found && lookup.member
+                ? `Known — ${
+                    lookup.member.hasMembership
+                      ? `member (${lookup.member.membershipStatus?.toLowerCase()})`
+                      : "no membership"
+                  }${lookup.member.creditsLeft ? ` · ${lookup.member.creditsLeft} credits` : ""}`
+                : lookup
+                  ? "New to us — an account will be created for them."
+                  : "Confirmation and calendar invite go here."}
+          </span>
+        </label>
+      </div>
+
+      <div className="admin-field-pair">
+        <label className="admin-field">
+          <span className="admin-field-label">Phone (optional)</span>
+          <input className="admin-input" value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="+65 …" />
+        </label>
+        <label className="admin-field">
+          <span className="admin-field-label">Places</span>
+          <input
+            className="admin-input"
+            type="number"
+            min={1}
+            max={10}
+            value={guests}
+            onChange={(e) => setGuests(Math.max(1, Number(e.target.value) || 1))}
+          />
+        </label>
+      </div>
+
+      {lookup?.alreadyBooked && (
+        <div className="admin-alert">They already have a booking for this one.</div>
+      )}
+
+      <div className="admin-field-pair">
+        <label className="admin-field">
+          <span className="admin-field-label">Paid with</span>
+          <select className="admin-input" value={tender} onChange={(e) => setTender(e.target.value as any)}>
+            <option value="CASH">Cash at the desk</option>
+            <option value="CARD">Card (Qashier)</option>
+            <option value="PAYNOW">PayNow</option>
+            {covered && <option value="PLAN">Their plan — no charge</option>}
+          </select>
+          {covered && tender !== "PLAN" && (
+            <span className="admin-field-hint">
+              Heads up — {lookup?.plan?.reason.toLowerCase()} You may not need to charge them.
+            </span>
+          )}
+        </label>
+        <label className="admin-field">
+          <span className="admin-field-label">Amount taken</span>
+          <input
+            className="admin-input"
+            value={tender === "PLAN" ? "" : amount}
+            disabled={tender === "PLAN"}
+            onChange={(e) => setAmount(e.target.value)}
+            placeholder="0.00"
+          />
+          <span className="admin-field-hint">
+            {tender === "PLAN" ? "Covered by their plan." : "SGD — edit if you took a different amount."}
+          </span>
+        </label>
+      </div>
+
+      <label className="admin-field">
+        <span className="admin-field-label">Note (optional)</span>
+        <input
+          className="admin-input"
+          value={notes}
+          onChange={(e) => setNotes(e.target.value)}
+          placeholder="Anything the teacher should know"
+        />
+      </label>
+
+      {error && <div className="admin-alert">{error}</div>}
+      {roomFull && (
+        <label className="admin-field-checkbox">
+          <input type="checkbox" checked={overrideFull} onChange={(e) => setOverrideFull(e.target.checked)} />
+          Book them in anyway — the room is over its mat count.
+        </label>
+      )}
+
+      <div className="admin-form-actions">
+        <button
+          type="button"
+          className="admin-btn admin-btn-primary"
+          disabled={saving || !offeringId}
+          onClick={submit}
+        >
+          {saving ? "Booking…" : "Book & send confirmation"}
+        </button>
+      </div>
+    </div>
+  );
+}
+
 export function AdminBookingsPage({ auth }: { auth: Auth }) {
   const [data, setData] = useState<{ totals: { bookings: number; paid: number; awaitingPayment: number }; offerings: OfferingGroup[] } | null>(null);
   const [error, setError] = useState("");
@@ -1070,6 +1371,7 @@ export function AdminBookingsPage({ auth }: { auth: Auth }) {
   const [markingPaidId, setMarkingPaidId] = useState<string | null>(null);
   const [actingId, setActingId] = useState<string | null>(null);
   const [activeGroup, setActiveGroup] = useState<string>("ALL");
+  const [deskOpen, setDeskOpen] = useState(false);
 
   const sections = useMemo<BookingSection[]>(() => {
     const offerings = data?.offerings ?? [];
@@ -1288,14 +1590,25 @@ export function AdminBookingsPage({ auth }: { auth: Auth }) {
       subtitle="Guest rosters grouped by type — teacher trainings, courses, workshops, events, and regular classes."
       icon={Ticket}
       toolbar={
-        <button type="button" className="admin-btn" onClick={load}>
-          <RefreshCw style={{ width: 14, height: 14 }} />
-          Refresh
-        </button>
+        <>
+          <button
+            type="button"
+            className={deskOpen ? "admin-btn" : "admin-btn admin-btn-primary"}
+            onClick={() => setDeskOpen((open) => !open)}
+          >
+            <Plus style={{ width: 14, height: 14 }} />
+            {deskOpen ? "Close" : "Book someone in"}
+          </button>
+          <button type="button" className="admin-btn" onClick={load}>
+            <RefreshCw style={{ width: 14, height: 14 }} />
+            Refresh
+          </button>
+        </>
       }
     >
       {error && <div className="admin-alert">{error}</div>}
       {notice && <div className="admin-alert admin-alert-success">{notice}</div>}
+      {deskOpen && <FrontDeskBooking auth={auth} onBooked={load} />}
       <div className="admin-help-banner">
         <Info />
         <span>

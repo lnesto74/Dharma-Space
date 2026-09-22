@@ -37,6 +37,7 @@ import {
   refundPayment
 } from "./payments/ledger.js";
 import { parsePriceToCents } from "./payments/money.js";
+import { formatPrice, singleClassCents, walkUpCents } from "./schedule/pricing.js";
 import type { WalletLedger } from "./credits/wallet.js";
 
 export type MemberToken = { sub: string; kind: "site_member" };
@@ -265,6 +266,59 @@ export async function assertMemberHasNoActiveBooking(
   if (existing) {
     throw Object.assign(
       new Error(`You already have a booking for ${offering.offeringTitle}. See My account → My bookings.`),
+      { status: 409 }
+    );
+  }
+}
+
+/**
+ * How full a weekly class is. `capacity` of 0 means the room is uncapped,
+ * which is how classes behaved before mats were counted.
+ *
+ * Guests are summed rather than rows counted, because one booking can bring
+ * more than one body into the room.
+ */
+export async function classCapacityStatus(prisma: PrismaClient, siteClassId: string) {
+  const [siteClass, taken] = await Promise.all([
+    prisma.siteClass.findUnique({ where: { id: siteClassId }, select: { capacity: true } }),
+    prisma.booking.aggregate({
+      where: { siteClassId, status: { in: [...ACTIVE_BOOKING_STATUSES] } },
+      _sum: { guests: true }
+    })
+  ]);
+
+  const capacity = siteClass?.capacity ?? 0;
+  const booked = taken._sum.guests ?? 0;
+  return {
+    capacity,
+    booked,
+    placesLeft: capacity > 0 ? Math.max(0, capacity - booked) : null,
+    full: capacity > 0 && booked >= capacity
+  };
+}
+
+/**
+ * Stops a class being booked past the mats in the room. The front desk can
+ * override this — someone standing in reception with cash is a different
+ * situation from a stranger on the website at midnight — but nobody can
+ * overfill a room by accident.
+ */
+async function assertClassHasCapacity(
+  prisma: PrismaClient,
+  siteClassId: string,
+  guests: number,
+  offeringTitle: string
+) {
+  const room = await classCapacityStatus(prisma, siteClassId);
+  if (room.capacity > 0 && room.booked + guests > room.capacity) {
+    throw Object.assign(
+      new Error(
+        room.placesLeft && room.placesLeft > 0
+          ? `${offeringTitle} has only ${room.placesLeft} ${
+              room.placesLeft === 1 ? "place" : "places"
+            } left.`
+          : `${offeringTitle} is full.`
+      ),
       { status: 409 }
     );
   }
@@ -556,6 +610,9 @@ export async function createSiteBooking(
   if (offering.siteProgramId) {
     await assertProgramHasCapacity(prisma, offering.siteProgramId, guests);
   }
+  if (offering.siteClassId) {
+    await assertClassHasCapacity(prisma, offering.siteClassId, guests, offering.offeringTitle);
+  }
 
   await assertMemberHasNoActiveBooking(prisma, member.id, offering);
 
@@ -670,6 +727,278 @@ export async function createSiteBooking(
     booking: serializeBooking(booking),
     checkoutUrl,
     payNowAmount: paymentMethod === "PAYNOW" ? offering.depositAmount || offering.price : null
+  };
+}
+
+// ─── Front desk ──────────────────────────────────────────────────────────────
+
+/**
+ * Booking somebody in at the counter.
+ *
+ * The website flow starts from a signed-in member and ends at a payment page.
+ * At the desk it is the other way round: the money is already in the till and
+ * the person in front of you may never have visited the website. So this takes
+ * a name and an email, finds or makes the account behind them, and writes a
+ * booking that is paid from the moment it exists.
+ *
+ * The email is not bureaucracy — it is what the confirmation and the calendar
+ * invite are sent to, and it is how someone who already has a membership or a
+ * credit pack is recognised instead of being charged twice.
+ */
+
+export const DESK_TENDERS = ["CASH", "CARD", "PAYNOW", "PLAN"] as const;
+export type DeskTender = (typeof DESK_TENDERS)[number];
+
+/** Tender as the booking and the ledger record it. PLAN never reaches here. */
+const TENDER_METHOD: Record<Exclude<DeskTender, "PLAN">, string> = {
+  CASH: "CASH",
+  CARD: "QASHIER",
+  PAYNOW: "PAYNOW"
+};
+
+export const frontDeskBookingSchema = z.object({
+  siteClassId: z.string().optional(),
+  siteProgramId: z.string().optional(),
+  name: z.string().min(1, "Name is required"),
+  email: z.string().email("A valid email is required"),
+  phone: z.string().optional(),
+  guests: z.number().int().min(1).max(10).optional(),
+  notes: z.string().optional(),
+  tender: z.enum(DESK_TENDERS).default("CASH"),
+  /** What was actually taken, when it differs from the standard rate. */
+  amountCents: z.number().int().min(0).optional(),
+  /** Squeeze someone into a full room. Deliberate, never the default. */
+  overrideFull: z.boolean().optional()
+});
+
+/**
+ * What the desk needs to know before taking money: whether this person is
+ * already known, what they're on, and what this class should cost them.
+ */
+export async function lookupWalkIn(
+  prisma: PrismaClient,
+  email: string,
+  input: { siteClassId?: string; siteProgramId?: string }
+) {
+  const member = await prisma.siteMember.findUnique({
+    where: { email: email.toLowerCase().trim() }
+  });
+
+  const offering =
+    input.siteClassId || input.siteProgramId ? await loadOffering(prisma, input) : null;
+
+  if (!member) {
+    const category = offering?.membershipCategory;
+    return {
+      found: false,
+      member: null,
+      plan: null,
+      priceCents: category
+        ? walkUpCents(category)
+        : parsePriceToCents(offering?.price ?? ""),
+      alreadyBooked: false
+    };
+  }
+
+  const [membership, wallets] = await Promise.all([
+    loadMembershipContext(prisma, member.id),
+    loadCreditWallets(prisma, member.id)
+  ]);
+
+  const plan = offering?.membershipCategory
+    ? resolvePaymentPlan(offering.membershipCategory, membership, wallets)
+    : null;
+
+  const alreadyBooked = offering
+    ? Boolean(
+        await prisma.booking.findFirst({
+          where: {
+            memberId: member.id,
+            status: { in: [...ACTIVE_BOOKING_STATUSES] },
+            ...(offering.siteProgramId
+              ? { siteProgramId: offering.siteProgramId }
+              : { siteClassId: offering.siteClassId })
+          },
+          select: { id: true }
+        })
+      )
+    : false;
+
+  const creditsLeft = wallets.reduce(
+    (sum, wallet) => sum + (wallet.creditsTotal - wallet.creditsUsed),
+    0
+  );
+
+  return {
+    found: true,
+    member: {
+      id: member.id,
+      name: member.name,
+      email: member.email,
+      phone: member.phone,
+      hasMembership: Boolean(membership),
+      membershipStatus: membership?.status ?? null,
+      creditsLeft
+    },
+    plan: plan ? { method: plan.method, reason: plan.reason } : null,
+    // A member whose plan doesn't cover this class still pays less than a
+    // stranger, so the desk is shown the rate that actually applies.
+    priceCents: offering?.membershipCategory
+      ? singleClassCents(offering.membershipCategory, Boolean(membership))
+      : parsePriceToCents(offering?.price ?? ""),
+    alreadyBooked
+  };
+}
+
+/** Finds the person by email, or opens an account for them there and then. */
+async function resolveWalkInMember(
+  prisma: PrismaClient,
+  input: { name: string; email: string; phone?: string }
+) {
+  const email = input.email.toLowerCase().trim();
+  const existing = await prisma.siteMember.findUnique({ where: { email } });
+  if (existing) {
+    // A phone number given at the desk is worth keeping if we didn't have one.
+    if (!existing.phone && input.phone?.trim()) {
+      return {
+        member: await prisma.siteMember.update({
+          where: { id: existing.id },
+          data: { phone: input.phone.trim() }
+        }),
+        isNewAccount: false
+      };
+    }
+    return { member: existing, isNewAccount: false };
+  }
+
+  // The password is a placeholder they never see; they set their own through
+  // the website's reset link the first time they want to sign in.
+  const member = await prisma.siteMember.create({
+    data: {
+      name: input.name.trim(),
+      email,
+      phone: input.phone?.trim() || null,
+      passwordHash: await bcrypt.hash(randomBytes(32).toString("hex"), 12)
+    }
+  });
+  return { member, isNewAccount: true };
+}
+
+export async function createFrontDeskBooking(
+  prisma: PrismaClient,
+  input: z.infer<typeof frontDeskBookingSchema>
+) {
+  const guests = input.guests ?? 1;
+  const offering = await loadOffering(prisma, input);
+
+  if (offering.siteProgramId) {
+    await assertProgramHasCapacity(prisma, offering.siteProgramId, guests);
+  }
+  if (offering.siteClassId && !input.overrideFull) {
+    await assertClassHasCapacity(prisma, offering.siteClassId, guests, offering.offeringTitle);
+  }
+
+  const { member, isNewAccount } = await resolveWalkInMember(prisma, input);
+
+  const clash = await prisma.booking.findFirst({
+    where: {
+      memberId: member.id,
+      status: { in: [...ACTIVE_BOOKING_STATUSES] },
+      ...(offering.siteProgramId
+        ? { siteProgramId: offering.siteProgramId }
+        : { siteClassId: offering.siteClassId })
+    }
+  });
+  if (clash) {
+    throw Object.assign(
+      new Error(`${member.name} is already booked into ${offering.offeringTitle} (${clash.reference}).`),
+      { status: 409 }
+    );
+  }
+
+  // Someone holding a membership or a pack shouldn't be charged cash for a
+  // class they've already paid for, so their plan is checked either way and
+  // used when the desk asked for it.
+  const plan = offering.membershipCategory
+    ? resolvePaymentPlan(
+        offering.membershipCategory,
+        await loadMembershipContext(prisma, member.id),
+        await loadCreditWallets(prisma, member.id)
+      )
+    : { method: "DROP_IN" as const, reason: "Ticketed separately from memberships." };
+
+  if (input.tender === "PLAN") {
+    if (plan.method === "MEMBERSHIP") {
+      return { ...(await createMembershipBooking(prisma, member, offering, plan, input.notes)), isNewAccount };
+    }
+    if (plan.method === "CREDITS") {
+      return { ...(await createCreditBooking(prisma, member, offering, plan, input.notes)), isNewAccount };
+    }
+    throw Object.assign(
+      new Error(`${member.name} has nothing that covers this class — ${plan.reason}`),
+      { status: 409 }
+    );
+  }
+
+  const amountCents =
+    input.amountCents ??
+    (offering.membershipCategory
+      ? singleClassCents(offering.membershipCategory, plan.method !== "DROP_IN")
+      : parsePriceToCents(offering.depositAmount || offering.price));
+
+  const reference = bookingReference("DSK");
+  const paymentMethod = TENDER_METHOD[input.tender];
+
+  const booking = await prisma.booking.create({
+    data: {
+      reference,
+      memberId: member.id,
+      siteProgramId: offering.siteProgramId,
+      siteClassId: offering.siteClassId,
+      offeringType: offering.offeringType,
+      offeringTitle: offering.offeringTitle,
+      category: offering.category,
+      scheduledLabel: offering.scheduledLabel,
+      time: offering.time,
+      location: offering.location,
+      facilitator: offering.facilitator,
+      price: formatPrice(amountCents),
+      guests,
+      notes: input.notes?.trim() || null,
+      customerName: member.name,
+      customerEmail: member.email,
+      customerPhone: member.phone,
+      // The money is already in the till, so there is nothing to await.
+      status: "PAID",
+      paidAt: new Date(),
+      paymentMethod
+    }
+  });
+
+  await openPayment(prisma, {
+    bookingId: booking.id,
+    kind: "BOOKING",
+    memberId: member.id,
+    reference,
+    ...providerFromLegacyMethod(paymentMethod),
+    amountCents,
+    paid: true
+  }).catch((error) => {
+    console.error("[payments] could not record desk payment:", error);
+  });
+
+  // Same confirmation and calendar invite as a booking made on the website —
+  // being booked in at the desk shouldn't mean a worse experience afterwards.
+  await sendBookingConfirmation(prisma, booking).catch((error) => {
+    console.error("[booking-mail] desk confirmation failed:", error);
+  });
+
+  return {
+    booking: serializeBooking(booking),
+    checkoutUrl: null as string | null,
+    payNowAmount: null as string | null,
+    isNewAccount,
+    paidWith: input.tender
   };
 }
 
@@ -935,6 +1264,33 @@ export function registerSiteBookingRoutes(
       const body = createBookingSchema.parse(req.body);
       const result = await createSiteBooking(prisma, req.siteMember!, body);
       res.status(201).json(result);
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  /** Who this email belongs to, what they're on, and what to charge them. */
+  app.get("/api/admin/bookings/walk-in-lookup", adminAuth, requireAdmin, async (req, res, next) => {
+    try {
+      const email = typeof req.query.email === "string" ? req.query.email : "";
+      if (!email.includes("@")) return res.status(400).json({ message: "A valid email is required" });
+      res.json(
+        await lookupWalkIn(prisma, email, {
+          siteClassId: typeof req.query.siteClassId === "string" ? req.query.siteClassId : undefined,
+          siteProgramId:
+            typeof req.query.siteProgramId === "string" ? req.query.siteProgramId : undefined
+        })
+      );
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  /** Booking someone in at the counter, with the money already taken. */
+  app.post("/api/admin/bookings", adminAuth, requireAdmin, async (req, res, next) => {
+    try {
+      const body = frontDeskBookingSchema.parse(req.body);
+      res.status(201).json(await createFrontDeskBooking(prisma, body));
     } catch (error) {
       next(error);
     }

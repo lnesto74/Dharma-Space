@@ -1031,6 +1031,20 @@
   color: var(--admin-text-tertiary);
 }
 
+/* Two fields that belong together — a name beside an email — on a wide panel. */
+.admin-field-pair {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px;
+}
+
+@media (max-width: 720px) {
+  .admin-field-pair {
+    grid-template-columns: 1fr;
+    gap: 0;
+  }
+}
+
 .admin-preset-row {
   display: flex;
   align-items: center;
